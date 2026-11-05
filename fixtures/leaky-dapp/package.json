@@ -1,0 +1,21 @@
+{
+  "name": "@igris/fixture-leaky-dapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@wagmi/core": "3.6.9",
+    "ethers": "6.17.0",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vite": "8.3.6"
+  }
+}

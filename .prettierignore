@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+examples/
+pnpm-lock.yaml
+*.patch
+test-results/
+playwright-report/

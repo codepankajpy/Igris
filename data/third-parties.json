@@ -1,0 +1,313 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "name": "Infura",
+      "class": "rpc-provider",
+      "domains": ["infura.io"],
+      "source": "https://docs.metamask.io/services/"
+    },
+    {
+      "name": "Alchemy",
+      "class": "rpc-provider",
+      "domains": ["alchemy.com", "alchemyapi.io", "g.alchemy.com"],
+      "source": "https://docs.alchemy.com/reference/api-overview"
+    },
+    {
+      "name": "QuickNode",
+      "class": "rpc-provider",
+      "domains": ["quicknode.com", "quiknode.pro"],
+      "source": "https://www.quicknode.com/docs/ethereum"
+    },
+    {
+      "name": "Ankr",
+      "class": "rpc-provider",
+      "domains": ["ankr.com"],
+      "source": "https://www.ankr.com/docs/rpc-service/overview/"
+    },
+    {
+      "name": "LlamaNodes",
+      "class": "rpc-provider",
+      "domains": ["llamarpc.com"],
+      "source": "https://llamanodes.com/"
+    },
+    {
+      "name": "PublicNode",
+      "class": "rpc-provider",
+      "domains": ["publicnode.com"],
+      "source": "https://publicnode.com/"
+    },
+    {
+      "name": "dRPC",
+      "class": "rpc-provider",
+      "domains": ["drpc.org"],
+      "source": "https://drpc.org/docs"
+    },
+    {
+      "name": "1RPC",
+      "class": "rpc-provider",
+      "domains": ["1rpc.io"],
+      "source": "https://docs.1rpc.io/"
+    },
+    {
+      "name": "Chainstack",
+      "class": "rpc-provider",
+      "domains": ["chainstack.com"],
+      "source": "https://docs.chainstack.com/"
+    },
+    {
+      "name": "GetBlock",
+      "class": "rpc-provider",
+      "domains": ["getblock.io"],
+      "source": "https://getblock.io/docs/"
+    },
+    {
+      "name": "BlockPI",
+      "class": "rpc-provider",
+      "domains": ["blockpi.network", "blockpi.io"],
+      "source": "https://docs.blockpi.io/"
+    },
+    {
+      "name": "Cloudflare Ethereum Gateway",
+      "class": "rpc-provider",
+      "domains": ["cloudflare-eth.com"],
+      "source": "https://developers.cloudflare.com/web3/ethereum-gateway/"
+    },
+    {
+      "name": "Google Analytics / Tag Manager",
+      "class": "analytics",
+      "domains": ["google-analytics.com", "googletagmanager.com", "analytics.google.com"],
+      "source": "https://developers.google.com/analytics"
+    },
+    {
+      "name": "Segment",
+      "class": "analytics",
+      "domains": ["segment.com", "segment.io", "segmentapis.com"],
+      "source": "https://segment.com/docs/connections/sources/"
+    },
+    {
+      "name": "Mixpanel",
+      "class": "analytics",
+      "domains": ["mixpanel.com", "mxpnl.com"],
+      "source": "https://docs.mixpanel.com/"
+    },
+    {
+      "name": "Amplitude",
+      "class": "analytics",
+      "domains": ["amplitude.com"],
+      "source": "https://amplitude.com/docs/apis"
+    },
+    {
+      "name": "PostHog",
+      "class": "analytics",
+      "domains": ["posthog.com", "i.posthog.com"],
+      "source": "https://posthog.com/docs/api"
+    },
+    {
+      "name": "Plausible",
+      "class": "analytics",
+      "domains": ["plausible.io"],
+      "source": "https://plausible.io/docs"
+    },
+    {
+      "name": "Hotjar",
+      "class": "analytics",
+      "domains": ["hotjar.com", "hotjar.io"],
+      "source": "https://help.hotjar.com/"
+    },
+    {
+      "name": "Vercel Analytics",
+      "class": "analytics",
+      "domains": ["vercel-insights.com", "vitals.vercel-insights.com"],
+      "source": "https://vercel.com/docs/analytics"
+    },
+    {
+      "name": "Cloudflare Insights",
+      "class": "analytics",
+      "domains": ["cloudflareinsights.com"],
+      "source": "https://developers.cloudflare.com/web-analytics/"
+    },
+    {
+      "name": "Fathom",
+      "class": "analytics",
+      "domains": ["usefathom.com"],
+      "source": "https://usefathom.com/docs"
+    },
+    {
+      "name": "Sentry",
+      "class": "error-monitoring",
+      "domains": ["sentry.io"],
+      "suffixes": ["ingest.sentry.io", "ingest.us.sentry.io", "ingest.de.sentry.io"],
+      "source": "https://docs.sentry.io/concepts/key-terms/dsn-explainer/"
+    },
+    {
+      "name": "Bugsnag",
+      "class": "error-monitoring",
+      "domains": ["bugsnag.com"],
+      "source": "https://docs.bugsnag.com/"
+    },
+    {
+      "name": "Rollbar",
+      "class": "error-monitoring",
+      "domains": ["rollbar.com"],
+      "source": "https://docs.rollbar.com/"
+    },
+    {
+      "name": "Datadog RUM",
+      "class": "error-monitoring",
+      "domains": ["datadoghq.com", "datadoghq.eu", "browser-intake-datadoghq.com"],
+      "source": "https://docs.datadoghq.com/real_user_monitoring/"
+    },
+    {
+      "name": "LogRocket",
+      "class": "error-monitoring",
+      "domains": ["logrocket.io", "logrocket.com", "lr-ingest.io", "lr-in.com"],
+      "source": "https://docs.logrocket.com/"
+    },
+    {
+      "name": "Intercom",
+      "class": "support-chat",
+      "domains": ["intercom.io", "intercom.com", "intercomcdn.com"],
+      "source": "https://developers.intercom.com/"
+    },
+    {
+      "name": "Zendesk",
+      "class": "support-chat",
+      "domains": ["zendesk.com", "zdassets.com", "zopim.com"],
+      "source": "https://developer.zendesk.com/"
+    },
+    {
+      "name": "Crisp",
+      "class": "support-chat",
+      "domains": ["crisp.chat"],
+      "source": "https://docs.crisp.chat/"
+    },
+    {
+      "name": "Tawk.to",
+      "class": "support-chat",
+      "domains": ["tawk.to"],
+      "source": "https://developer.tawk.to/"
+    },
+    {
+      "name": "Drift",
+      "class": "support-chat",
+      "domains": ["drift.com", "driftt.com"],
+      "source": "https://devdocs.drift.com/"
+    },
+    {
+      "name": "WalletConnect / Reown relay",
+      "class": "walletconnect-relay",
+      "domains": ["walletconnect.com", "walletconnect.org", "reown.com", "web3modal.com"],
+      "suffixes": ["relay.walletconnect.com", "relay.walletconnect.org", "pulse.walletconnect.org"],
+      "source": "https://docs.reown.com/"
+    },
+    {
+      "name": "Coinbase WalletLink",
+      "class": "walletconnect-relay",
+      "domains": ["walletlink.org"],
+      "source": "https://docs.cloud.coinbase.com/wallet-sdk/docs"
+    },
+    {
+      "name": "ipfs.io gateway",
+      "class": "ipfs-gateway",
+      "domains": ["ipfs.io", "dweb.link"],
+      "source": "https://docs.ipfs.tech/concepts/ipfs-gateway/"
+    },
+    {
+      "name": "Cloudflare IPFS",
+      "class": "ipfs-gateway",
+      "domains": ["cloudflare-ipfs.com"],
+      "source": "https://developers.cloudflare.com/web3/ipfs-gateway/"
+    },
+    {
+      "name": "Pinata",
+      "class": "ipfs-gateway",
+      "domains": ["pinata.cloud", "mypinata.cloud"],
+      "source": "https://docs.pinata.cloud/"
+    },
+    {
+      "name": "Infura IPFS",
+      "class": "ipfs-gateway",
+      "domains": ["infura-ipfs.io"],
+      "source": "https://docs.metamask.io/services/how-to/use-ipfs/"
+    },
+    {
+      "name": "NFT.Storage / web3.storage gateways",
+      "class": "ipfs-gateway",
+      "domains": ["nftstorage.link", "w3s.link"],
+      "source": "https://web3.storage/docs/"
+    },
+    {
+      "name": "jsDelivr",
+      "class": "cdn",
+      "domains": ["jsdelivr.net"],
+      "source": "https://www.jsdelivr.com/documentation"
+    },
+    {
+      "name": "unpkg",
+      "class": "cdn",
+      "domains": ["unpkg.com"],
+      "source": "https://unpkg.com/"
+    },
+    {
+      "name": "cdnjs",
+      "class": "cdn",
+      "domains": ["cdnjs.cloudflare.com"],
+      "source": "https://cdnjs.com/about"
+    },
+    {
+      "name": "Google Fonts",
+      "class": "cdn",
+      "domains": ["fonts.googleapis.com", "fonts.gstatic.com"],
+      "source": "https://developers.google.com/fonts/docs/getting_started"
+    },
+    {
+      "name": "Amazon CloudFront",
+      "class": "cdn",
+      "domains": ["cloudfront.net"],
+      "source": "https://docs.aws.amazon.com/cloudfront/"
+    },
+    {
+      "name": "Fastly",
+      "class": "cdn",
+      "domains": ["fastly.net", "fastlylb.net"],
+      "source": "https://docs.fastly.com/"
+    },
+    {
+      "name": "Akamai",
+      "class": "cdn",
+      "domains": ["akamaized.net", "akamai.net", "akamaihd.net"],
+      "source": "https://techdocs.akamai.com/"
+    },
+    {
+      "name": "Igris fixture: sink RPC provider",
+      "class": "rpc-provider",
+      "domains": ["igris-rpc.test"],
+      "source": "observed in fixture"
+    },
+    {
+      "name": "Igris fixture: sink analytics",
+      "class": "analytics",
+      "domains": ["igris-analytics.test"],
+      "source": "observed in fixture"
+    },
+    {
+      "name": "Igris fixture: sink error monitor",
+      "class": "error-monitoring",
+      "domains": ["igris-errors.test"],
+      "source": "observed in fixture"
+    },
+    {
+      "name": "Igris fixture: sink support chat",
+      "class": "support-chat",
+      "domains": ["igris-chat.test"],
+      "source": "observed in fixture"
+    },
+    {
+      "name": "Igris fixture: sink CDN",
+      "class": "cdn",
+      "domains": ["igris-cdn.test"],
+      "source": "observed in fixture"
+    }
+  ]
+}

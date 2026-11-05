@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.env
+.env.*
+!.env.example
+# Scan output (may contain request snippets from third-party sites)
+igris-out/
+reports/
+*.log
+.DS_Store
+.vite/
+test-results/
+playwright-report/
+.trash-node_modules/

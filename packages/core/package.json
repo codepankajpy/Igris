@@ -1,0 +1,23 @@
+{
+  "name": "@igris/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "tldts": "7.4.19",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "5.1.0",
+    "vitest": "5.1.0"
+  }
+}

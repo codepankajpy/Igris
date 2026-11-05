@@ -1,0 +1,22 @@
+{
+  "name": "@igris/registry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@arkiv-network/sdk": "1.0.1",
+    "@igris/core": "workspace:*",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "vitest": "5.1.0"
+  }
+}

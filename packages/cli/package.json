@@ -1,0 +1,26 @@
+{
+  "name": "@igris/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "igris": "./src/main.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@igris/core": "workspace:*",
+    "@igris/patcher": "workspace:*",
+    "@igris/registry": "workspace:*",
+    "@igris/scanner": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "5.1.0"
+  }
+}

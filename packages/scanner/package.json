@@ -1,0 +1,23 @@
+{
+  "name": "@igris/scanner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+  },
+  "dependencies": {
+    "@igris/core": "workspace:*",
+    "playwright": "1.65.0",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "vitest": "5.1.0"
+  }
+}
