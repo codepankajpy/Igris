@@ -19,3 +19,4 @@ igris-snapshot.json
 igris-batch/
 corpus/runs/
 .igris-data/
+.igris-data-node2/
