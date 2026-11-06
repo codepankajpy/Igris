@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "steps": [
+    { "click": "button:has-text(\"Decline optional cookies\")", "waitMs": 400 },
+    { "click": "text=/connect wallet/i", "waitMs": 800 },
+    { "click": "text=/injected|browser wallet|igris canary/i", "waitMs": 800 }
+  ]
+}
