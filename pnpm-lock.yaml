@@ -8,15 +8,9 @@ importers:
 
   .:
     devDependencies:
-      '@igris/cli':
-        specifier: workspace:*
-        version: link:packages/cli
       '@igris/core':
         specifier: workspace:*
         version: link:packages/core
-      '@igris/patcher':
-        specifier: workspace:*
-        version: link:packages/patcher
       '@igris/registry':
         specifier: workspace:*
         version: link:packages/registry
@@ -47,15 +41,9 @@ importers:
 
   apps/api:
     dependencies:
-      '@igris/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
       '@igris/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@igris/patcher':
-        specifier: workspace:*
-        version: link:../../packages/patcher
       '@igris/registry':
         specifier: workspace:*
         version: link:../../packages/registry
@@ -119,25 +107,6 @@ importers:
         specifier: 5.1.0
         version: 5.1.0(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15))
 
-  apps/web:
-    dependencies:
-      '@arkiv-network/sdk':
-        specifier: 1.0.1
-        version: 1.0.1(typescript@5.9.3)(viem@2.57.16(typescript@5.9.3))
-      '@igris/registry':
-        specifier: workspace:*
-        version: link:../../packages/registry
-      viem:
-        specifier: 2.57.16
-        version: 2.57.16(typescript@5.9.3)
-    devDependencies:
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-      vite:
-        specifier: 8.3.6
-        version: 8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)
-
   fixtures/leaky-dapp:
     dependencies:
       '@wagmi/core':
@@ -157,51 +126,7 @@ importers:
         specifier: 8.3.6
         version: 8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)
 
-  fixtures/leaky-dapp-fixed:
-    dependencies:
-      '@anon-rpc/browser-harness':
-        specifier: 0.4.0
-        version: 0.4.0
-      '@wagmi/core':
-        specifier: 3.6.9
-        version: 3.6.9(typescript@5.9.3)(viem@2.57.16(typescript@5.9.3))
-      ethers:
-        specifier: 6.17.0
-        version: 6.17.0
-      viem:
-        specifier: 2.57.16
-        version: 2.57.16(typescript@5.9.3)
-    devDependencies:
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-      vite:
-        specifier: 8.3.6
-        version: 8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)
-
   fixtures/third-party-sink: {}
-
-  packages/cli:
-    dependencies:
-      '@igris/core':
-        specifier: workspace:*
-        version: link:../core
-      '@igris/patcher':
-        specifier: workspace:*
-        version: link:../patcher
-      '@igris/registry':
-        specifier: workspace:*
-        version: link:../registry
-      '@igris/scanner':
-        specifier: workspace:*
-        version: link:../scanner
-      viem:
-        specifier: 2.57.16
-        version: 2.57.16(typescript@5.9.3)
-    devDependencies:
-      vitest:
-        specifier: 5.1.0
-        version: 5.1.0(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15))
 
   packages/core:
     dependencies:
@@ -218,16 +143,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: 5.1.0
         version: 5.1.0(vitest@5.1.0)
-      vitest:
-        specifier: 5.1.0
-        version: 5.1.0(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15))
-
-  packages/patcher:
-    dependencies:
-      ts-morph:
-        specifier: 28.0.0
-        version: 28.0.0
-    devDependencies:
       vitest:
         specifier: 5.1.0
         version: 5.1.0(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15))
@@ -268,12 +183,6 @@ packages:
 
   '@adraffy/ens-normalize@1.11.1':
     resolution: {integrity: sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ==}
-
-  '@anon-rpc/browser-harness@0.4.0':
-    resolution: {integrity: sha512-9h+ks9lGmGTXE3fuFopowag+pLVJxhgmYG3SEBI1qk8ik7RGkxPT7Ub7RmbkDJ92/4VCa8gjT45BWoEnGynJYQ==}
-
-  '@anon-rpc/harness-core@0.4.0':
-    resolution: {integrity: sha512-ZFVeE0tkUgXPw1qu99s8JPKD4jFatHZ+nELisZ4WF+YMpCrBFIvpJe0qdCoLcmbhH1brbsC35qe8F1G3HxIbgA==}
 
   '@arkiv-network/sdk@1.0.1':
     resolution: {integrity: sha512-DCOFdGunn4I5nYrvIV/YIkMCkLZM7EQNSyNPtqpmQkP2JzTEfRLBJleBSB2rokWMa833/9P8DMiwsEXACr3CUQ==}
@@ -546,12 +455,6 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
-  '@kpstreams/core@0.2.1':
-    resolution: {integrity: sha512-cx82IpcAG2OoteTrUbHECIm2jc5rJ0+O8qB7cKAXdvkN5oje4aOIiF8nb7nEk+LSMISz8Zz7znrj+gzSXEBKuw==}
-
-  '@kpstreams/webrtc-client@0.2.1':
-    resolution: {integrity: sha512-B4o0mN6QmSblhfaKy74xezV82LaIqp6tdZ05HBAuBV2sSw9wFsT3TY6xmMJeHOECWVwFJGnSit9k0RV6HnPPBw==}
-
   '@noble/ciphers@1.3.0':
     resolution: {integrity: sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw==}
     engines: {node: ^14.21.3 || >=16}
@@ -675,9 +578,6 @@ packages:
 
   '@scure/bip39@1.6.0':
     resolution: {integrity: sha512-+lF0BbLiJNwVlev4eKelw1WWLaiKXw7sSl8T6FvBlWkdX+94aGJ4o8XjUdlyhTCjd8c+B3KT3JfS8P0bLRNU6A==}
-
-  '@ts-morph/common@0.29.0':
-    resolution: {integrity: sha512-35oUmphHbJvQ/+UTwFNme/t2p3FoKiGJ5auTjjpNTop2dyREspirjMy82PLSC1pnDJ8ah1GU98hwpVt64YXQsg==}
 
   '@types/body-parser@1.19.6':
     resolution: {integrity: sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g==}
@@ -909,9 +809,6 @@ packages:
   chai@6.3.0:
     resolution: {integrity: sha512-XWAtwJ6OHO+tj0EKCs0Y2UamnyOxseZWltU4x2U2wh8g4AigdjwvtUjvLP2tqkA/avxHEtzxNaqGq/YGNwckKg==}
     engines: {node: '>=18'}
-
-  code-block-writer@13.0.3:
-    resolution: {integrity: sha512-Oofo0pq3IKnsFtuHqSF7TqBfr71aeyZDVJ0HpmqB7FBM2qEigL0iPONSCZSO9pE9dZTAxANe5XHG9Uy0YMv8cg==}
 
   content-disposition@0.5.4:
     resolution: {integrity: sha512-FveZTNuGw04cxlAiWbzi6zTAL/lhehaWbTtgluJh4/E95DqMwTmha3KZN1aAWA8cFIhHzMZUvLevkw5Rqk+tSQ==}
@@ -1398,9 +1295,6 @@ packages:
     resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
     engines: {node: '>= 0.8'}
 
-  path-browserify@1.0.1:
-    resolution: {integrity: sha512-b7uo2UCUOYZcnF/3ID0lulOJi/bafxa1xPe7ZPsammBSpjSWQkjNxlt635YGS2MiR9GjvuXCtz2emr3jbsz98g==}
-
   path-exists@4.0.0:
     resolution: {integrity: sha512-ak9Qy5Q7jYb2Wwcey5Fpvg2KoAc/ZIhLSLOSBmRmygPsGwkVVt0fZa0qrtMz+m6tJTAHfZQ8FnmB4MG4LWy7/w==}
     engines: {node: '>=8'}
@@ -1572,9 +1466,6 @@ packages:
     engines: {node: '>=18.12'}
     peerDependencies:
       typescript: '>=4.8.4'
-
-  ts-morph@28.0.0:
-    resolution: {integrity: sha512-Wp3tnZ2bzwxyTZMtgWVzXDfm7lB1Drz+y9DmmYH/L702PQhPyVrp3pkou3yIz4qjS14GY9kcpmLiOOMvl8oG1g==}
 
   tslib@2.7.0:
     resolution: {integrity: sha512-gLXCKdN1/j47AiHiOkJN69hJmcbGTHI0ImLmbYLHykhgeN0jVGola9yVjFgzCUklsZQMW55o+dW7IXv3RCXDzA==}
@@ -1772,16 +1663,6 @@ snapshots:
 
   '@adraffy/ens-normalize@1.11.1': {}
 
-  '@anon-rpc/browser-harness@0.4.0':
-    dependencies:
-      '@anon-rpc/harness-core': 0.4.0
-      '@kpstreams/webrtc-client': 0.2.1
-      '@noble/hashes': 1.8.0
-
-  '@anon-rpc/harness-core@0.4.0':
-    dependencies:
-      '@noble/hashes': 1.8.0
-
   '@arkiv-network/sdk@1.0.1(typescript@5.9.3)(viem@2.57.16(typescript@5.9.3))':
     dependencies:
       viem: 2.57.16(typescript@5.9.3)
@@ -1962,12 +1843,6 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@kpstreams/core@0.2.1': {}
-
-  '@kpstreams/webrtc-client@0.2.1':
-    dependencies:
-      '@kpstreams/core': 0.2.1
-
   '@noble/ciphers@1.3.0': {}
 
   '@noble/curves@1.2.0':
@@ -2043,12 +1918,6 @@ snapshots:
     dependencies:
       '@noble/hashes': 1.8.0
       '@scure/base': 1.2.6
-
-  '@ts-morph/common@0.29.0':
-    dependencies:
-      minimatch: 10.2.6
-      path-browserify: 1.0.1
-      tinyglobby: 0.2.17
 
   '@types/body-parser@1.19.6':
     dependencies:
@@ -2331,8 +2200,6 @@ snapshots:
       get-intrinsic: 1.3.0
 
   chai@6.3.0: {}
-
-  code-block-writer@13.0.3: {}
 
   content-disposition@0.5.4:
     dependencies:
@@ -2827,8 +2694,6 @@ snapshots:
 
   parseurl@1.3.3: {}
 
-  path-browserify@1.0.1: {}
-
   path-exists@4.0.0: {}
 
   path-key@3.1.1: {}
@@ -3002,11 +2867,6 @@ snapshots:
   ts-api-utils@2.5.0(typescript@5.9.3):
     dependencies:
       typescript: 5.9.3
-
-  ts-morph@28.0.0:
-    dependencies:
-      '@ts-morph/common': 0.29.0
-      code-block-writer: 13.0.3
 
   tslib@2.7.0: {}
 
