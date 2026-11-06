@@ -1,0 +1,23 @@
+{
+  "name": "@igris/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
+    "@fontsource/instrument-serif": "5.3.0",
+    "@igris/core": "workspace:*",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vite": "8.3.6"
+  }
+}

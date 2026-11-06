@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "igris-api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-s", "exec", "tsx", "apps/api/src/index.ts"],
+      "env": { "IGRIS_ALLOWED_ORIGINS": "http://localhost:5180,http://127.0.0.1:5180" },
+      "port": 3001
+    },
+    {
+      "name": "igris-app",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@igris/app", "dev"],
+      "port": 5180
+    }
+  ]
+}
