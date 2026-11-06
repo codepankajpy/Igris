@@ -22,7 +22,13 @@ export {
   type Resolver,
 } from './egress/proxy.js';
 export { isPublicAddress, isPublicIPv4, isPublicIPv6 } from './egress/ip-policy.js';
-export { classifyLoad, observeLoad, type LoadObservation, type LoadVerdict } from './load-state.js';
+export {
+  classifyLoad,
+  cleanNavError,
+  observeLoad,
+  type LoadObservation,
+  type LoadVerdict,
+} from './load-state.js';
 export {
   collectKitSignals,
   identifyKit,

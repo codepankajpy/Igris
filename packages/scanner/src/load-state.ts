@@ -10,6 +10,12 @@ import type { FailureCategory } from '@igris/core';
 export interface LoadObservation {
   /** Navigation error message (DNS, refused, timeout…) when goto threw. */
   error?: string;
+  /**
+   * The egress proxy's own reason for refusing the target, when it did
+   * (e.g. "DNS resolution failed"). Through the proxy, Chromium reports every
+   * such refusal as ERR_TUNNEL_CONNECTION_FAILED, which hides the cause.
+   */
+  proxyRefusal?: string;
   status?: number;
   /** Lower-cased response headers of the main document. */
   headers?: Record<string, string>;
@@ -32,9 +38,30 @@ const CHALLENGE_BODY =
 const INCOMPATIBLE_BODY =
   /(unsupported browser|browser (is )?not supported|please (use|switch to) (a )?(supported|different|modern) browser|this (site|app) requires (chrome|a desktop browser))/i;
 
+/** One readable line from a Playwright navigation error: no ANSI codes, no call log. */
+export function cleanNavError(raw: string): string {
+  const line = raw
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    .split(/\n|Call log:/)[0]!
+    .replace(/^(Error|TimeoutError):\s*/, '')
+    .replace(/^page\.goto:\s*/, '')
+    .trim();
+  return line.slice(0, 160);
+}
+
 export function classifyLoad(o: LoadObservation): LoadVerdict {
   if (o.error) {
-    const e = o.error;
+    const e = cleanNavError(o.error);
+    if (o.proxyRefusal) {
+      const dns = /DNS/i.test(o.proxyRefusal);
+      return {
+        ok: false,
+        category: 'site-unavailable',
+        detail: dns
+          ? 'DNS name not resolved (checked by the egress proxy)'
+          : `refused by egress policy: ${o.proxyRefusal}`,
+      };
+    }
     const why = /ERR_NAME_NOT_RESOLVED/.test(e)
       ? 'DNS name not resolved'
       : /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED/.test(e)
@@ -44,7 +71,7 @@ export function classifyLoad(o: LoadObservation): LoadVerdict {
           : /ERR_TUNNEL_CONNECTION_FAILED|ERR_PROXY/.test(e)
             ? 'refused by egress policy'
             : 'navigation error';
-    return { ok: false, category: 'site-unavailable', detail: `${why}: ${e.slice(0, 160)}` };
+    return { ok: false, category: 'site-unavailable', detail: `${why}: ${e}` };
   }
   if (o.headers?.['x-igris-egress'] === 'blocked') {
     // The scanner's own egress proxy refused the target (non-public address).

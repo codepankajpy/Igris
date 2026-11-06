@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { isNavigatingLink, scoreCandidates } from './candidates.js';
 import { identifyKit, type KitSignal } from './fingerprint.js';
 import type { RawCandidate } from './page-probes.js';
-import { classifyLoad } from '../load-state.js';
+import { classifyLoad, cleanNavError } from '../load-state.js';
 import { isUnexpectedNavigation } from './open.js';
 
 let n = 0;
@@ -208,6 +208,26 @@ describe('load classification', () => {
       category: 'site-unavailable',
       detail: expect.stringMatching(/egress policy/),
     });
+  });
+  it('a proxied DNS failure is reported as DNS, not as an egress refusal', () => {
+    const error =
+      'Error: page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at https://nope.xyz/\nCall log:\n\u001b[2m  - navigating to "https://nope.xyz/"\u001b[22m';
+    expect(classifyLoad({ error, proxyRefusal: 'DNS resolution failed' })).toEqual({
+      ok: false,
+      category: 'site-unavailable',
+      detail: 'DNS name not resolved (checked by the egress proxy)',
+    });
+    expect(classifyLoad({ error, proxyRefusal: 'private address 10.0.0.1' }).detail).toBe(
+      'refused by egress policy: private address 10.0.0.1',
+    );
+  });
+  it('navigation error text is one clean line (no ANSI codes, no call log)', () => {
+    const error =
+      'Error: page.goto: net::ERR_CONNECTION_REFUSED at https://x.org/\nCall log:\n\u001b[2m  - navigating\u001b[22m';
+    expect(cleanNavError(error)).toBe('net::ERR_CONNECTION_REFUSED at https://x.org/');
+    expect(classifyLoad({ error }).detail).toBe(
+      'connection refused/reset: net::ERR_CONNECTION_REFUSED at https://x.org/',
+    );
   });
   it('a normal page is ok', () => {
     expect(classifyLoad({ status: 200, title: 'Aave', bodyText: 'Markets Dashboard' })).toEqual({

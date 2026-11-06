@@ -248,8 +248,14 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     }
     // Not the dapp (unavailable, bot wall, unsupported browser, HTTP error):
     // never scored — a score would describe a page nobody intended to scan.
+    const targetHost = new URL(options.url).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    const proxyRefusal = egressProxy?.blocked.find(
+      (b) => b.host.toLowerCase() === targetHost,
+    )?.reason;
     const verdict = classifyLoad(
-      navError ? { error: navError } : await observeLoad(page, response),
+      navError
+        ? { error: navError, ...(proxyRefusal ? { proxyRefusal } : {}) }
+        : await observeLoad(page, response),
     );
     if (!verdict.ok) {
       status = 'page-load-failed';
