@@ -19,14 +19,28 @@ What the registry needs, and what Arkiv gives:
    alone, without trusting the API that served them.
 4. **A cross-site view nobody else has.** One `igris.flow.v1` entity per
    recipient of each scan makes "which scanned sites send data to
-   segment.io?" a single indexed query, for us and for anyone else.
-5. **Queryable without an indexer.** `arkiv_query` filters, sorts and
+   segment.io?" a single indexed query, for us and for anyone else. One
+   `igris.walletreq.v1` per decoded wallet request does the same for "which
+   scanned sites ask for an unlimited Permit2 approval?".
+5. **No single server to trust or censor.** Anyone can write an
+   `igris.request.v1` asking for a scan; any scanner node polls for them,
+   scans independently and publishes a version linked to the request.
+   Readers compare the nodes' results per recipient. Arkiv supplies each
+   piece: permissionless writes (anyone may ask), an immutable `$creator`
+   (each node's results are attributable; trust is the reader's choice),
+   `readonly` (IGRIS's requests cannot be changed after a node acted on
+   them; other creators' need not be, since each node re-validates the URL
+   it scans) and `permissionlessExtension` (anyone may keep a request alive
+   for longer than its 7 days).
+6. **Queryable without an indexer.** `arkiv_query` filters, sorts and
    selects typed attributes directly. No subgraph, no separate database.
-6. **Atomic batches.** `executeBatch` writes the scan, its evidence and
-   its flows in one transaction, so a version is never half-published.
-7. **Expiry matches the data.** A privacy scan describes a site at one
-   moment. Entities live 180 days (close to Arkiv's maximum) and then
-   expire unless the site is retested, which publishes a new version.
+7. **Atomic batches.** `executeBatch` writes the scan, its evidence, its
+   flows and its wallet requests in one transaction, so a version is never
+   half-published.
+8. **Expiry matches the data.** A privacy scan describes a site at one
+   moment. Scan entities live 180 days (close to Arkiv's maximum) and then
+   expire unless the site is retested, which publishes a new version. A
+   scan request is a call to act now: it lives 7 days.
 
 What we do not put on Arkiv: anything secret (there is none) and anything
 that could identify a real user. The only wallet address in a report is the

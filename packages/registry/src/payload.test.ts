@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
-import { buildCanaryForms, bundleHash, canonicalize, contentHash } from '@igris/core';
+import {
+  EVIDENCE_BUNDLE_VERSION,
+  buildCanaryForms,
+  bundleHash,
+  canonicalize,
+  contentHash,
+} from '@igris/core';
 import { sampleResultV2 } from '@igris/core/testing';
 import {
   buildPublication,
@@ -75,7 +81,7 @@ describe('buildPublication', () => {
     expect(pub.evidence).toMatchObject({
       sha256: bundleHash(bundle),
       scanId: contentHash(report),
-      bundleVersion: 'igris.evidence.v3',
+      bundleVersion: EVIDENCE_BUNDLE_VERSION,
     });
     expect(decodePayload(pub.evidence.bundle)).toEqual(JSON.parse(canonicalize(bundle)));
   });

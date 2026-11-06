@@ -116,6 +116,13 @@ matches locally against a snapshot instead of querying per visited site.
   evidence) plus N flow entities in one transaction, and one transaction is
   capped at 2^24 gas (`MAX_TRANSACTION_GAS`). We have not measured a
   maximal batch on Rabdi; the first live publishes should log gas used.
+- Since wallet requests (≤ 64 `igris.walletreq.v1` per version) joined the
+  batch, `estimateBatchGas` (packages/registry/src/gas.ts) computes the
+  exact calldata offline and refuses a batch whose calldata alone exceeds
+  the cap. The engine's execution cost is not documented, so the estimate
+  assumes it by EVM analogy (schema.md → "Batch size"): a version with
+  20 wallet requests and 40 flows ≈ 5.35 M gas; both payloads at the
+  limit ≈ 12.8 M.
 
 ## 13. `$owner` is not an identity: transfers need no consent
 

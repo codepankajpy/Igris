@@ -12,14 +12,29 @@
 import {
   ADDRESS_EXPOSURES,
   RECIPIENT_V3_CLASSES,
+  RECORDED_WALLET_METHODS,
   SUMMARY_STATES,
   VERDICTS,
+  WALLET_REQUEST_KINDS,
   type SummaryState,
   type Verdict,
+  type WalletRequestKind,
 } from '@igris/core';
 import { SCHEMA_ATTRIBUTE } from '@arkiv-network/sdk/schema';
-import type { FlowEntity, PublishedScan } from './site-registry.js';
-import { EVIDENCE_SCHEMA_NAME, FLOW_SCHEMA_NAME, SCAN_SCHEMA_NAME } from './schemas.js';
+import { getAddress } from 'viem';
+import type {
+  FlowEntity,
+  PublishedScan,
+  ScanRequest,
+  WalletRequestEntity,
+} from './site-registry.js';
+import {
+  EVIDENCE_SCHEMA_NAME,
+  FLOW_SCHEMA_NAME,
+  REQUEST_SCHEMA_NAME,
+  SCAN_SCHEMA_NAME,
+  WALLET_REQUEST_SCHEMA_NAME,
+} from './schemas.js';
 
 /** Arkiv's limit on a str attribute, in UTF-8 bytes. */
 export const MAX_STR_BYTES = 128;
@@ -33,7 +48,7 @@ export const LOCAL_KEY_RE = /^local:[0-9a-f]{64}$/;
 export const LOCAL_OWNER_RE = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/;
 
 const MAX_COUNT = 100_000;
-const MAX_UNIX = 2 ** 40;
+export const MAX_UNIX = 2 ** 40;
 const I32_MAX = 2_147_483_647;
 const PUBLISHED_STATES = SUMMARY_STATES.filter((s) => s !== 'not-observed');
 
@@ -44,6 +59,51 @@ export function utf8Length(s: string): number {
 /** Lower-case DNS hostname with at least two labels, ≤ 128 bytes (Arkiv str limit). */
 export function isHostname(v: unknown): v is string {
   return typeof v === 'string' && v.length <= MAX_STR_BYTES && HOSTNAME_RE.test(v);
+}
+
+/** Creation-flag bits (Arkiv `creationFlags` byte). */
+export const READONLY_FLAG = 1;
+export const PERMISSIONLESS_EXTENSION_FLAG = 2;
+
+/** Wallet request kinds that get an igris.walletreq.v1 entity (all but "connect"). */
+export const PUBLISHED_WALLET_REQUEST_KINDS = WALLET_REQUEST_KINDS.filter(
+  (k): k is Exclude<WalletRequestKind, 'connect'> => k !== 'connect',
+);
+export const WALLET_REQUEST_OUTCOMES = ['answered', 'signed', 'rejected', 'error'] as const;
+
+/** A checksummed 20-byte address (EIP-55), exactly as getAddress() writes it. */
+export function isChecksummedAddress(v: unknown): v is string {
+  if (typeof v !== 'string' || !ARKIV_OWNER_RE.test(v)) return false;
+  try {
+    return getAddress(v) === v;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Why `url` is not a valid scan-request URL for `hostname`, or null when it
+ * is: an absolute http(s) URL in canonical form (`new URL(url).href`),
+ * without credentials, whose hostname is exactly `hostname`, ≤ 128 UTF-8
+ * bytes (Arkiv's str limit; longer URLs are refused, never truncated).
+ * Validation only: whether the target may be fetched (SSRF guard, public
+ * egress) is decided by the scanner node before it scans.
+ */
+export function requestUrlProblem(hostname: unknown, url: unknown): string | null {
+  if (!isHostname(hostname)) return 'hostname is not a lower-case DNS hostname';
+  if (typeof url !== 'string') return 'url is not a string';
+  if (utf8Length(url) > MAX_STR_BYTES) return `url exceeds ${MAX_STR_BYTES} bytes`;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return 'url is not an absolute URL';
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return 'url is not http(s)';
+  if (u.username !== '' || u.password !== '') return 'url carries credentials';
+  if (u.hostname !== hostname) return `url is not on ${hostname}`;
+  if (u.href !== url) return 'url is not in canonical form';
+  return null;
 }
 
 /** Formats of keys and owners for one backend. */
@@ -126,9 +186,19 @@ function meta(
   entity: unknown,
   schemaName: string,
   format: RowFormat,
-): { key: string; owner: string; expiresAtBlock: number | null; attrs: Attrs } {
+): {
+  key: string;
+  owner: string;
+  expiresAtBlock: number | null;
+  attrs: Attrs;
+} {
   if (typeof entity !== 'object' || entity === null) bad('entity');
-  const e = entity as { key?: unknown; owner?: unknown; creator?: unknown; expiresAt?: unknown };
+  const e = entity as {
+    key?: unknown;
+    owner?: unknown;
+    creator?: unknown;
+    expiresAt?: unknown;
+  };
   if (typeof e.key !== 'string' || !format.key.test(e.key)) bad('key');
   // Trust is decided by the CREATOR, which never changes. The current owner
   // does not count: on Arkiv anyone can transfer an entity they created to
@@ -143,7 +213,24 @@ function meta(
   const attrs = attrsOf(entity);
   const tag = attrs.get(SCHEMA_ATTRIBUTE);
   if (!tag || tag.type !== 'str' || tag.value !== schemaName) bad('schema tag');
-  return { key: e.key as string, owner: e.creator as string, expiresAtBlock, attrs };
+  return {
+    key: e.key as string,
+    owner: e.creator as string,
+    expiresAtBlock,
+    attrs,
+  };
+}
+
+/** i32 0/1 boolean (igris.walletreq.v1). */
+function flag01(attrs: Attrs, name: string): boolean {
+  return int(attrs, name, 'i32', 0, 1) === 1;
+}
+
+/** "" or a checksummed address. */
+function addressOrEmpty(attrs: Attrs, name: string): string {
+  const v = str(attrs, name);
+  if (v !== '' && !isChecksummedAddress(v)) bad(name);
+  return v;
 }
 
 function guard<T>(fn: () => T): T | null {
@@ -173,6 +260,15 @@ export function parseScanRow(entity: unknown, format: RowFormat): PublishedScan 
     const trackingRecipients = int(attrs, 'trackingRecipients', 'i32', 0, recipients);
     const reportVersion = str(attrs, 'reportVersion');
     if (reportVersion !== '3.0.0') bad('reportVersion');
+    // Absent on entities published before requests existed → null.
+    let request: string | null = null;
+    if (attrs.has('request')) {
+      const r = str(attrs, 'request');
+      if (r !== '') {
+        if (!format.key.test(r) || r.toLowerCase() === key.toLowerCase()) bad('request');
+        request = r;
+      }
+    }
     const scan: PublishedScan = {
       key,
       owner,
@@ -192,6 +288,7 @@ export function parseScanRow(entity: unknown, format: RowFormat): PublishedScan 
       scannerVersion: str(attrs, 'scannerVersion'),
       reportVersion,
       expiresAtBlock,
+      request,
     };
     return scan;
   });
@@ -259,6 +356,123 @@ export function parseFlowRow(entity: unknown, format: RowFormat): FlowEntity | n
   });
 }
 
+/**
+ * How far in the future a request's self-declared `requestedAt` may lie
+ * (clock skew between a creator and a reader). Later ones are rejected: a
+ * request dated ahead would sort above every honest one for as long as it
+ * likes.
+ */
+export const REQUEST_CLOCK_SKEW_S = 300;
+
+/**
+ * Decode an igris.request.v1 row; null when invalid. Requests come from ANY
+ * creator, so this is the only gate: the hostname, the URL (http(s), on that
+ * hostname, canonical, ≤ 128 bytes) and requestedAt must all hold; with
+ * `now`, a requestedAt more than REQUEST_CLOCK_SKEW_S after it is rejected
+ * too. The readonly creation flag is NOT required: a third party following
+ * docs/design/SCAN-NETWORK.md may create a mutable request. That is safe
+ * because a scan records only the request's key and every node re-validates
+ * the URL it reads (SSRF guard, public egress) right before it scans; what
+ * was scanned is in each published report.
+ */
+export function parseRequestRow(
+  entity: unknown,
+  format: RowFormat,
+  opts: { now?: number } = {},
+): ScanRequest | null {
+  return guard(() => {
+    const { key, owner, expiresAtBlock, attrs } = meta(entity, REQUEST_SCHEMA_NAME, format);
+    const host = hostname(attrs, 'hostname');
+    const url = str(attrs, 'url');
+    if (requestUrlProblem(host, url) !== null) bad('url');
+    const requestedAt = int(attrs, 'requestedAt', 'u64', 1, MAX_UNIX);
+    if (opts.now !== undefined && !(requestedAt <= opts.now + REQUEST_CLOCK_SKEW_S))
+      bad('requestedAt');
+    return {
+      key,
+      creator: owner,
+      hostname: host,
+      url,
+      requestedAt,
+      expiresAtBlock,
+    };
+  });
+}
+
+/** At most this many requests per creator in one openRequests() answer. */
+export const MAX_REQUESTS_PER_CREATOR = 20;
+
+/**
+ * Picks openRequests' answer while rows are read NEWEST FIRST: at most
+ * `perCreator` requests per creator (the newest), at most `limit` in all,
+ * each key once. A creator over its cap is skipped, not counted, so reading
+ * goes on past it and one creator flooding the registry cannot hide the
+ * requests of others (bounded only by how many rows the caller walks).
+ */
+export class RequestPicker {
+  private readonly counts = new Map<string, number>();
+  private readonly keys = new Set<string>();
+  private readonly picked: ScanRequest[] = [];
+  constructor(
+    private readonly limit: number,
+    private readonly perCreator: number = MAX_REQUESTS_PER_CREATOR,
+  ) {}
+
+  get full(): boolean {
+    return this.picked.length >= this.limit;
+  }
+
+  /** Offer one request (callers offer newest first). */
+  offer(r: ScanRequest): void {
+    if (this.full) return;
+    const k = r.key.toLowerCase();
+    if (this.keys.has(k)) return;
+    this.keys.add(k);
+    const c = r.creator.toLowerCase();
+    const n = this.counts.get(c) ?? 0;
+    if (n >= this.perCreator) return;
+    this.counts.set(c, n + 1);
+    this.picked.push(r);
+  }
+
+  /** The picked requests, oldest first. */
+  result(): ScanRequest[] {
+    return [...this.picked].sort(byRequestedAt);
+  }
+}
+
+/** Decode an igris.walletreq.v1 row; null when invalid. */
+export function parseWalletRequestRow(
+  entity: unknown,
+  format: RowFormat,
+): WalletRequestEntity | null {
+  return guard(() => {
+    const { key, owner, attrs } = meta(entity, WALLET_REQUEST_SCHEMA_NAME, format);
+    return {
+      key,
+      owner,
+      hostname: hostname(attrs, 'hostname'),
+      kind: oneOf(attrs, 'kind', PUBLISHED_WALLET_REQUEST_KINDS),
+      method: oneOf(attrs, 'method', RECORDED_WALLET_METHODS),
+      outcome: oneOf(attrs, 'outcome', WALLET_REQUEST_OUTCOMES),
+      unlimited: flag01(attrs, 'unlimited'),
+      chainIdMismatch: flag01(attrs, 'chainIdMismatch'),
+      domainMismatch: flag01(attrs, 'domainMismatch'),
+      preConnect: flag01(attrs, 'preConnect'),
+      verifyingContract: addressOrEmpty(attrs, 'verifyingContract'),
+      spender: addressOrEmpty(attrs, 'spender'),
+      version: int(attrs, 'version', 'i32', 1, I32_MAX),
+      scanId: sha(attrs, 'scanId'),
+      scannedAt: int(attrs, 'scannedAt', 'u64', 1, MAX_UNIX),
+    };
+  });
+}
+
+/** Oldest request first; ties by key (the order openRequests returns). */
+export function byRequestedAt(a: ScanRequest, b: ScanRequest): number {
+  return a.requestedAt - b.requestedAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+}
+
 /** Newest version first; ties (two owners) by newest scannedAt, then key. */
 export function byVersionDesc(a: PublishedScan, b: PublishedScan): number {
   return b.version - a.version || b.scannedAt - a.scannedAt || (a.key < b.key ? -1 : 1);
@@ -281,8 +495,17 @@ export function ownerSet(owners: readonly string[]): Set<string> {
   return new Set(owners.map((o) => o.toLowerCase()));
 }
 
-/** The flow belongs to exactly this published version (same owner, version and scanId). */
-export function isFlowOf(f: FlowEntity, scan: PublishedScan): boolean {
+/** A per-version index row (flow, wallet request). */
+export interface VersionRow {
+  hostname: string;
+  version: number;
+  scanId: string;
+  owner: string;
+  scannedAt: number;
+}
+
+/** The row belongs to exactly this published version (same owner, version and scanId). */
+export function isOfVersion(f: VersionRow, scan: PublishedScan): boolean {
   return (
     f.hostname === scan.hostname &&
     f.version === scan.version &&
@@ -291,8 +514,17 @@ export function isFlowOf(f: FlowEntity, scan: PublishedScan): boolean {
   );
 }
 
-/** Newest scannedAt first, ties by hostname (the order flowsTo returns, both backends). */
-export function byNewestFlow(a: FlowEntity, b: FlowEntity): number {
+/** The flow belongs to exactly this published version (same owner, version and scanId). */
+export function isFlowOf(f: FlowEntity, scan: PublishedScan): boolean {
+  return isOfVersion(f, scan);
+}
+
+/**
+ * Newest scannedAt first, ties by hostname (the order flowsTo and
+ * walletRequests return, both backends; Array#sort is stable, so rows of one
+ * version keep their stored order).
+ */
+export function byNewestFlow(a: VersionRow, b: VersionRow): number {
   return (
     b.scannedAt - a.scannedAt || (a.hostname < b.hostname ? -1 : a.hostname > b.hostname ? 1 : 0)
   );

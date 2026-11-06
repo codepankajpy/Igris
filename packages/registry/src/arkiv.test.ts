@@ -1,161 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { ExpirationTime, type ExecuteBatchParameters } from '@arkiv-network/sdk';
-import { bytesToHex, getAddress, keccak256, toHex } from 'viem';
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { ArkivSiteRegistry, type ArkivIo } from './arkiv.js';
-import type { LoadedScanner } from './identity.js';
+import { ExpirationTime } from '@arkiv-network/sdk';
+import { getAddress, keccak256, toHex } from 'viem';
+import { ArkivSiteRegistry } from './arkiv.js';
 import { EvidenceSchema, FlowSchema, ScanSchema } from './schemas.js';
 import type { WireEntity } from './payload.js';
 import { diffVersions } from './diff.js';
-import { contentHash } from '@igris/core';
+import { contentHash, EVIDENCE_BUNDLE_VERSION } from '@igris/core';
 import { PublishRefusedError } from './site-registry.js';
 import {
+  FakeNode,
   IPV6_RECIPIENT,
+  scanner,
+  type Create,
   fixedSegment,
   leaky,
   otherSite,
   siteN,
   withIpv6Recipient,
 } from './test-fixtures.js';
-
-function scanner(): LoadedScanner {
-  const privateKey = generatePrivateKey();
-  const address = privateKeyToAccount(privateKey).address;
-  return {
-    privateKey,
-    address,
-    profile: {
-      schema: 'igris.scanner.v1',
-      address,
-      name: 'test',
-      nodeId: '00000000-0000-4000-8000-000000000000',
-      createdAt: '2026-11-06T00:00:00.000Z',
-      origin: 'generated',
-    },
-  };
-}
-
-type Create = {
-  schema: { name: string; columns: Record<string, { type: string }> };
-  values: Record<string, unknown>;
-  expiration: unknown;
-};
-
-/**
- * A minimal in-memory Arkiv node: stores batch creates in the JSON-RPC wire
- * shape the real node returns (u64 as 0x hex, owner lower-case) and answers
- * the subset of the query language the registry emits.
- */
-class FakeNode {
-  entities: WireEntity[] = [];
-  queries: string[] = [];
-  batches: ExecuteBatchParameters[] = [];
-  /** Simulate a node (or a proxy) that ignores the owner filter. */
-  ignoreOwnerFilter = false;
-  private n = 0;
-  constructor(public owner: string) {}
-
-  io: ArkivIo = {
-    query: async (q, options) => {
-      this.queries.push(q);
-      const [where = '', order] = q.split(' ORDER BY ');
-      const creators = new Set<string>();
-      const terms: Array<{ name: string; value: string | number }> = [];
-      for (const m of where.matchAll(
-        /(\$?[A-Za-z][\w.]*) = (?:str\('((?:[^']|'')*)'\)|i32\((-?\d+)\)|addr\((0x[0-9a-fA-F]{40})\)|key\((0x[0-9a-fA-F]{64})\))/g,
-      )) {
-        const [, name, s, n, a, k] = m;
-        if (name === '$creator') creators.add(a!.toLowerCase());
-        else
-          terms.push({
-            name: name!,
-            value:
-              s !== undefined
-                ? s.replaceAll("''", "'")
-                : n !== undefined
-                  ? Number(n)
-                  : k!.toLowerCase(),
-          });
-      }
-      const val = (e: WireEntity, name: string) => e.attributes.find((x) => x.name === name)?.value;
-      const match = (e: WireEntity, t: { name: string; value: string | number }) =>
-        t.name === '$key'
-          ? e.key.toLowerCase() === t.value
-          : typeof t.value === 'number'
-            ? Number(val(e, t.name)) === t.value
-            : val(e, t.name) === t.value;
-      // The registry only ever ORs equalities on ONE attribute (an owner or a
-      // hostname group) and ANDs different attributes: group terms by name.
-      const groups = new Map<string, Array<{ name: string; value: string | number }>>();
-      for (const t of terms) groups.set(t.name, [...(groups.get(t.name) ?? []), t]);
-      let rows = this.entities.filter(
-        (e) =>
-          (this.ignoreOwnerFilter || creators.has(e.creator.toLowerCase())) &&
-          [...groups.values()].every((g) => g.some((t) => match(e, t))),
-      );
-      if (order) {
-        const [name] = order.split(':');
-        const num = (e: WireEntity) => {
-          try {
-            return Number(BigInt(val(e, name!) as string | number));
-          } catch {
-            return -1; // the real node would not hold a mistyped value; keep the fake total
-          }
-        };
-        rows = [...rows].sort((x, y) => num(y) - num(x));
-      }
-      const offset = options.offset ? Number(options.offset) : 0;
-      rows = rows.slice(offset, offset + Number(options.limit));
-      const sel = options.select.attributes;
-      return {
-        data: rows.map((e) => ({
-          key: e.key,
-          owner: e.owner,
-          creator: e.creator,
-          expiresAt: e.expiresAt,
-          attributes:
-            sel === true
-              ? e.attributes
-              : e.attributes.filter((x) => typeof sel === 'object' && sel[x.name]),
-        })),
-        blockNumber: '0x1',
-      };
-    },
-    executeBatch: async (params) => {
-      this.batches.push(params);
-      const created: string[] = [];
-      for (const c of (params.creates ?? []) as unknown as Create[]) {
-        const key = keccak256(toHex(`entity-${++this.n}`));
-        const attributes = [{ name: 'arkiv.schema', type: 'str', value: c.schema.name }];
-        for (const [name, col] of Object.entries(c.schema.columns)) {
-          const v = c.values[name];
-          const raw =
-            typeof v === 'object' && v !== null && 'type' in v && 'value' in v
-              ? (v as { value: unknown }).value
-              : v;
-          attributes.push({
-            name,
-            type: col.type,
-            value: (col.type === 'u64'
-              ? toHex(BigInt(raw as bigint))
-              : col.type === 'bytes'
-                ? bytesToHex(raw as Uint8Array)
-                : raw) as string,
-          });
-        }
-        this.entities.push({
-          key,
-          owner: this.owner.toLowerCase(),
-          creator: this.owner.toLowerCase(),
-          expiresAt: '0x77d0a0',
-          attributes,
-        });
-        created.push(key);
-      }
-      return { txHash: keccak256(toHex(`tx-${this.batches.length}`)), createdEntities: created };
-    },
-  };
-}
 
 function setup(opts: { trustedOwners?: string[] } = {}) {
   const s = scanner();
@@ -197,7 +59,7 @@ describe('ArkivSiteRegistry publish', () => {
     expect(creates[0]!.values.report).toBeInstanceOf(Uint8Array);
     expect(creates[1]!.values).toMatchObject({
       sha256: a.report.evidence.sha256,
-      bundleVersion: 'igris.evidence.v3',
+      bundleVersion: EVIDENCE_BUNDLE_VERSION,
     });
     expect(creates.slice(2).map((c) => c.values.recipient)).toEqual([
       'segment.io',

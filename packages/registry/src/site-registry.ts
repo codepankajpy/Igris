@@ -11,7 +11,14 @@
  * Reads only trust entities owned by `trustedOwners` (anyone can write to
  * Arkiv; an entity is an attestation by its owner, not a fact).
  */
-import type { EvidenceBundle, ReportV3, SummaryState, Verdict } from '@igris/core';
+import type {
+  EvidenceBundle,
+  RecordedWalletMethod,
+  ReportV3,
+  SummaryState,
+  Verdict,
+  WalletRequestKind,
+} from '@igris/core';
 
 /** A published scan version (the igris.scan.v2 entity, decoded). */
 export interface PublishedScan {
@@ -41,6 +48,47 @@ export interface PublishedScan {
   reportVersion: string;
   /** Block at which the entity expires, when known. */
   expiresAtBlock: number | null;
+  /**
+   * Entity key of the igris.request.v1 this scan fulfilled, null when it was
+   * not made for a request (entities published before requests existed).
+   */
+  request: string | null;
+}
+
+/**
+ * An open scan request (igris.request.v1): anyone can create one; every
+ * scanner node that sees it may fulfil it. docs/design/SCAN-NETWORK.md.
+ */
+export interface ScanRequest {
+  key: string;
+  /** Immutable creator of the request ($creator). */
+  creator: string;
+  hostname: string;
+  url: string;
+  /** Unix seconds. */
+  requestedAt: number;
+  expiresAtBlock: number | null;
+}
+
+/** One decoded wallet request of a published version (igris.walletreq.v1). */
+export interface WalletRequestEntity {
+  key: string;
+  owner: string;
+  hostname: string;
+  kind: WalletRequestKind;
+  method: RecordedWalletMethod;
+  outcome: 'answered' | 'signed' | 'rejected' | 'error';
+  unlimited: boolean;
+  chainIdMismatch: boolean;
+  domainMismatch: boolean;
+  preConnect: boolean;
+  /** Checksummed address or "" when none. */
+  verifyingContract: string;
+  /** Checksummed address or "" when none. */
+  spender: string;
+  version: number;
+  scanId: string;
+  scannedAt: number;
 }
 
 /** One dApp → recipient data flow of a published version (igris.flow.v1). */
@@ -62,6 +110,11 @@ export interface PublishResult {
   scan: PublishedScan;
   evidenceKey: string;
   flowKeys: string[];
+  /**
+   * igris.walletreq.v1 keys, in report order. Optional only so results built
+   * elsewhere (test doubles) still type-check; both backends always set it.
+   */
+  walletRequestKeys?: string[];
   /** Transaction hash of the atomic batch (null for the local backend). */
   txHash: string | null;
 }
@@ -71,6 +124,11 @@ export interface LoadedScan {
   bundle: EvidenceBundle;
   /** Every check passed: hashes match the entity, schema valid, integrity ok. */
   verified: boolean;
+  /**
+   * Why `verified` is false. A verified version may still carry one
+   * informational note: DRAFT_V3_NOTE for a draft 3.0.0 report (published
+   * before wallet-request auditing; shown upgraded, walletRequests null).
+   */
   problems: string[];
 }
 
@@ -110,12 +168,53 @@ export interface SiteRegistry {
    * Idempotent per (hostname, scanId): when that report is already published
    * (by a trusted owner or this publisher), nothing is written and the
    * existing version is returned with txHash null and its evidence / flow
-   * keys looked up ("" / [] when they cannot be found).
+   * keys looked up ("" / [] when they cannot be found). This holds with
+   * `opts.request` too: the existing scan is returned UNCHANGED, so its
+   * `request` may differ from (or lack) the one passed — the request is
+   * neither checked nor recorded, and `fulfilments(request)` will not list it.
    *
    * Recipients whose domain is not a hostname (IP literals) get no flow
    * entity; the scan and its full report are still published.
    */
-  publish(report: ReportV3, bundle: EvidenceBundle): Promise<PublishResult>;
+  publish(
+    report: ReportV3,
+    bundle: EvidenceBundle,
+    opts?: { request?: string },
+  ): Promise<PublishResult>;
+  /**
+   * Create an igris.request.v1 for `url` on `hostname`, signed by the
+   * publisher (refused when read-only). Short expiry (7 days) with
+   * permissionlessExtension, so anyone can keep a request alive. Ours are
+   * also created readonly (readonly still allows extension), so their URL
+   * never changes after a node fulfilled them. Readers do NOT require the
+   * readonly flag: any third party following SCAN-NETWORK.md may create a
+   * mutable request. A scan records only the request's key, and each node
+   * re-validates the URL it reads right before scanning, so a later edit
+   * changes nothing already published.
+   */
+  createRequest(hostname: string, url: string): Promise<ScanRequest>;
+  /**
+   * One request by key (any creator; strictly validated), null when absent
+   * or dated more than REQUEST_CLOCK_SKEW_S in the future.
+   */
+  request(key: string): Promise<ScanRequest | null>;
+  /**
+   * Requests created at or after `since` (unix seconds), any creator, oldest
+   * first; at most `limit` (default 100, ≤ 1000) — the newest ones when more
+   * exist. Requests dated more than REQUEST_CLOCK_SKEW_S in the future are
+   * ignored, and at most MAX_REQUESTS_PER_CREATOR (the newest) are taken
+   * per creator, so one creator cannot crowd out the others.
+   */
+  openRequests(opts: { since: number; limit?: number }): Promise<ScanRequest[]>;
+  /** Trusted scans that fulfilled request `key` (any version), newest first. */
+  fulfilments(key: string): Promise<PublishedScan[]>;
+  /** Decoded wallet requests across sites (latest version per site), filtered. */
+  walletRequests(opts: {
+    kind?: WalletRequestKind;
+    unlimited?: boolean;
+    hostname?: string;
+    limit?: number;
+  }): Promise<WalletRequestEntity[]>;
   /**
    * Flows to one recipient across all sites: only flows of each site's
    * latest version, newest scannedAt first (ties by hostname), at most
