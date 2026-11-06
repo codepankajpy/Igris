@@ -196,5 +196,11 @@ export function igrisInitWallet(cfg: {
 
 /** Build the raw init-script source injected via addInitScript. */
 export function buildWalletInitScript(cfg: WalletInitConfig): string {
-  return `(${igrisInitWallet.toString()})(${JSON.stringify(cfg)});`;
+  // esbuild-based runtimes (tsx, vitest) transpile this module with
+  // keepNames, which rewrites inner functions to `__name(fn, "fn")` calls —
+  // a helper that lives OUTSIDE the serialized function. Shim it so the
+  // stringified source runs in the page under every toolchain (plain tsc
+  // emits no helper; the shim is then unused).
+  const nameShim = 'var __name = (fn) => fn;';
+  return `(() => { ${nameShim} (${igrisInitWallet.toString()})(${JSON.stringify(cfg)}); })();`;
 }
