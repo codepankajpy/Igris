@@ -6,6 +6,9 @@
  */
 // Browser-safe module: types + pure helpers only (the viewer imports this).
 // Node-only pieces (hashing, report conversion) live in from-report.ts.
+// (Type-only import — erased at compile time, so no Node code reaches the
+// browser bundle.)
+import type { Report } from '@igris/core';
 
 export const RECORD_VERSION = 1;
 

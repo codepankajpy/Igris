@@ -117,9 +117,9 @@ export class ArkivRegistry implements RegistryBackend {
     const records = entities.map((e: any) => rowToRecord(e));
     // leakClass has no server-side operator (no substring match in the Arkiv
     // query language) — filter client-side; recorded in arkiv/friction.md.
-    return q.leakClass !== undefined
-      ? records.filter((r: RegistryRecord) => matchesQuery(r, { leakClass: q.leakClass }))
-      : records;
+    const leakClass = q.leakClass;
+    if (leakClass === undefined) return records;
+    return records.filter((r: RegistryRecord) => matchesQuery(r, { leakClass }));
   }
 
   /** Walk every entity of our schema (key-cursor pagination, pages of 100). */

@@ -46,11 +46,14 @@ Last updated: 2026-11-06 (M0–M7 done; polish/review pass in progress)
 
 ## UNVERIFIED (exact repro for a human)
 
-1. **Real Arkiv publish** — needs a funded key (faucet is a browser flow):
-   generate a key, visit https://hub.arkiv.network/faucet, fund it, then
-   `export ARKIV_PRIVATE_KEY=0x…` and
-   `pnpm igris publish examples/leaky/report.json` — then paste the printed
-   `scanner:` address into README ("Registry" section) and
+1. **Real Arkiv publish** — a scanner key is ALREADY GENERATED in the
+   gitignored `.env` at the repo root (address
+   `0xDbd0309b80f71E12d45Ac8321DBA637156a4198B`, unfunded, never used).
+   Human steps (~2 min): fund that address at
+   https://hub.arkiv.network/faucet, then run
+   `pnpm igris publish examples/leaky/report.json && pnpm igris publish examples/fixed/report.json`
+   and `pnpm igris query --scanner 0xDbd0309b80f71E12d45Ac8321DBA637156a4198B`.
+   Then paste the address into README ("Registry" section) and into
    `DEFAULT_PINNED` in apps/web/src/main.ts.
 2. **Live Anon-RPC round-trip** — browser-only harness: serve a patched dapp
    (`fixtures/leaky-dapp-fixed` via `pnpm --filter

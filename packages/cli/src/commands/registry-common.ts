@@ -26,11 +26,10 @@ export function makeBackend(flags: RegistryFlags): RegistryBackend {
   if (expiryDays !== undefined && !Number.isFinite(expiryDays)) {
     throw new Error('--expiry-days needs a number');
   }
+  const rpcUrl = flags['rpc-url'] ?? process.env.ARKIV_RPC_URL;
   return new ArkivRegistry({
     ...(process.env.ARKIV_PRIVATE_KEY ? { privateKey: process.env.ARKIV_PRIVATE_KEY } : {}),
-    ...(flags['rpc-url'] ?? process.env.ARKIV_RPC_URL
-      ? { rpcUrl: flags['rpc-url'] ?? process.env.ARKIV_RPC_URL }
-      : {}),
+    ...(rpcUrl ? { rpcUrl } : {}),
     ...(process.env.ARKIV_ACCESS_KEY ? { accessKey: process.env.ARKIV_ACCESS_KEY } : {}),
     ...(expiryDays !== undefined ? { expiryDays } : {}),
   });

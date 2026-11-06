@@ -60,7 +60,7 @@ export class WalletReadHandler {
           body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
         });
         const json = (await res.json()) as RpcAnswer & { jsonrpc?: string };
-        return { result: json.result, error: json.error };
+        return json.error ? { error: json.error } : { result: json.result };
       } catch (err) {
         return { error: { code: -32000, message: `live read failed: ${String(err)}` } };
       }

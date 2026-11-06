@@ -14,5 +14,8 @@
     "declaration": true,
     "sourceMap": true,
     "isolatedModules": true
-  }
+  },
+  // Tests are run from source by vitest; compiling them into dist would make
+  // vitest pick up both copies.
+  "exclude": ["**/*.test.ts", "**/dist/**", "**/node_modules/**"]
 }

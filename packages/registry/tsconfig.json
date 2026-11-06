@@ -2,7 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // Private workspace package consumed from source; the Arkiv SDK's
+    // inferred schema types reference internal names that cannot appear in
+    // emitted .d.ts files (TS4023).
+    "declaration": false
   },
   "include": ["src"]
 }
