@@ -1,7 +1,8 @@
 /**
  * Evidence bundles. `igris.evidence.v1` (P0.5) is FROZEN — its schema objects
  * below are pinned by hash in contracts.test.ts. `igris.evidence.v2` (P1) is
- * v1 plus exactly one additive item type, `contact-classification`. Both
+ * v1 plus exactly one additive item type, `contact-classification`; approved
+ * by the project owner 2026-11-06 and frozen (hash-pinned) as well. Both
  * validate; new bundles are written as v2.
  *
  * The redacted, self-contained artifact holding every piece of evidence a

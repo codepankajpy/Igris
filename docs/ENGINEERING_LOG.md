@@ -213,8 +213,8 @@ Committed as `dd47f45` on `p1-reliability`. What exists:
   (RainbowKit 2, Privy 5, AppKit 5, ConnectKit 1, Dynamic 1).
 - Contract successors, additive: Report 2.1.0 (optional `scan.connection`,
   `scan.failure`) and `igris.evidence.v2` (+ `contact-classification`). The
-  frozen 2.0.0 / v1 schemas are untouched and hash-pinned. **PENDING the
-  project owner's approval** (ROADMAP MVP-7).
+  frozen 2.0.0 / v1 schemas are untouched and hash-pinned. Approved by
+  the project owner on 2026-11-06 (see below).
 
 Not done: kit recipes are not wired into `scan()` (scans still connect with
 the legacy heuristic, `legacy-heuristic@0`); terms/consent gates (Morpho,
@@ -292,3 +292,21 @@ the UI and in `assess()`.
   content-addressed extracts and says so.
 - Not yet measured: Lighthouse accessibility, an e2e no-third-party-request
   check, a light theme (P5-2, P5-3).
+
+## 2026-11-06 — Contract successors approved and frozen
+
+The project owner approved Report 2.1.0 and `igris.evidence.v2` (ROADMAP
+MVP-7). They are accepted exactly as proposed in `dd47f45`; the schemas
+have not changed since (their canonical hashes were recomputed and match).
+
+- The three successor schemas (`REPORT_SCHEMA_2_1_0`, `EVIDENCE_ITEM_SCHEMA`,
+  `EVIDENCE_BUNDLE_SCHEMA`) are now pinned by canonical hash in
+  `contracts.test.ts`, alongside the P0.5 pins. Changing them now means a
+  new version.
+- `docs/CONTRACTS.md` specifies both normatively and states the approval
+  rule: a successor takes effect only after owner approval and is then
+  frozen.
+- Why they were needed (demonstrated before they were added): the frozen
+  2.0.0 schema has `additionalProperties: false` on `scan`, so it cannot
+  carry connect diagnostics or a structured failure reason, and the frozen
+  v1 item `oneOf` cannot hold a classification item.

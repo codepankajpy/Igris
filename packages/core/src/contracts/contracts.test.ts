@@ -152,7 +152,7 @@ describe('schema validation of real and hostile documents', () => {
   });
 });
 
-describe('P0.5 contracts are frozen; P1 successors are additive (compatibility)', () => {
+describe('P0.5 contracts are frozen; P1 successors are additive and, once approved, frozen too', () => {
   // Canonical hashes of the schemas exactly as committed at b3c1485 (P0.5).
   it('frozen schemas are byte-for-byte unchanged', () => {
     expect(contentHash(REPORT_SCHEMA_2_0_0)).toBe(
@@ -163,6 +163,21 @@ describe('P0.5 contracts are frozen; P1 successors are additive (compatibility)'
     );
     expect(contentHash(EVIDENCE_BUNDLE_SCHEMA_V1)).toBe(
       '30123ef564721e395430fac52b5d778a02c2c8c21cac0fa65cca8c2c6a6aabc6',
+    );
+  });
+
+  // Report 2.1.0 and igris.evidence.v2 were approved by the project owner on
+  // 2026-11-06 (ROADMAP MVP-7) exactly as committed at dd47f45. From here on
+  // they are frozen like 2.0.0 / v1: any change is a new version.
+  it('approved successor schemas (2.1.0, evidence v2) are byte-for-byte unchanged', () => {
+    expect(contentHash(REPORT_SCHEMA_2_1_0)).toBe(
+      '9ee25dd09c0769879d2b50d8add238f6cc5b4c48382f84982ab85f5aee5406f1',
+    );
+    expect(contentHash(EVIDENCE_ITEM_SCHEMA)).toBe(
+      '622effab4db47e09d579864881425a5b8c2bb6967d631b021da3a4d6f892ecd8',
+    );
+    expect(contentHash(EVIDENCE_BUNDLE_SCHEMA)).toBe(
+      '49b6536cee6fda539ea86091d3cb27620202bca0eeee9cbd962b79086b6329f8',
     );
   });
 

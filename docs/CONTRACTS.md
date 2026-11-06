@@ -11,8 +11,8 @@ exported from `@igris/core` (`REPORT_V2_SCHEMA`, `EVIDENCE_BUNDLE_SCHEMA`,
 | Canonical JSON         | RFC 8785                                         | `packages/core/src/contracts/canonical.ts` |
 | Content hash           | sha256 over canonical bytes, 64 lowercase hex    | `contracts/hash.ts`                        |
 | Capture                | v1 (internal, unredacted — never published)      | `contracts/capture.ts`                     |
-| Evidence bundle        | `igris.evidence.v1`                              | `contracts/evidence.ts`                    |
-| Report                 | `reportVersion: "2.0.0"`                         | `contracts/report-v2.ts`                   |
+| Evidence bundle        | `igris.evidence.v2` (writes); v1 still read      | `contracts/evidence.ts`                    |
+| Report                 | `"2.1.0"` (writes); `"2.0.0"` still read         | `contracts/report-v2.ts`                   |
 | Detector API           | v1                                               | `contracts/detector.ts`, `engine.ts`       |
 | Scanner node / profile | `igris.node.v1` / `igris.scanner.v1`             | `packages/registry/src/identity.ts`        |
 | Registry entity        | Arkiv schema `igris.scan.v1`, summary payload v2 | `packages/registry/src/{schema,record}.ts` |
@@ -69,6 +69,38 @@ is pretty-printed; its content hash is `contentHash(report)`, which
 Item types: `canary-match`, `third-party-contact`, `document-headers`. The
 JSON Schema is `EVIDENCE_ITEM_SCHEMA`, with `additionalProperties: false` on
 every object.
+
+## Evidence bundle `igris.evidence.v2`
+
+Approved by the project owner on 2026-11-06 and frozen: its schemas are
+pinned by canonical hash in `contracts.test.ts`, like v1's. New bundles are
+written as v2; v1 bundles still validate and verify.
+
+v2 is v1 plus exactly one item type. The three v1 item schemas are
+byte-for-byte identical in v2 (tested).
+
+```jsonc
+{
+  "type": "contact-classification",
+  "host": "api.example.org",
+  "registrableDomain": "example.org",
+  "relationship": "first-party" | "same-organisation" | "tenant-infrastructure"
+                | "shared-cdn" | "wallet-sdk" | "rpc" | "walletconnect-relay"
+                | "ipfs-gateway" | "analytics" | "advertising" | "error-monitoring"
+                | "support-chat" | "security-service" | "anon-rpc" | "unknown",
+  "confidence": "high" | "medium" | "low",
+  "rule": "<rule-id>@<n>",                 // which rule, which version
+  "basis": [{ "kind": BasisKind, "detail": "…" }]   // 1–16 entries
+}
+```
+
+`BasisKind` is one of `registrable-domain-match`, `organisation-mapping`,
+`third-party-db`, `tenant-hostname`, `resource-profile`, `no-cookies`,
+`no-canary`, `no-match`. Every classification therefore names the rule that
+made it and the evidence it rested on. `relationship` is descriptive; the
+scoring class stays the frozen `recipientClass` on `third-party-contact`.
+
+No detector produces `contact-classification` items yet (ROADMAP P1-3).
 
 ## Report v2 (`2.0.0`)
 
@@ -131,6 +163,49 @@ Every finding, privacy or security, has these fields:
 Use `findingSet` for re-scan confirmation (ROADMAP P2-5) and independent
 reproduction (P6-2). Use `evidence.sha256` to prove what was seen.
 
+## Report `2.1.0`
+
+Approved by the project owner on 2026-11-06 and frozen (hash-pinned). New
+reports are written as 2.1.0; 2.0.0 reports still validate and verify.
+
+2.1.0 is 2.0.0 with additive changes only (a test asserts that nothing else
+differs):
+
+- `reportVersion` is `"2.1.0"`;
+- `evidence.bundleVersion` is `"igris.evidence.v2"`, and finding evidence
+  references may point at `contact-classification` items;
+- `scan.connection` (optional): connect-phase diagnostics;
+- `scan.failure` (optional): why nothing was measured.
+
+Pairing is enforced by `verifyReportIntegrity`: a 2.0.0 report references a
+v1 bundle, a 2.1.0 report a v2 bundle.
+
+```
+scan.connection {
+  kit        { id: rainbowkit|connectkit|appkit|privy|dynamic|none,
+               confidence: high|medium|low|none, signals: string[] }
+  strategy   kit-recipe | generic | recipe-file | none
+  recipe     "<id>@<n>" | null           e.g. "legacy-heuristic@0"
+  outcome    connected | failed | not-attempted
+  failure    { category, step, detail } | null
+  steps      [{ step, result: ok|failed|skipped, detail, ms }]   ≤ 50
+  navigation { urlChanges: string[] ≤ 20, aborted: boolean }
+  requestAccountsCalls  integer ≥ 0
+}
+scan.failure { category, detail }
+```
+
+Failure categories: `site-unavailable`, `bot-blocked`,
+`browser-incompatible`, `no-connect-control`, `modal-not-opened`,
+`wallet-option-missing`, `request-not-issued`, `unexpected-navigation`,
+`recipe-error`, `scanner-error`.
+
+`scan.connection` is a diagnostic, not evidence. It is not part of the
+evidence bundle or of `findingSet`, so it never changes a finding or the
+score. Kit `confidence` is earned: `high` means the kit's own modal was
+observed; a network host alone is `low`. Consumers must not present a `low`
+kit as an identification.
+
 ## Detector API v1
 
 ```ts
@@ -161,6 +236,10 @@ Built-in detectors: `canary-leak` 1.0.0 (privacy), `ip-exposure` 1.0.0
   bump and must ship with a migration function plus regression fixtures.
 - **Evidence bundle, scanner profile, node file**: new name on any change
   (`igris.evidence.v2`, …).
+- **Approval and freezing**: a successor contract takes effect only after
+  the project owner approves it. Once approved it is frozen, and its schemas
+  are pinned by canonical hash in `contracts.test.ts`. Frozen so far: report
+  2.0.0 and 2.1.0, `igris.evidence.v1` and `igris.evidence.v2`.
 - **Detectors**: bump `version` when logic changes. The `id` never changes,
   because it is part of every fingerprint.
 - **Arkiv entity schema**: a new schema name on breaking change

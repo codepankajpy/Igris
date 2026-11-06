@@ -474,7 +474,9 @@ export const REPORT_SCHEMA_2_0_0 = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Report 2.1.0 — built from the frozen 2.0.0 schema by ADDITIVE changes only:
+// Report 2.1.0 — APPROVED by the project owner 2026-11-06 and FROZEN (pinned
+// by hash in contracts.test.ts; any change is a new version). Built from the
+// frozen 2.0.0 schema by ADDITIVE changes only:
 //  - reportVersion "2.1.0";
 //  - scan.connection and scan.failure: new OPTIONAL properties;
 //  - evidence.bundleVersion "igris.evidence.v2" and evidence refs may point

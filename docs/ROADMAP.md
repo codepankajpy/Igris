@@ -102,7 +102,7 @@ and the risk verdict; the frontend only displays them; nothing is fabricated.
 | MVP-4 | One real dApp scanned through the UI and displayed end to end.                                                                                                                   | PASS (app.uniswap.org: live stages → 77/100, 23 evidence items, integrity re-checked in the browser) |
 | MVP-5 | 5–8 representative dApps scanned and displayed (kits: Privy, ConnectKit, RainbowKit, AppKit, Dynamic).                                                                           | PASS (6 dApps; connect succeeded on 3/6 with the legacy heuristic — recorded in ENGINEERING_LOG)     |
 | MVP-6 | Dashboard shows only real aggregates: latest completed scan per dApp, unscored scans separated, kits by identification confidence.                                               | PASS                                                                                                 |
-| MVP-7 | Report v2.1.0 / `igris.evidence.v2` successors (P1 work) approved by the project owner. The app reads them; the frozen 2.0.0 / v1 schemas are untouched.                         | BLOCKED(owner approval)                                                                              |
+| MVP-7 | Report v2.1.0 / `igris.evidence.v2` successors (P1 work) approved by the project owner. The app reads them; the frozen 2.0.0 / v1 schemas are untouched.                         | PASS (approved by the owner 2026-11-06; schemas frozen and hash-pinned; spec in CONTRACTS.md)        |
 
 ---
 

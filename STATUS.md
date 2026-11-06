@@ -19,9 +19,10 @@ verification notes are in [docs/ENGINEERING_LOG.md](docs/ENGINEERING_LOG.md).
   → isolated Chromium → evidence → detectors → score → report, displayed in
   `apps/app` (Landing, Dashboard, New Scan, Live Scan, Report, Evidence
   Explorer, History). Six real dApps scanned through it (ENGINEERING_LOG).
-- **Waiting on the owner:** approval of the Report 2.1.0 /
-  `igris.evidence.v2` successors (ROADMAP MVP-7) and review of the P1
-  discovery report before recipe work.
+- **Contracts:** Report 2.1.0 and `igris.evidence.v2` approved by the owner
+  on 2026-11-06 and frozen (hash-pinned, spec in docs/CONTRACTS.md).
+- **Waiting on the owner:** review of the P1 discovery report before
+  recipe work.
 
 ## Run the web app (local)
 
