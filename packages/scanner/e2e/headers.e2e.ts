@@ -1,6 +1,6 @@
 /**
  * P0-1 / P0-3 end to end: security headers are read from the main document's
- * final response (through redirects), and an HTTP error page is never scored.
+ * final response (through redirects), and an HTTP error page is never reported on.
  * Fully offline: a local server answers for *.test via the host-resolver rule.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -83,8 +83,10 @@ describe('security headers (main document)', () => {
         'Page can be embedded by any site (clickjacking)',
       ]),
     );
-    // Never scored.
-    expect(r.report.security.observations.every((o) => !o.countsTowardPrivacyScore)).toBe(true);
+    // Security observations carry no privacy weight (3.0.0 has no score at all).
+    expect(r.report.security.observations.every((o) => !('countsTowardPrivacyScore' in o))).toBe(
+      true,
+    );
   });
 
   it('redirect chain: the final document decides, not the redirect hop', async () => {
@@ -96,20 +98,20 @@ describe('security headers (main document)', () => {
   });
 });
 
-describe('HTTP error pages are not scored', () => {
-  it('a 404 main document → page-load-failed, score null, no security claims', async () => {
+describe('HTTP error pages are not reported on', () => {
+  it('a 404 main document → page-load-failed, coverage none, no recipients, no security claims', async () => {
     const r = await scanPath('/missing');
     expect(r.report.scan.status).toBe('page-load-failed');
-    expect(r.report.privacy.score).toBeNull();
     expect(r.report.privacy.coverage).toBe('none');
+    expect(r.report.recipients).toEqual([]);
     expect(r.report.security.observations).toEqual([]);
     expect(r.report.scan.notes.join(' ')).toMatch(/HTTP 404/);
   });
 
-  it('a page with no wallet flow is scored with coverage pre-connect-only', async () => {
+  it('a page with no wallet flow is reported with coverage pre-connect-only', async () => {
     const r = await scanPath('/plain');
     expect(r.report.scan.status).toBe('wallet-connect-failed');
     expect(r.report.privacy.coverage).toBe('pre-connect-only');
-    expect(typeof r.report.privacy.score).toBe('number');
+    expect(Array.isArray(r.report.recipients)).toBe(true);
   });
 });

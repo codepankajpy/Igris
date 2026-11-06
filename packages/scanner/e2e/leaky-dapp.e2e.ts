@@ -103,10 +103,10 @@ describe('leaky fixture scan', () => {
     expect(hits[0]!.url).toContain('ref=<CANARY>');
   });
 
-  it('localStorage persistence is reported but not scored', () => {
+  it('localStorage persistence is reported as an observation, not a third-party exposure', () => {
     const hits = findingsMatching(result, (f) => f.location === 'local-storage');
     expect(hits.length).toBeGreaterThanOrEqual(1);
-    expect(hits.every((f) => !f.countsTowardScore)).toBe(true);
+    expect(hits.every((f) => !f.isIssue)).toBe(true);
   });
 
   it('phase A records third-party contacts before any wallet interaction', () => {
@@ -127,17 +127,25 @@ describe('leaky fixture scan', () => {
     expect(result.report.wallet.usesAnonRpc).toBe(false);
   });
 
-  it('scores clearly below 90 with an itemized ledger', () => {
-    const { privacy } = result.report;
-    expect(privacy.score).toBeLessThan(90);
-    expect(privacy.ledger.length).toBeGreaterThanOrEqual(4);
-    const total = privacy.ledger.reduce((s, l) => s + l.points, 0);
-    expect(privacy.score).toBe(Math.max(0, Math.round(100 - total)));
-    // Every scored finding is referenced by some ledger line.
-    const referenced = new Set(privacy.ledger.flatMap((l) => l.findingIds));
-    for (const f of privacy.findings.filter((f) => f.countsTowardPrivacyScore)) {
-      expect(referenced.has(f.id), `finding ${f.id} must appear in the ledger`).toBe(true);
+  it('every address exposure lands in a recipient with a verdict and a reason; no score', () => {
+    const { report } = result;
+    expect('score' in report.privacy).toBe(false);
+    const referenced = new Set(report.recipients.flatMap((r) => r.findingIds));
+    for (const f of report.privacy.findings.filter(
+      (x) => x.detector === 'canary-leak' && x.kind === 'issue',
+    )) {
+      expect(referenced.has(f.id), `finding ${f.id} must belong to a recipient`).toBe(true);
     }
+    // The planted analytics leak is a tracking recipient that received the address.
+    const tracking = report.recipients.filter(
+      (r) =>
+        (r.verdict === 'tracking' || r.verdict === 'unidentified') && r.learned.address === 'exact',
+    );
+    expect(tracking.length).toBeGreaterThanOrEqual(1);
+    for (const r of report.recipients) expect(r.reason.length).toBeGreaterThan(10);
+    // Timing and RPC inventory were recorded.
+    expect(report.timeline).not.toBeNull();
+    expect(report.rpc!.length).toBeGreaterThanOrEqual(1);
   });
 
   it('never exposes the raw canary: once in the report (its own field), never in the evidence', () => {
@@ -152,14 +160,12 @@ describe('leaky fixture scan', () => {
 
   it('every privacy finding carries evidence; security observations are separate', () => {
     for (const f of result.report.privacy.findings) expect(f.evidence.length).toBeGreaterThan(0);
-    expect(result.report.security.observations.every((o) => !o.countsTowardPrivacyScore)).toBe(
-      true,
-    );
+    expect(result.report.security.observations.every((o) => o.domain === 'security')).toBe(true);
   });
 });
 
 describe('determinism and cross-scan stability', () => {
-  it('a second scan (new random canary) yields the same finding ids, score and leak set', async () => {
+  it('a second scan (new random canary) yields the same finding ids, verdicts and leak set', async () => {
     const second = await scan({
       url: PAGE_URL,
       hostResolverRules: HOST_RULES,
@@ -173,7 +179,11 @@ describe('determinism and cross-scan stability', () => {
         .map(({ snippet, ...rest }) => ({ ...rest, snippet: snippet.length > 0 }))
         .sort((a, b) => (a.id < b.id ? -1 : 1));
     expect(strip(second)).toEqual(strip(result));
-    expect(second.report.privacy.score).toBe(result.report.privacy.score);
+    const verdicts = (r: ScanResult) =>
+      r.report.recipients.map(
+        (x) => `${x.registrableDomain}|${x.class}|${x.verdict}|${x.learned.address}`,
+      );
+    expect(verdicts(second)).toEqual(verdicts(result));
     // The same behaviour → the same finding-set digest, even though the
     // canary differs. (The evidence-bundle hash is NOT asserted equal: page
     // snippets can embed nonces — measured on this fixture: wagmi writes a

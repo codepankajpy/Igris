@@ -76,7 +76,7 @@ export function flatLeaks(result: import('@igris/core').ScanResult) {
         id: f.id,
         severity: f.severity,
         kind: f.kind,
-        countsTowardScore: f.countsTowardPrivacyScore,
+        isIssue: f.kind === 'issue',
         class: e.recipientClass,
         location: e.location,
         encoding: e.encoding,

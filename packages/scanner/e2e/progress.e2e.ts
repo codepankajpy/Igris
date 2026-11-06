@@ -59,16 +59,26 @@ describe('scan progress events', () => {
     expect(reqs.length).toBeGreaterThan(2);
     for (let i = 1; i < reqs.length; i++) expect(reqs[i]!).toBeGreaterThanOrEqual(reqs[i - 1]!);
 
-    // The report stage states the real score.
+    // The report stage states what was really found.
     const report = events.find((e) => e.stage === 'report' && e.status === 'completed')!;
-    expect(report.detail).toBe(`privacy score ${result.report.privacy.score}/100`);
+    expect(report.detail).toBe(
+      `${result.report.recipients.length} recipients · ${
+        result.report.recipients.filter(
+          (x) => x.learned.address === 'exact' || x.learned.address === 'hashed',
+        ).length
+      } received the address · ${
+        result.report.recipients.filter(
+          (x) => x.verdict === 'tracking' || x.verdict === 'unidentified',
+        ).length
+      } tracking or unidentified`,
+    );
     // The wallet stage reports the real connection.
     expect(events.find((e) => e.stage === 'wallet' && e.status === 'completed')!.detail).toMatch(
       /^connected/,
     );
   }, 180_000);
 
-  it('an unreachable target: navigation failed, dependent stages skipped, report not scored', async () => {
+  it('an unreachable target: navigation failed, dependent stages skipped, nothing observed', async () => {
     const events: ScanProgressEvent[] = [];
     const result = await scan({
       url: 'http://nothing-here.test:1/',
@@ -76,12 +86,12 @@ describe('scan progress events', () => {
       dwellMs: 300,
       onProgress: (e) => events.push(e),
     });
-    expect(result.report.privacy.score).toBeNull();
+    expect(result.report.privacy.coverage).toBe('none');
     const nav = events.filter((e) => e.stage === 'navigation').map((e) => e.status);
     expect(nav).toEqual(['started', 'failed']);
     for (const st of ['observe-pre-connect', 'wallet', 'observe-post-connect'] as const) {
       expect(events.filter((e) => e.stage === st).map((e) => e.status)).toEqual(['skipped']);
     }
-    expect(events.find((e) => e.stage === 'report')!.detail).toBe('not scored');
+    expect(events.find((e) => e.stage === 'report')!.detail).toBe('nothing observed');
   }, 120_000);
 });

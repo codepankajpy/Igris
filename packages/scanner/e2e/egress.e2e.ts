@@ -156,7 +156,7 @@ describe('egress isolation (public-only)', () => {
   it('an internal scan target never loads (direct)', async () => {
     const report = await publicOnlyScan(`http://127.0.0.1:${SECRET_PORT}/`, false);
     expect(report.scan.status).toBe('page-load-failed');
-    expect(report.privacy.score).toBeNull();
+    expect(report.privacy.coverage).toBe('none');
     expect(secretHits).toEqual([]);
   });
 

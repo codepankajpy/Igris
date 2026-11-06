@@ -8,7 +8,7 @@
  * docs/METHODOLOGY.md.
  */
 import type { BrowserContext, Page } from 'playwright';
-import type { Capture, CapturedRequest, Phase } from '@igris/core';
+import type { Capture, CapturedRequest, MilestoneEvent, Phase } from '@igris/core';
 
 /** Bodies larger than this are truncated before detection (documented cap). */
 export const BODY_CAP_BYTES = 512 * 1024;
@@ -37,9 +37,29 @@ export class TrafficRecorder {
     cookies: [],
   };
   private phase: Phase = 'pre-connect';
+  /** Navigation start (ms epoch); timeline offsets are relative to it. */
+  private origin: number | null = null;
 
   setPhase(phase: Phase): void {
     this.phase = phase;
+  }
+
+  /** Start the timeline clock (call right before page.goto). */
+  startClock(now = Date.now()): void {
+    this.origin = now;
+  }
+
+  /** ms since navigation start, or undefined before the clock started. */
+  private elapsed(now = Date.now()): number | undefined {
+    return this.origin === null ? undefined : Math.max(0, Math.round(now - this.origin));
+  }
+
+  /** Record a scan milestone once (first occurrence wins). */
+  milestone(event: MilestoneEvent, now = Date.now()): void {
+    const t = this.elapsed(now);
+    if (t === undefined) return;
+    const list = (this.capture.milestones ??= []);
+    if (!list.some((m) => m.event === event)) list.push({ event, t });
   }
 
   attach(context: BrowserContext): void {
@@ -61,6 +81,8 @@ export class TrafficRecorder {
         failed: false,
         setCookies: [],
       };
+      const t = this.elapsed();
+      if (t !== undefined) entry.t = t;
       this.capture.requests.push(entry);
       const phaseAtRequest = this.phase;
       let isMainDocument = false;
@@ -118,6 +140,7 @@ export class TrafficRecorder {
           direction: 'sent',
           payload:
             typeof frame.payload === 'string' ? frame.payload : frame.payload.toString('utf8'),
+          ...(this.elapsed() !== undefined ? { t: this.elapsed()! } : {}),
         }),
       );
       ws.on('framereceived', (frame) =>
@@ -127,6 +150,7 @@ export class TrafficRecorder {
           direction: 'received',
           payload:
             typeof frame.payload === 'string' ? frame.payload : frame.payload.toString('utf8'),
+          ...(this.elapsed() !== undefined ? { t: this.elapsed()! } : {}),
         }),
       );
     });
