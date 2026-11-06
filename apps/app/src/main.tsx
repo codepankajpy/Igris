@@ -8,7 +8,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { api, type RegistryInfo } from './api.js';
 import { useRoute, type Route } from './router.js';
 import { SearchBox } from './SearchBox.js';
-import { Sigil, short } from './ui.js';
+import { Sigil } from './ui.js';
+import { ExplorerContext, networkLabel } from './explorer.js';
 import { Landing } from './pages/Landing.js';
 import { SitePage } from './pages/Site.js';
 import { ScanPage } from './pages/Scan.js';
@@ -48,17 +49,17 @@ function RegistryChip({ info, down }: { info: RegistryInfo | null; down: boolean
       </span>
     );
   if (!info) return null;
-  const where = info.mode === 'arkiv' ? `Arkiv · ${info.network}` : 'Local registry';
+  const where =
+    info.mode === 'arkiv' ? `Published on Arkiv · ${networkLabel(info.network)}` : 'Local registry';
   const title = info.ready
-    ? info.publisher
-      ? `Reports are published by ${info.publisher}`
+    ? info.publishing
+      ? 'Every report this instance produces is published on Arkiv'
       : 'Read-only: this instance cannot publish'
     : (info.reason ?? 'Registry not ready');
   return (
     <span class="row muted small node-label" title={title}>
       <span class={`live-dot ${info.ready ? '' : 'off'}`} />
       {where}
-      {info.publisher ? <span class="mono"> · {short(info.publisher, 6, 4)}</span> : null}
     </span>
   );
 }
@@ -149,7 +150,7 @@ function App() {
       page = <NotFound />;
   }
   return (
-    <>
+    <ExplorerContext.Provider value={registry.info?.explorer ?? null}>
       <a
         class="skip"
         href="#main"
@@ -173,7 +174,7 @@ function App() {
           <span class="mono">no trackers · no third-party requests</span>
         </div>
       </footer>
-    </>
+    </ExplorerContext.Provider>
   );
 }
 

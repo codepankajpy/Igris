@@ -5,6 +5,7 @@
  * finished), the reason is shown with a retry and the report can be viewed
  * from the server's cache; when the scan failed, the reason and a retry.
  */
+import { ExplorerLink } from '../explorer.js';
 import { useEffect, useState } from 'preact/hooks';
 import {
   SCAN_STAGES,
@@ -376,6 +377,20 @@ function PublishPanel({
             {publish.scanKey ? `entity ${short(publish.scanKey, 10, 6)}` : ''}
             {publish.flowKeys ? ` · ${publish.flowKeys.length} flow entities` : ''}
           </div>
+          {publish.mode !== 'local' && (
+            <div class="row small" style={{ flexWrap: 'wrap', gap: 14, marginTop: 6 }}>
+              {publish.txHash && (
+                <ExplorerLink kind="tx" value={publish.txHash}>
+                  Transaction on the Arkiv explorer
+                </ExplorerLink>
+              )}
+              {publish.scanKey && (
+                <ExplorerLink kind="entity" value={publish.scanKey}>
+                  Report entity
+                </ExplorerLink>
+              )}
+            </div>
+          )}
           {version !== null && (
             <a class="link small" href={`#${paths.version(job.hostname, version)}`}>
               Opening the report…

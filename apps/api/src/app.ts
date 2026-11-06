@@ -20,7 +20,13 @@ import {
   type EvidenceBundle,
   type ReportV3,
 } from '@igris/core';
-import { isHostname, type Changes, type PublishedScan, type SiteRegistry } from '@igris/registry';
+import {
+  RABDI_EXPLORER_URL,
+  isHostname,
+  type Changes,
+  type PublishedScan,
+  type SiteRegistry,
+} from '@igris/registry';
 import { readCachedScan } from './artifacts.js';
 import type { ApiConfig } from './config.js';
 import {
@@ -293,14 +299,24 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
   app.get(
     '/api/registry',
     handle(async (_req, res) => {
+      // Public view: no publisher or trusted-owner addresses (they are on
+      // Arkiv for anyone who looks; the website does not advertise them).
+      const view = (ready: boolean, reason: string | undefined) => ({
+        mode: registryInfo.mode,
+        network: registryInfo.network,
+        explorer: registryInfo.mode === 'arkiv' ? RABDI_EXPLORER_URL : null,
+        publishing: registryInfo.publisher !== null,
+        ready,
+        ...(reason !== undefined ? { reason } : {}),
+      });
       if (!probe) {
-        res.json(registryInfo);
+        res.json(view(registryInfo.ready, registryInfo.reason));
         return;
       }
       const live = await liveStatus(probe);
       const ready = registryInfo.ready && live.ready;
       const reason = registryInfo.reason ?? (live.ready ? undefined : live.reason);
-      res.json({ ...registryInfo, ready, ...(reason !== undefined ? { reason } : {}) });
+      res.json(view(ready, reason));
     }),
   );
 

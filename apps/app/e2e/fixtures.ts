@@ -194,9 +194,9 @@ export const CACHE_PROBLEM = 'Arkiv read failed (timeout); served from the local
 
 export const registry: RegistryInfo = {
   mode: 'arkiv',
-  publisher: OWNER,
-  network: 'rabdi-testnet',
-  trustedOwners: [OWNER],
+  network: 'arkiv-rabdi-testnet',
+  explorer: 'https://rabdi.explorer.arkiv.network',
+  publishing: true,
   ready: true,
 };
 

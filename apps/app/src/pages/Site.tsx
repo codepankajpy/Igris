@@ -4,6 +4,7 @@
  * with "Scan this site". A scan already running → its live view.
  */
 import type { ComponentChildren } from 'preact';
+import { ExplorerLink } from '../explorer.js';
 import { useEffect, useState } from 'preact/hooks';
 import {
   api,
@@ -125,6 +126,13 @@ export function SitePage({
         </a>
       )}
       <VersionRail hostname={hostname} versions={site.versions} current={n} />
+      {registry?.mode === 'arkiv' && (
+        <p class="small rail-explorer">
+          <ExplorerLink kind="versions" value={hostname}>
+            Every version of {hostname} on the Arkiv explorer
+          </ExplorerLink>
+        </p>
+      )}
       <VersionBody key={`${hostname}@${n}`} hostname={hostname} n={n} registry={registry} />
     </div>
   );

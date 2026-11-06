@@ -225,6 +225,18 @@ function fakeDiff(prev: ReportV3, next: ReportV3): Changes {
   };
 }
 
+/** What GET /api/registry returns: no publisher or trusted-owner addresses. */
+function publicView(info: RegistryInfo) {
+  return {
+    mode: info.mode,
+    network: info.network,
+    explorer: info.mode === 'arkiv' ? 'https://rabdi.explorer.arkiv.network' : null,
+    publishing: info.publisher !== null,
+    ready: info.ready,
+    ...(info.reason !== undefined ? { reason: info.reason } : {}),
+  };
+}
+
 const READY: RegistryInfo = {
   mode: 'arkiv',
   publisher: PUBLISHER,
@@ -402,6 +414,13 @@ describe('validateHostname / scanTarget (fail-fast; the egress proxy is the real
 // ---------------------------------------------------------------------------
 
 describe('GET /api/health and /api/registry', () => {
+  it('GET /api/registry never exposes the publisher or trusted-owner addresses', async () => {
+    const { get } = await start({ info: READY });
+    const body = JSON.stringify((await get('/api/registry')).body);
+    expect(body).not.toMatch(/0x[0-9a-fA-F]{40}/);
+    expect(body).toContain('rabdi.explorer.arkiv.network');
+  });
+
   it('health is { ok: true }; registry reports its readiness as configured', async () => {
     const info: RegistryInfo = {
       mode: 'arkiv',
@@ -413,7 +432,7 @@ describe('GET /api/health and /api/registry', () => {
     };
     const { get } = await start({ info });
     expect((await get('/api/health')).body).toEqual({ ok: true });
-    expect((await get('/api/registry')).body).toEqual(info);
+    expect((await get('/api/registry')).body).toEqual(publicView(info));
   });
 });
 
@@ -1232,13 +1251,15 @@ describe('GET /api/registry probes the live registry (arkiv), bounded and cached
     let t = 0;
     const { get } = await start({ registry, probe: { now: () => t } });
     const a = await get('/api/registry');
-    expect(a.body).toEqual({ ...READY, ready: false, reason: 'Arkiv query failed: 503' });
+    expect(a.body).toEqual(
+      publicView({ ...READY, ready: false, reason: 'Arkiv query failed: 503' }),
+    );
     t = 29_000;
     await get('/api/registry');
     expect(registry.statusCalls).toBe(1); // cached
     registry.statusImpl = async () => ({ ready: true });
     t = 31_000;
-    expect((await get('/api/registry')).body).toEqual(READY);
+    expect((await get('/api/registry')).body).toEqual(publicView(READY));
     expect(registry.statusCalls).toBe(2);
   });
 
@@ -1250,7 +1271,7 @@ describe('GET /api/registry probes the live registry (arkiv), bounded and cached
       reason: 'no scanner key',
     };
     const { get } = await start({ info });
-    expect((await get('/api/registry')).body).toEqual(info);
+    expect((await get('/api/registry')).body).toEqual(publicView(info));
   });
 
   it('a node that never answers → not ready after the timeout; concurrent requests share one probe', async () => {
@@ -1278,7 +1299,7 @@ describe('GET /api/registry probes the live registry (arkiv), bounded and cached
       ready: true,
     };
     const { get } = await start({ registry, info, dataDir });
-    expect((await get('/api/registry')).body).toEqual(info);
+    expect((await get('/api/registry')).body).toEqual(publicView(info));
   });
 });
 

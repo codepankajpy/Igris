@@ -5,6 +5,7 @@
  * entity and its verification). The browser only draws them and re-checks
  * the hashes of what it received.
  */
+import { ExplorerLink, networkLabel } from '../explorer.js';
 import { useMemo } from 'preact/hooks';
 import type { Verdict } from '@igris/core/contracts';
 import type { RegistryInfo } from '../api.js';
@@ -206,7 +207,7 @@ function ProofChip({ data, registry }: { data: ReportData; registry: RegistryInf
   const where = provenance(data, registry?.mode);
   const status = proofStatus(data);
   const entity = scan
-    ? `owner ${short(scan.owner, 6, 4)} · entity ${short(scan.key, 8, 6)} · v${scan.version}`
+    ? `entity ${short(scan.key, 8, 6)} · v${scan.version}`
     : 'no registry entity yet';
   return (
     <>
@@ -215,9 +216,7 @@ function ProofChip({ data, registry }: { data: ReportData; registry: RegistryInf
         class={`proof ${status.ok ? 'ok' : 'bad'}`}
         onClick={() => jump('integrity')}
         aria-label={`${where}. ${
-          scan
-            ? `Version ${scan.version}, signed by ${scan.owner}, entity ${scan.key}.`
-            : 'Not a published version.'
+          scan ? `Version ${scan.version}, entity ${scan.key}.` : 'Not a published version.'
         } ${status.text}. Show integrity details.`}
       >
         <span class="proof-mark" aria-hidden="true">
@@ -226,13 +225,20 @@ function ProofChip({ data, registry }: { data: ReportData; registry: RegistryInf
         <span class="proof-text">
           <b>{where}</b>
           {onArkiv(data, registry?.mode) && registry?.network ? (
-            <span class="muted"> · {registry.network}</span>
+            <span class="muted"> · {networkLabel(registry.network)}</span>
           ) : null}
           <span class="proof-meta mono">
             {entity} · {status.text}
           </span>
         </span>
       </button>
+      {scan && onArkiv(data, registry?.mode) && (
+        <div class="proof-links small">
+          <ExplorerLink kind="entity" value={scan.key}>
+            See this version on the Arkiv explorer
+          </ExplorerLink>
+        </div>
+      )}
       {problems.length > 0 && (
         <ul class="points small proof-problems" aria-label="Verification problems">
           {problems.map((p) => (

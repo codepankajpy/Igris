@@ -2290,3 +2290,21 @@ table.sr-only {
     display: none;
   }
 }
+
+/* --- Arkiv explorer links ------------------------------------------------- */
+.ext-link {
+  color: var(--fg-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-3);
+  text-underline-offset: 3px;
+}
+.ext-link:hover {
+  color: var(--fg);
+  text-decoration-color: var(--fg);
+}
+.proof-links {
+  margin-top: 8px;
+}
+.rail-explorer {
+  margin: 10px 0 0;
+}

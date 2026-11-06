@@ -122,11 +122,14 @@ export interface Changes {
   }>;
 }
 
+/** GET /api/registry — deliberately carries no publisher address. */
 export interface RegistryInfo {
   mode: 'arkiv' | 'local';
-  publisher: string | null;
   network: string;
-  trustedOwners: string[];
+  /** Public block explorer base URL (Arkiv mode), or null. */
+  explorer: string | null;
+  /** Whether this instance publishes the reports it produces. */
+  publishing: boolean;
   ready: boolean;
   reason?: string;
 }
