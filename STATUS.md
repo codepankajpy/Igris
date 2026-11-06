@@ -17,12 +17,15 @@ verification notes are in [docs/ENGINEERING_LOG.md](docs/ENGINEERING_LOG.md).
   owner's direction change; recipes not yet wired into scans.
 - **MVP web application:** working on branch `mvp-web-app`. URL → scan job
   → isolated Chromium → evidence → detectors → score → report, displayed in
-  `apps/app` (Landing, Dashboard, New Scan, Live Scan, Report, Evidence
-  Explorer, History). Six real dApps scanned through it (ENGINEERING_LOG).
+  `apps/app`. Scanner 0.3.0 connects the canary wallet through a
+  dialog-scoped connect engine: 9/9 real dApps connected (RainbowKit,
+  ConnectKit, AppKit, Privy, Dynamic, custom). The web app makes zero
+  third-party requests (e2e-enforced).
 - **Contracts:** Report 2.1.0 and `igris.evidence.v2` approved by the owner
   on 2026-11-06 and frozen (hash-pinned, spec in docs/CONTRACTS.md).
-- **Waiting on the owner:** review of the P1 discovery report before
-  recipe work.
+- **Waiting on the owner:** (1) a `wallet-sdk` recipient class (contract
+  change) for Dynamic/Privy/AppKit backends; (2) metadata detectors that need
+  new evidence types (contract change); (3) funding the Arkiv scanner key.
 
 ## Run the web app (local)
 

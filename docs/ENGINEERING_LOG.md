@@ -310,3 +310,78 @@ have not changed since (their canonical hashes were recomputed and match).
   2.0.0 schema has `additionalProperties: false` on `scan`, so it cannot
   carry connect diagnostics or a structured failure reason, and the frozen
   v1 item `oneOf` cannot hold a classification item.
+
+## 2026-11-06 — Connect engine, leak lens, CROPS hardening (scanner 0.3.0)
+
+Trigger: a relay.link scan failed to connect. The legacy heuristic searched
+the whole page for `/metamask/i` and clicked the marketing line "$20B+
+settled across 85+ chains, powering Phantom, MetaMask,". The owner asked
+that connecting work everywhere and that the product focus on the bounty's
+idea 4 ("a tool that shows what an app leaks").
+
+### What changed and why
+
+- **Connect engine** (`packages/scanner/src/connect/{engine,choice}.ts`):
+  strict control scoring → wallet choice **inside the dialog that appeared
+  after the click** (our EIP-6963 rdns / exact name → at most two "reveal
+  the list" steps → exact generic entries) → connected only when the dApp's
+  **main frame** calls `eth_requestAccounts` → one in-dialog SIWE click.
+  Origin change at any step aborts. No page-wide fallback. Evidence first:
+  `scripts/connect-probe.ts` recorded what each kit's open modal contains
+  before any rule was written.
+- **RPC by behaviour** (`packages/core/src/engine.ts`): an unknown domain
+  is `rpc-provider` only if every request (and sent WebSocket message) to
+  any of its hosts is pure Ethereum JSON-RPC. First version was per host and
+  "any request"; the review showed a tracker could soften its own leak by
+  answering one RPC call, mixed batches qualified, and one vendor could be
+  charged twice. All three are regression-tested now.
+- **Third-party DB** 52 → 77 entries, each sourced (agent-researched,
+  reviewed). `api.developer.coinbase.com` was added and then removed: the
+  same host receives OnchainKit's address-bearing analytics.
+- **"Who learned what"** report section: one row per (registrable domain,
+  class), address column from the backend's scored canary-leak findings
+  (a truncated match is only "possible"), honest wording when the wallet
+  did not connect.
+- **Zero third-party requests in the web app** is now an e2e test
+  (`apps/app/e2e/no-third-party.e2e.ts`, 10 routes, delayed-request and
+  static-bundle checks, negative controls).
+- README CROPS rewritten against the code (it claimed the API stores no
+  results and that keys live in `.env`; both false), plus "Where the
+  blockchain is used".
+
+### Review
+
+A four-lens adversarial review (connect safety, detection integrity,
+frontend truth, security/CROPS) produced 25 confirmed findings (0 high
+after verification); all were fixed or documented in this change. Notable:
+URLs > 500 chars could break the Report 2.1.0 schema; an engine exception
+discarded a loaded page; iframe `eth_requestAccounts` counted as connected;
+cookie banners counted as connect dialogs.
+
+### Results (scanner 0.3.0, API, egress public-only, 4 s dwell)
+
+| dApp                | Score | Connect      | Address reached                                                        |
+| ------------------- | ----- | ------------ | ---------------------------------------------------------------------- |
+| app.uniswap.org     | 77    | generic@1    | first party only                                                       |
+| app.pendle.finance  | 66    | appkit@1     | walletconnect.org                                                      |
+| matcha.xyz          | 61    | privy@1      | quiknode.pro                                                           |
+| app.spark.fi        | 44    | appkit@1     | alchemy.com, walletconnect.org                                         |
+| www.bungee.exchange | 35    | dynamic@1    | dynamicauth.com                                                        |
+| relay.link          | 0     | dynamic@1    | abs.xyz (RPC), dynamicauth.com, ensideas.com                           |
+| app.aave.com        | 0     | connectkit@1 | aavechan.com, browser-intake-datadoghq.com, tenderly.co                |
+| app.gearbox.fi      | 0     | rainbowkit@1 | alchemy.com, etherlink.com, somnia.network (RPC), gearbox.foundation   |
+| swap.cow.fi         | 0     | generic@1    | alchemy.com, google.com, hypelab.com, sentry.io, spindl.link, wc relay |
+
+Connect: 9/9 (legacy heuristic: 3/6). Scores fell because post-connect
+traffic is now observed; the leaks were checked by hand against evidence.
+
+### Known limitations (stated, not hidden)
+
+- `gearbox.foundation` is Gearbox's own domain but is scored as an unknown
+  third party: same-organisation mapping (P1-3) is not built.
+- Wallet-SDK backends (Dynamic, Privy, the AppKit API) have no recipient
+  class in the frozen enum, so they appear as "Unidentified" and drive a
+  "critical" headline on Bungee. A `wallet-sdk` class is a contract change
+  (owner approval).
+- Kit-specific local fixture tests and a full-corpus connect rate (P1-2)
+  are still pending; the 9/9 is a live result on the MVP set.
