@@ -64,6 +64,24 @@ export interface ThirdPartyContact {
   class: RecipientClass;
   phases: Phase[];
   requestCount: number;
+  methods?: string[];
+  resourceTypes?: string[];
+}
+
+export interface ReportSummary {
+  totalRequests: number;
+  preConnectRequests: number;
+  postConnectRequests: number;
+  wsConnections: number;
+  cookiesCount: number;
+  localStorageCount: number;
+  sessionStorageCount: number;
+}
+
+export interface SecurityHeaders {
+  cspPresent: boolean;
+  hstsPresent: boolean;
+  xFrameOptions?: string;
 }
 
 export interface WalletRead {
@@ -101,6 +119,9 @@ export interface Report {
   score: number;
   ledger: PenaltyLine[];
   errors: string[];
+  summary?: ReportSummary;
+  securityHeaders?: SecurityHeaders;
+  connectionLog?: string[];
 }
 
 /**
@@ -197,6 +218,8 @@ export const REPORT_JSON_SCHEMA = {
           class: { enum: [...RECIPIENT_CLASSES] },
           phases: { type: 'array', items: { enum: ['pre-connect', 'post-connect'] } },
           requestCount: { type: 'integer' },
+          methods: { type: 'array', items: { type: 'string' } },
+          resourceTypes: { type: 'array', items: { type: 'string' } },
         },
       },
     },
@@ -225,5 +248,26 @@ export const REPORT_JSON_SCHEMA = {
       },
     },
     errors: { type: 'array', items: { type: 'string' } },
+    summary: {
+      type: 'object',
+      properties: {
+        totalRequests: { type: 'integer' },
+        preConnectRequests: { type: 'integer' },
+        postConnectRequests: { type: 'integer' },
+        wsConnections: { type: 'integer' },
+        cookiesCount: { type: 'integer' },
+        localStorageCount: { type: 'integer' },
+        sessionStorageCount: { type: 'integer' },
+      },
+    },
+    securityHeaders: {
+      type: 'object',
+      properties: {
+        cspPresent: { type: 'boolean' },
+        hstsPresent: { type: 'boolean' },
+        xFrameOptions: { type: 'string' },
+      },
+    },
+    connectionLog: { type: 'array', items: { type: 'string' } },
   },
 } as const;

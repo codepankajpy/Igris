@@ -355,16 +355,54 @@ function renderList(): string {
 
 function renderDetail(r: RegistryRecord): string {
   const s = r.summary;
+  const isOk = s.status === 'completed';
+  const statusBadge = isOk
+    ? '<span class="badge anon-rpc">✅ Handshake Complete</span>'
+    : '<span class="badge unpinned">⚠️ Wallet Handshake Incomplete</span>';
+
   return `<div class="panel detail">
     <button class="back" id="back">← Back to Registry Results</button>
-    <h2>${esc(r.hostname)} <span class="score ${scoreClass(r.score)}">${r.score}</span> / 100</h2>
+    <h2>${esc(r.hostname)} <span class="score ${scoreClass(r.score)}">${r.score}</span> / 100 ${statusBadge}</h2>
     <p class="row-meta">
       Scanned: ${new Date(r.scannedAt * 1000).toISOString()} · Scanner: <span class="mono">${esc(r.scanner)}</span>
       ${isPinned(r.scanner) || r.scanner === 'local' ? '<span class="badge anon-rpc">trusted</span>' : '<span class="badge unpinned">unpinned</span>'}<br>
       Arkiv Entity: <span class="mono">${esc(r.id)}</span> · Expiry: ${esc(r.expiresAt ?? '30-day TTL')} ·<br>
       report sha256 <span class="mono">${esc(r.reportSha256)}</span><br>
-      Scan Status: <strong>${esc(s.status)}</strong> · Canary Address: <span class="mono">${esc(s.canaryAddress)}</span>
+      Canary Address: <span class="mono">${esc(s.canaryAddress)}</span> · MetaMask Spoofing: <strong>${s.spoofMetaMask ? 'Enabled' : 'Disabled'}</strong>
     </p>
+
+    <!-- Telemetry Stats -->
+    <div class="telemetry-grid">
+      <div class="telemetry-card">
+        <div class="telemetry-label">Network Traffic</div>
+        <div class="telemetry-value">${s.telemetry?.totalRequests ?? r.thirdPartyCount} requests</div>
+        <div class="telemetry-sub">${s.telemetry?.preConnectRequests ?? '—'} pre / ${s.telemetry?.postConnectRequests ?? '—'} post</div>
+      </div>
+      <div class="telemetry-card">
+        <div class="telemetry-label">Third Parties</div>
+        <div class="telemetry-value">${s.thirdParties.length} contacted</div>
+        <div class="telemetry-sub">${s.thirdParties.filter((t) => t.phases.includes('pre-connect')).length} pre-connect</div>
+      </div>
+      <div class="telemetry-card">
+        <div class="telemetry-label">Security Headers</div>
+        <div class="telemetry-value">${s.securityHeaders?.cspPresent ? 'CSP Active' : 'CSP Missing'}</div>
+        <div class="telemetry-sub">${s.securityHeaders?.hstsPresent ? 'HSTS Enforced' : 'HSTS Absent'}</div>
+      </div>
+      <div class="telemetry-card">
+        <div class="telemetry-label">Canary Leaks</div>
+        <div class="telemetry-value" style="color:${s.findings.length ? 'var(--bad)' : 'var(--good)'}">${s.findings.length} detected</div>
+        <div class="telemetry-sub">${s.findings.length ? 'Identity compromised' : 'Zero canary leaks'}</div>
+      </div>
+    </div>
+
+    ${
+      s.connectionLog && s.connectionLog.length
+        ? `<h3>Wallet Connection Diagnostic Log</h3>
+        <div class="connection-log">
+          ${s.connectionLog.map((line) => `<div class="connection-log-step">${esc(line)}</div>`).join('')}
+        </div>`
+        : ''
+    }
 
     <h3>Detected Leaks & Evidence (${s.findings.length})</h3>
     ${
@@ -389,11 +427,11 @@ function renderDetail(r: RegistryRecord): string {
       .join('')}</tbody></table></div>
 
     <h3>Third Parties Contacted (${s.thirdParties.length})</h3>
-    <div class="table-container"><table><thead><tr><th>host</th><th>class</th><th>phases</th></tr></thead>
+    <div class="table-container"><table><thead><tr><th>host</th><th>class</th><th>requests</th><th>phases</th></tr></thead>
     <tbody>${s.thirdParties
       .map(
         (t) =>
-          `<tr><td>${esc(t.host)}</td><td>${esc(t.class)}</td><td>${t.phases.map(esc).join(', ')}</td></tr>`,
+          `<tr><td><strong>${esc(t.host)}</strong></td><td>${esc(t.class)}</td><td>${t.requestCount ?? 1}</td><td>${t.phases.map(esc).join(', ')}</td></tr>`,
       )
       .join('')}</tbody></table></div>
   </div>`;

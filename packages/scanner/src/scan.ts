@@ -71,6 +71,7 @@ export async function scan(options: ScanOptions): Promise<Report> {
   try {
     browser = await chromium.launch(launchOptions);
     const context = await browser.newContext({
+      viewport: { width: 1280, height: 960 },
       serviceWorkers: 'block', // so SW-mediated requests can't dodge capture
       ignoreHTTPSErrors: true,
     });
@@ -121,7 +122,14 @@ export async function scan(options: ScanOptions): Promise<Report> {
       } catch (err) {
         connectLog.push(`connect error: ${String(err).slice(0, 200)}`);
       }
-      const connected = await isWalletConnected(page);
+      let connected = await isWalletConnected(page);
+      if (!connected) {
+        for (let poll = 0; poll < 6; poll++) {
+          await page.waitForTimeout(500);
+          connected = await isWalletConnected(page);
+          if (connected) break;
+        }
+      }
       if (!connected) {
         status = 'wallet-connect-failed';
         errors.push(`could not connect wallet (${connectLog.join('; ') || 'no steps ran'})`);

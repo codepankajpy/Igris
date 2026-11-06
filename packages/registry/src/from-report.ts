@@ -45,9 +45,23 @@ export function recordFromReport(report: Report, reportJson: string): ScanRecord
         host: t.host,
         class: t.class,
         phases: t.phases,
+        ...(t.requestCount !== undefined ? { requestCount: t.requestCount } : {}),
+        ...(t.methods ? { methods: t.methods } : {}),
       })),
       ledger: report.ledger.map((l) => ({ rule: l.rule, points: l.points, label: l.label })),
       readsViaWallet: report.readsViaWallet,
+      ...(report.summary
+        ? {
+            telemetry: {
+              totalRequests: report.summary.totalRequests,
+              preConnectRequests: report.summary.preConnectRequests,
+              postConnectRequests: report.summary.postConnectRequests,
+              wsConnections: report.summary.wsConnections,
+            },
+          }
+        : {}),
+      ...(report.securityHeaders ? { securityHeaders: report.securityHeaders } : {}),
+      ...(report.connectionLog ? { connectionLog: report.connectionLog } : {}),
     },
   };
 }

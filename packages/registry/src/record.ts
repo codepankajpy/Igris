@@ -47,9 +47,27 @@ export interface SummaryPayload {
     phase: string;
     counted: boolean;
   }>;
-  thirdParties: Array<{ host: string; class: string; phases: string[] }>;
+  thirdParties: Array<{
+    host: string;
+    class: string;
+    phases: string[];
+    requestCount?: number;
+    methods?: string[];
+  }>;
   ledger: Array<{ rule: string; points: number; label: string }>;
   readsViaWallet: Array<{ method: string; count: number }>;
+  telemetry?: {
+    totalRequests: number;
+    preConnectRequests: number;
+    postConnectRequests: number;
+    wsConnections: number;
+  };
+  securityHeaders?: {
+    cspPresent: boolean;
+    hstsPresent: boolean;
+    xFrameOptions?: string;
+  };
+  connectionLog?: string[];
 }
 
 /** A record as it comes back from a registry (with provenance). */

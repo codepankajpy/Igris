@@ -91,13 +91,33 @@ export function buildReport(input: BuildReportInput): Report {
     }
   };
 
+  let preConnectRequests = 0;
+  let postConnectRequests = 0;
+  let cspPresent = false;
+  let hstsPresent = false;
+  let xFrameOptions: string | undefined = undefined;
+
   for (const req of input.capture.requests) {
     let host: string;
     try {
-      host = new URL(req.url).hostname;
+      const u = new URL(req.url);
+      if (!['http:', 'https:', 'ws:', 'wss:'].includes(u.protocol)) continue;
+      host = u.hostname;
+      if (!host) continue;
     } catch {
       continue; // data:, blob:, about: etc. never leave the machine
     }
+
+    if (req.phase === 'pre-connect') preConnectRequests++;
+    else postConnectRequests++;
+
+    for (const [k, v] of Object.entries(req.headers)) {
+      const lk = k.toLowerCase();
+      if (lk === 'content-security-policy') cspPresent = true;
+      if (lk === 'strict-transport-security') hstsPresent = true;
+      if (lk === 'x-frame-options') xFrameOptions = v;
+    }
+
     const meta = { url: req.url, method: req.method, host, phase: req.phase };
     scanText(req.url, 'url', meta);
     for (const [name, value] of Object.entries(req.headers)) {
@@ -110,7 +130,9 @@ export function buildReport(input: BuildReportInput): Report {
   for (const frame of input.capture.wsFrames) {
     let host: string;
     try {
-      host = new URL(frame.url).hostname;
+      const u = new URL(frame.url);
+      host = u.hostname;
+      if (!host) continue;
     } catch {
       continue;
     }
@@ -164,7 +186,10 @@ export function buildReport(input: BuildReportInput): Report {
   for (const req of input.capture.requests) {
     let host: string;
     try {
-      host = new URL(req.url).hostname;
+      const u = new URL(req.url);
+      if (!['http:', 'https:', 'ws:', 'wss:'].includes(u.protocol)) continue;
+      host = u.hostname;
+      if (!host) continue;
     } catch {
       continue;
     }
@@ -176,14 +201,24 @@ export function buildReport(input: BuildReportInput): Report {
       class: c.class,
       phases: [],
       requestCount: 0,
+      methods: [],
+      resourceTypes: [],
     };
     if (!existing.phases.includes(req.phase)) existing.phases.push(req.phase);
+    if (req.method && !existing.methods?.includes(req.method)) {
+      existing.methods?.push(req.method);
+    }
+    if (req.resourceType && !existing.resourceTypes?.includes(req.resourceType)) {
+      existing.resourceTypes?.push(req.resourceType);
+    }
     existing.requestCount += 1;
     contacts.set(c.host, existing);
   }
   const thirdParties = [...contacts.values()].sort((a, b) => a.host.localeCompare(b.host));
 
   const { score, ledger } = scoreReport(findings, thirdParties);
+
+  const connectionLog = input.errors.filter((e) => e.startsWith('connect: '));
 
   return {
     reportVersion: REPORT_VERSION,
@@ -202,5 +237,20 @@ export function buildReport(input: BuildReportInput): Report {
     score,
     ledger,
     errors: input.errors,
+    summary: {
+      totalRequests: preConnectRequests + postConnectRequests,
+      preConnectRequests,
+      postConnectRequests,
+      wsConnections: input.capture.wsFrames.length,
+      cookiesCount: input.capture.cookies.length,
+      localStorageCount: input.capture.storage.filter((s) => s.kind === 'local-storage').length,
+      sessionStorageCount: input.capture.storage.filter((s) => s.kind === 'session-storage').length,
+    },
+    securityHeaders: {
+      cspPresent,
+      hstsPresent,
+      ...(xFrameOptions ? { xFrameOptions } : {}),
+    },
+    connectionLog,
   };
 }

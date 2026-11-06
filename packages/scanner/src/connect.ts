@@ -6,7 +6,7 @@
  * that matches our injected provider. Sites with stranger flows use a recipe
  * (recipes/README.md documents the schema).
  */
-import type { Page } from 'playwright';
+import type { Page, Locator } from 'playwright';
 
 /**
  * Texts that mean "connect a wallet". Kept deliberately short: overly broad
@@ -21,6 +21,7 @@ export const CONNECT_TEXT = /connect( wallet)?|sign in|log ?in|launch app|get st
  */
 export const WALLET_OPTION_TEXTS = [
   /igris canary wallet/i,
+  /canary wallet/i,
   /injected/i,
   /browser wallet/i,
   /detected/i,
@@ -46,22 +47,66 @@ export interface ConnectResult {
   log: string[];
 }
 
+async function triggerClick(el: Locator): Promise<void> {
+  await el.scrollIntoViewIfNeeded().catch(() => {});
+  await el
+    .evaluate((domEl: Element) => {
+      let target: HTMLElement | null = domEl as HTMLElement;
+      while (target && target !== document.body) {
+        const style = window.getComputedStyle(target);
+        if (
+          style.cursor === 'pointer' ||
+          target.getAttribute('role') === 'button' ||
+          target.tagName === 'BUTTON'
+        ) {
+          break;
+        }
+        if (target.parentElement) target = target.parentElement;
+        else break;
+      }
+      if (!target) target = domEl as HTMLElement;
+      target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      target.click();
+    })
+    .catch(() => {});
+  await el.click({ timeout: 2000, force: true, noWaitAfter: true }).catch(() => {});
+}
+
 async function clickFirstVisible(
   page: Page,
   pattern: RegExp,
   log: string[],
   what: string,
+  isWalletOption = false,
 ): Promise<boolean> {
-  const candidates = page
-    .locator('button, a, [role="button"], [class*="connect" i]')
-    .filter({ hasText: pattern });
+  if (isWalletOption) {
+    // Try text-exact leaf locator first (avoids selecting outer modal containers)
+    const textLocator = page.getByText(pattern).first();
+    try {
+      if (await textLocator.isVisible()) {
+        const text = (await textLocator.innerText()).trim().slice(0, 60);
+        await triggerClick(textLocator);
+        log.push(`clicked ${what}: "${text}"`);
+        return true;
+      }
+    } catch {
+      /* fallback to candidate search */
+    }
+  }
+
+  const selector = isWalletOption
+    ? 'button, a, [role="button"], [data-testid*="wallet" i], [data-testid*="option" i], [class*="wallet" i], [class*="option" i], li'
+    : 'button, a, [role="button"], [data-testid*="connect" i], [class*="connect" i]';
+
+  const candidates = page.locator(selector).filter({ hasText: pattern });
   const count = await candidates.count();
   for (let i = 0; i < Math.min(count, 10); i++) {
     const el = candidates.nth(i);
     try {
       if (!(await el.isVisible())) continue;
       const text = (await el.innerText()).trim().slice(0, 60);
-      await el.click({ timeout: 2000, noWaitAfter: true });
+      await triggerClick(el);
       log.push(`clicked ${what}: "${text}"`);
       return true;
     } catch {
@@ -84,7 +129,8 @@ export async function connectWallet(
   if (recipe) {
     for (const step of recipe.steps) {
       try {
-        await page.locator(step.click).first().click({ timeout: 5000 });
+        const el = page.locator(step.click).first();
+        await triggerClick(el);
         log.push(`recipe click: ${step.click}`);
       } catch (err) {
         log.push(`recipe click FAILED: ${step.click} (${String(err).slice(0, 100)})`);
@@ -94,16 +140,16 @@ export async function connectWallet(
     return;
   }
 
-  const clickedConnect = await clickFirstVisible(page, CONNECT_TEXT, log, 'connect button');
+  const clickedConnect = await clickFirstVisible(page, CONNECT_TEXT, log, 'connect button', false);
   if (!clickedConnect) {
     log.push('no connect button found by heuristic');
     return;
   }
-  await page.waitForTimeout(1000); // let a wallet-picker modal render
+  await page.waitForTimeout(1500); // let a wallet-picker modal render
 
   for (const pattern of WALLET_OPTION_TEXTS) {
-    if (await clickFirstVisible(page, pattern, log, 'wallet option')) {
-      await page.waitForTimeout(500);
+    if (await clickFirstVisible(page, pattern, log, 'wallet option', true)) {
+      await page.waitForTimeout(1000);
       break;
     }
   }

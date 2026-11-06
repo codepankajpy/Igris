@@ -87,6 +87,7 @@ export function igrisInitWallet(cfg: {
         case 'eth_requestAccounts': {
           if (!connected) {
             connected = true;
+            provider.selectedAddress = cfg.address;
             emit('connect', { chainId: chainIdHex });
             emit('accountsChanged', [cfg.address]);
           }
@@ -129,14 +130,26 @@ export function igrisInitWallet(cfg: {
           throw rpcError(4200, 'Igris Canary Wallet: unsupported method ' + method);
       }
     },
+    isConnected() {
+      return true;
+    },
+    selectedAddress: null,
+    chainId: chainIdHex,
+    networkVersion: String(parseInt(chainIdHex, 16)),
     on(event: string, fn: Listener) {
       if (!listeners.has(event)) listeners.set(event, new Set());
       listeners.get(event)!.add(fn);
       return provider;
     },
+    addListener(event: string, fn: Listener) {
+      return provider.on(event, fn);
+    },
     removeListener(event: string, fn: Listener) {
       listeners.get(event)?.delete(fn);
       return provider;
+    },
+    off(event: string, fn: Listener) {
+      return provider.removeListener(event, fn);
     },
     removeAllListeners(event?: string) {
       if (event) listeners.delete(event);
@@ -160,7 +173,13 @@ export function igrisInitWallet(cfg: {
     },
   };
 
-  if (cfg.spoofMetaMask) provider.isMetaMask = true;
+  if (cfg.spoofMetaMask) {
+    provider.isMetaMask = true;
+    provider._metamask = {
+      isUnlocked: () => Promise.resolve(true),
+      isControllable: () => Promise.resolve(true),
+    };
+  }
 
   // EIP-6963 announcement (plus the legacy window.ethereum global).
   const info = Object.freeze({
@@ -175,12 +194,34 @@ export function igrisInitWallet(cfg: {
       ),
     rdns: 'network.igris.canary',
   });
+  const metaMaskInfo = cfg.spoofMetaMask
+    ? Object.freeze({
+        uuid: 'c76a13a8-4eb4-44ec-b8f9-5ec6be13508f',
+        name: 'MetaMask',
+        icon:
+          'data:image/svg+xml;base64,' +
+          btoa(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+              '<rect width="32" height="32" rx="6" fill="#e2761b"/>' +
+              '<circle cx="16" cy="16" r="8" fill="#ffffff"/></svg>',
+          ),
+        rdns: 'io.metamask',
+      })
+    : null;
+
   function announce(): void {
     window.dispatchEvent(
       new CustomEvent('eip6963:announceProvider', {
         detail: Object.freeze({ info, provider }),
       }),
     );
+    if (metaMaskInfo) {
+      window.dispatchEvent(
+        new CustomEvent('eip6963:announceProvider', {
+          detail: Object.freeze({ info: metaMaskInfo, provider }),
+        }),
+      );
+    }
   }
   window.addEventListener('eip6963:requestProvider', announce);
   announce();
