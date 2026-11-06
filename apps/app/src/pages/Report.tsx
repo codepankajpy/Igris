@@ -160,6 +160,7 @@ export function Report({ scan, data }: { scan: ScanMeta; data: Data }) {
         <>
           <nav class="report-nav rise d3" aria-label="Report sections">
             {[
+              ['exposure', 'Who learned what'],
               ['findings', 'Findings'],
               ['wallet', 'Wallet'],
               ['third-parties', 'Third parties'],
@@ -183,6 +184,7 @@ export function Report({ scan, data }: { scan: ScanMeta; data: Data }) {
             ))}
           </nav>
 
+          <Exposure data={data} scanId={scan.id} />
           <Findings data={data} scanId={scan.id} />
           <Wallet data={data} />
           <ThirdParties data={data} />
@@ -590,11 +592,19 @@ function ThirdParties({ data }: { data: Data }) {
       if (i.type === 'contact-classification') m.set(i.host, i);
     return m;
   }, [evidence]);
+  // Hosts with a scored address leak (the backend's findings), not every
+  // canary-match item (which also covers storage and truncated forms).
   const leakHosts = useMemo(() => {
     const s = new Set<string>();
-    for (const i of Object.values(evidence.items)) if (i.type === 'canary-match') s.add(i.host);
+    for (const f of report.privacy.findings) {
+      if (f.detector !== 'canary-leak' || !f.countsTowardPrivacyScore) continue;
+      for (const ref of f.evidence) {
+        const i = evidence.items[ref.id];
+        if (i?.type === 'canary-match') s.add(i.host);
+      }
+    }
     return s;
-  }, [evidence]);
+  }, [report, evidence]);
   const rows = [...report.contacts]
     .filter((c) =>
       filter === 'pre'
@@ -796,5 +806,225 @@ function Check({ ok, label }: { ok: boolean; label: string }) {
       <span class="check-mark">{ok ? '✓' : '×'}</span>
       {label}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Who learned what: one row per recipient domain, from the report's contacts
+// and the canary-match evidence only (no scoring, no new judgement).
+
+/** Display order of recipient kinds: most concerning first. */
+const KIND_ORDER = [
+  'unknown-third-party',
+  'analytics',
+  'error-monitoring',
+  'support-chat',
+  'rpc-provider',
+  'walletconnect-relay',
+  'ipfs-gateway',
+  'cdn',
+  'anon-rpc',
+];
+/** Address reaching these classes is the "tracking or unidentified" case. */
+const TRACKING = new Set(['unknown-third-party', 'analytics', 'error-monitoring', 'support-chat']);
+
+interface Recipient {
+  domain: string;
+  kind: string;
+  hosts: string[];
+  ipPhases: Set<string>;
+  address: {
+    /** yes: a scored exact leak; hashed: only hashed forms; possible: only a truncated display form (unscored). */
+    state: 'yes' | 'hashed' | 'possible';
+    phases: Set<string>;
+    how: Set<string>;
+    viaWebSocketOnly: boolean;
+    /** Strongest evidence first (exact, then hashed, then partial). */
+    evidence: Array<{ id: string; rank: number }>;
+  } | null;
+}
+
+const CATEGORY_RANK: Record<string, number> = { exact: 0, hashed: 1, partial: 2 };
+
+function Exposure({ data, scanId }: { data: Data; scanId: string }) {
+  const { report, evidence } = data;
+  const full = report.privacy.coverage === 'full';
+  const rows = useMemo(() => {
+    const m = new Map<string, Recipient>();
+    // One row per (registrable domain, class) — the same unit the score
+    // ledger uses — so an RPC host and an unidentified asset host of the
+    // same domain are never merged under one label.
+    const get = (domain: string, kind: string) => {
+      const key = `${domain}|${kind}`;
+      const r = m.get(key) ?? { domain, kind, hosts: [], ipPhases: new Set(), address: null };
+      m.set(key, r);
+      return r;
+    };
+    for (const c of report.contacts) {
+      const r = get(c.registrableDomain, c.class);
+      if (!r.hosts.includes(c.host)) r.hosts.push(c.host);
+      for (const p of c.phases) r.ipPhases.add(p);
+    }
+    // The address column comes from the backend's canary-leak FINDINGS:
+    // scored leaks are "yes"/"hashed"; an unscored truncated display form is
+    // only "possible"; storage observations are not third-party receipts.
+    for (const f of report.privacy.findings) {
+      if (f.detector !== 'canary-leak') continue;
+      for (const ref of f.evidence) {
+        const item = evidence.items[ref.id];
+        if (item?.type !== 'canary-match' || item.recipientClass === 'first-party') continue;
+        const counted = f.countsTowardPrivacyScore;
+        if (!counted && item.category !== 'partial') continue;
+        const r = get(item.registrableDomain, item.recipientClass);
+        if (!r.hosts.includes(item.host)) r.hosts.push(item.host);
+        const state = !counted ? 'possible' : item.category === 'hashed' ? 'hashed' : 'yes';
+        const a = r.address ?? {
+          state,
+          phases: new Set<string>(),
+          how: new Set<string>(),
+          viaWebSocketOnly: true,
+          evidence: [],
+        };
+        const order = { yes: 0, hashed: 1, possible: 2 } as const;
+        if (order[state] < order[a.state]) a.state = state;
+        a.phases.add(item.phase);
+        a.how.add(item.location.replace(/-/g, ' '));
+        if (item.location !== 'websocket-frame') a.viaWebSocketOnly = false;
+        a.evidence.push({ id: ref.id, rank: CATEGORY_RANK[item.category] ?? 3 });
+        r.address = a;
+      }
+    }
+    for (const r of m.values())
+      r.address?.evidence.sort((x, y) => x.rank - y.rank || x.id.localeCompare(y.id));
+    return [...m.values()].sort(
+      (x, y) =>
+        (x.address ? { yes: 0, hashed: 1, possible: 2 }[x.address.state] : 3) -
+          (y.address ? { yes: 0, hashed: 1, possible: 2 }[y.address.state] : 3) ||
+        KIND_ORDER.indexOf(x.kind) - KIND_ORDER.indexOf(y.kind) ||
+        x.domain.localeCompare(y.domain),
+    );
+  }, [report, evidence]);
+
+  const gotAddress = rows.filter((r) => r.address && r.address.state !== 'possible');
+  const trackersBefore = rows.filter(
+    (r) =>
+      (r.kind === 'analytics' || r.kind === 'error-monitoring' || r.kind === 'support-chat') &&
+      r.ipPhases.has('pre-connect'),
+  );
+  const rpcs = rows.filter((r) => r.kind === 'rpc-provider');
+  // "post-connect" only means "after connecting" when the wallet connected;
+  // otherwise it is the traffic of the connect attempt.
+  const after = full ? 'after connecting' : 'during the connect attempt';
+  const phaseText = (ps: Set<string>) =>
+    ps.has('pre-connect') && ps.has('post-connect')
+      ? `before connecting and ${after}`
+      : ps.has('pre-connect')
+        ? 'before connecting'
+        : after;
+
+  return (
+    <Section
+      id="exposure"
+      title="Who learned what"
+      aside="Every third party reached over HTTP(S), plus any that received the address over WebSocket"
+    >
+      <div class="grid g-3">
+        <Kpi
+          k={gotAddress.length}
+          l="received the wallet address"
+          s={
+            gotAddress.length
+              ? `${gotAddress.filter((r) => TRACKING.has(r.kind)).length} of them trackers or unidentified`
+              : full
+                ? 'not observed in any third-party traffic'
+                : 'not tested: the wallet did not connect'
+          }
+        />
+        <Kpi
+          k={trackersBefore.length}
+          l="trackers before any click"
+          s="analytics, monitoring or chat loaded on arrival"
+        />
+        <Kpi
+          k={rpcs.length}
+          l="RPC providers"
+          s={
+            rpcs.length
+              ? `each can link the addresses it serves to the visitor\u2019s IP${report.wallet.usesAnonRpc ? ' (Anon-RPC also detected)' : ''}`
+              : report.wallet.usesAnonRpc
+                ? 'reads routed through Anon-RPC'
+                : 'none contacted directly'
+          }
+        />
+      </div>
+      <div class="panel flush table-wrap" style={{ marginTop: 16 }}>
+        <table class="table exposure">
+          <thead>
+            <tr>
+              <th>Recipient</th>
+              <th>What it is</th>
+              <th>Wallet address</th>
+              <th>IP address and visit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={`${r.domain}|${r.kind}`}>
+                <td>
+                  <div class="mono" style={{ fontSize: '0.84rem' }}>
+                    {r.domain}
+                  </div>
+                  <div class="muted small" title={r.hosts.join('\n')}>
+                    {r.hosts.length === 1 ? r.hosts[0] : `${r.hosts.length} hosts`}
+                  </div>
+                </td>
+                <td class="dim">{RECIPIENT_LABEL[r.kind] ?? r.kind}</td>
+                <td>
+                  {r.address ? (
+                    <>
+                      <span
+                        class={`chip ${
+                          r.address.state === 'yes' && TRACKING.has(r.kind)
+                            ? 'signal'
+                            : r.address.state === 'possible'
+                              ? ''
+                              : 'solid'
+                        }`}
+                        title={
+                          r.address.state === 'possible'
+                            ? 'Only a truncated display form (0x1234…abcd) was seen; not scored'
+                            : undefined
+                        }
+                      >
+                        {r.address.state === 'yes'
+                          ? 'yes'
+                          : r.address.state === 'hashed'
+                            ? 'hashed address'
+                            : 'possible (truncated)'}
+                      </span>
+                      <div class="muted small" style={{ marginTop: 6 }}>
+                        {phaseText(r.address.phases)} · via {[...r.address.how].join(', ')} ·{' '}
+                        <a href={`#/scans/${scanId}/evidence/${r.address.evidence[0]!.id}`}>
+                          evidence →
+                        </a>
+                      </div>
+                    </>
+                  ) : (
+                    <span class="muted">{full ? 'not observed' : 'not tested'}</span>
+                  )}
+                </td>
+                <td class="small dim">
+                  {r.ipPhases.size
+                    ? phaseText(r.ipPhases)
+                    : r.address?.viaWebSocketOnly
+                      ? `${phaseText(r.address.phases)} (WebSocket)`
+                      : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   );
 }

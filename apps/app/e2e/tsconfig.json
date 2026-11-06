@@ -1,0 +1,14 @@
+{
+  // Typecheck for the e2e suite (Node + Playwright side; page callbacks need DOM).
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["./**/*.ts", "../vitest.e2e.config.ts"]
+}

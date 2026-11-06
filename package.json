@@ -15,7 +15,7 @@
     "format:check": "prettier --check .",
     "build": "pnpm -r build && pnpm typecheck:scripts",
     "test": "pnpm -r --no-bail test",
-    "test:e2e": "pnpm --filter @igris/scanner test:e2e",
+    "test:e2e": "pnpm --filter @igris/scanner test:e2e && pnpm --filter @igris/app test:e2e",
     "web:dev": "pnpm --filter @igris/web dev",
     "web:build": "pnpm --filter @igris/web build",
     "api:dev": "pnpm --filter @igris/api dev",
