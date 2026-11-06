@@ -17,7 +17,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isIP } from 'node:net';
-import type { Report } from '@igris/core';
+import type { EvidenceBundleV1, ReportV2, ScanResult } from '@igris/core';
 import type { ScanOptions } from '@igris/scanner';
 import type { ScanRecord } from '@igris/registry';
 import type { ApiConfig } from './config.js';
@@ -32,9 +32,9 @@ export interface FixResultLike {
 
 /** Side-effectful collaborators, injected so the HTTP layer is testable. */
 export interface ApiDeps {
-  scan: (options: ScanOptions) => Promise<Report>;
+  scan: (options: ScanOptions) => Promise<ScanResult>;
   fix: (options: { targetDir: string }) => FixResultLike;
-  recordFromReport: (report: Report, json: string) => ScanRecord;
+  recordFromReport: (report: ReportV2, bundle: EvidenceBundleV1) => ScanRecord;
   isPublicAddress: (ip: string) => boolean;
   /** Clone step (default: hardened git clone). */
   clone?: typeof cloneRepo;
@@ -138,7 +138,7 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
         ? Math.min(Math.max(Math.round(req.body.dwellMs), 1000), 20000)
         : 4000;
     try {
-      const report = await queue.run((signal) =>
+      const { report, bundle } = await queue.run((signal) =>
         deps.scan({
           url,
           dwellMs,
@@ -152,12 +152,12 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
       // measured. Never an entity, never attributed to a scanner.
       let preview: ScanRecord | null = null;
       try {
-        preview = deps.recordFromReport(report, JSON.stringify(report));
+        preview = deps.recordFromReport(report, bundle);
       } catch {
         preview = null;
       }
-      log(`scan finished: status=${report.status} score=${report.score ?? 'none'}`);
-      res.json({ provenance: 'unpublished', report, preview });
+      log(`scan finished: status=${report.scan.status} score=${report.privacy.score ?? 'none'}`);
+      res.json({ provenance: 'unpublished', report, evidence: bundle, preview });
     } catch (err) {
       sendJobError(res, err, log);
     }

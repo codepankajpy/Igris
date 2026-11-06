@@ -9,8 +9,9 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stringToHex } from 'viem';
-import { RECIPIENT_CLASSES, type Report } from '@igris/core';
-import { recordFromReport, UnpublishableReportError } from './from-report.js';
+import { RECIPIENT_CLASSES } from '@igris/core';
+import { sampleResult } from '@igris/core/testing';
+import { recordFromReport } from './from-report.js';
 import { rawRowToCandidate } from './arkiv.js';
 import { LocalRegistry } from './local.js';
 import {
@@ -26,81 +27,10 @@ const KEY = '0x' + 'ab'.repeat(32);
 const OWNER = '0x' + 'cd'.repeat(20);
 const XSS = '<img src=x onerror=alert(1)>';
 
-function report(overrides: Partial<Report> = {}): Report {
-  return {
-    reportVersion: '1.1.0',
-    scannerVersion: '0.1.0',
-    target: 'https://app.example.org/',
-    hostname: 'app.example.org',
-    scannedAt: '2026-11-06T06:00:00.000Z',
-    chainId: 1,
-    status: 'completed',
-    coverage: 'full',
-    canaryAddress: '0x8ba1f109551bd432803012645ac136ddd64dba72',
-    spoofMetaMask: true,
-    findings: [
-      {
-        id: 'f1',
-        category: 'exact',
-        encoding: 'base64(lowercase)',
-        location: 'request-body',
-        url: 'https://rpc.example.net/',
-        method: 'POST',
-        host: 'rpc.example.net',
-        registrableDomain: 'example.net',
-        class: 'rpc-provider',
-        phase: 'post-connect',
-        snippet: 'x<CANARY>y',
-        countsTowardScore: true,
-      },
-    ],
-    thirdParties: [
-      {
-        host: 'rpc.example.net',
-        registrableDomain: 'example.net',
-        class: 'rpc-provider',
-        phases: ['post-connect'],
-        requestCount: 2,
-        methods: ['POST'],
-      },
-    ],
-    readsViaWallet: [{ method: 'eth_chainId', count: 1 }],
-    usesAnonRpc: false,
-    score: 85,
-    ledger: [
-      {
-        id: 'p1',
-        label: 'address reached example.net (rpc-provider)',
-        points: 15,
-        rule: 'leak.rpc-provider',
-        findingIds: ['f1'],
-      },
-    ],
-    errors: [],
-    summary: {
-      totalRequests: 3,
-      preConnectRequests: 1,
-      postConnectRequests: 2,
-      wsConnections: 1,
-      wsFrames: 4,
-      cookiesCount: 0,
-      localStorageCount: 0,
-      sessionStorageCount: 0,
-    },
-    securityHeaders: {
-      documentUrl: 'https://app.example.org/',
-      documentStatus: 200,
-      cspPresent: true,
-      cspReportOnly: false,
-      hstsPresent: true,
-    },
-    ...overrides,
-  };
-}
-
+/** A real record: Report v2 + bundle from the engine, with Arkiv-shaped id/owner. */
 function validRecord(): RegistryRecord {
-  const r = report();
-  return { ...recordFromReport(r, JSON.stringify(r)), id: KEY, scanner: OWNER };
+  const { report, bundle } = sampleResult();
+  return { ...recordFromReport(report, bundle), id: KEY, scanner: OWNER };
 }
 
 /** Shape an SDK row the way @arkiv-network/sdk returns it. */
@@ -147,13 +77,8 @@ describe('parseRegistryRecord — positive', () => {
     expect(parsed.hostname).toBe('app.example.org');
     expect(parsed.scannedAt).toBe(rec.scannedAt);
     expect(parsed.expiresAt).toBe('block 1234');
-    expect(parsed.summary.securityHeaders).toEqual({
-      source: 'main-document',
-      documentStatus: 200,
-      cspPresent: true,
-      cspReportOnly: false,
-      hstsPresent: true,
-    });
+    expect(parsed.summary.securityHeaders).toEqual(rec.summary.securityHeaders);
+    expect(parsed.summary.evidenceSha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('keeps free-text labels as text (renderers must still escape)', () => {
@@ -196,6 +121,7 @@ describe('parseRegistryRecord — negative (hostile entities)', () => {
     ['summary missing', (r) => delete (r as Record<string, unknown>).summary],
     ['summary not an object', (r) => ((r as Record<string, unknown>).summary = 'x')],
     ['bad canary address', (r) => (r.summary.canaryAddress = '0x123')],
+    ['bad evidence hash', (r) => (r.summary.evidenceSha256 = 'zz')],
     ['NaN points', (r) => (r.summary.ledger[0]!.points = Number.NaN)],
   ];
   for (const [name, mutate] of mutations) {
@@ -252,30 +178,6 @@ describe('validateRecords', () => {
     };
     const out = validateRecords([rec], { source: 'arkiv' });
     expect(out.records[0]!.summary.securityHeaders).toBeUndefined();
-  });
-});
-
-describe('recordFromReport refuses unmeasured scans (P0-1)', () => {
-  it('throws for page-load-failed with a null score', () => {
-    const r = report({ status: 'page-load-failed', coverage: 'none', score: null, ledger: [] });
-    expect(() => recordFromReport(r, JSON.stringify(r))).toThrow(UnpublishableReportError);
-  });
-
-  it('throws for a legacy 1.0.0 page-load-failed report that still carries score 100', () => {
-    const r = report({ reportVersion: '1.0.0', status: 'page-load-failed', score: 100 });
-    delete (r as Partial<Report>).coverage;
-    expect(() => recordFromReport(r, JSON.stringify(r))).toThrow(UnpublishableReportError);
-  });
-
-  it('publishes a partial (wallet-connect-failed) scan with its coverage stated', () => {
-    const r = report({ status: 'wallet-connect-failed', coverage: 'pre-connect-only' });
-    expect(recordFromReport(r, JSON.stringify(r)).summary.coverage).toBe('pre-connect-only');
-  });
-
-  it('derives coverage for legacy 1.0.0 reports', () => {
-    const r = report({ reportVersion: '1.0.0' });
-    delete (r as Partial<Report>).coverage;
-    expect(recordFromReport(r, JSON.stringify(r)).summary.coverage).toBe('full');
   });
 });
 

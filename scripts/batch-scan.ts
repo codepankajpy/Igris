@@ -10,7 +10,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { scan } from '@igris/scanner';
-import type { Report } from '@igris/core';
+import { countedLeaks, type ScanResult } from '@igris/core';
+import { writeScanArtifacts } from '@igris/cli';
 
 const [targetsFile, outDir = 'igris-batch'] = process.argv.slice(2);
 const extraIdx = process.argv.indexOf('--');
@@ -36,7 +37,7 @@ const summaries: Array<{
   url: string;
   hostname: string;
   status: string;
-  score: number;
+  score: number | null;
   leakCount: number;
   leakClasses: string[];
   thirdParties: number;
@@ -47,9 +48,9 @@ for (const url of targets) {
   process.stderr.write(`scanning ${url} …\n`);
   const dwell = extraFlag('--dwell');
   const rules = extraFlag('--host-resolver-rules');
-  let report: Report;
+  let result: ScanResult;
   try {
-    report = await scan({
+    result = await scan({
       url,
       ...(dwell ? { dwellMs: Number(dwell) } : {}),
       ...(rules ? { hostResolverRules: rules } : {}),
@@ -59,21 +60,20 @@ for (const url of targets) {
     continue;
   }
   // Hostname + port keeps two deployments of one host apart.
-  const slug = `${report.hostname}${new URL(url).port ? '-' + new URL(url).port : ''}`;
+  const report = result.report;
+  const slug = `${report.scan.hostname}${new URL(url).port ? '-' + new URL(url).port : ''}`;
   const dir = join(outDir, slug.replaceAll(/[^a-z0-9.-]/gi, '_'));
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'report.json'), JSON.stringify(report, null, 2));
+  writeScanArtifacts(dir, result);
   summaries.push({
     url,
-    hostname: report.hostname,
-    status: report.status,
-    score: report.score,
-    leakCount: report.findings.filter((f) => f.countsTowardScore).length,
-    leakClasses: [
-      ...new Set(report.findings.filter((f) => f.countsTowardScore).map((f) => f.class)),
-    ].sort(),
-    thirdParties: report.thirdParties.length,
-    usesAnonRpc: report.usesAnonRpc,
+    hostname: report.scan.hostname,
+    status: report.scan.status,
+    score: report.privacy.score,
+    leakCount: countedLeaks(result).length,
+    leakClasses: [...new Set(countedLeaks(result).map((l) => l.evidence.recipientClass))].sort(),
+    thirdParties: report.contacts.length,
+    usesAnonRpc: report.wallet.usesAnonRpc,
   });
 }
 

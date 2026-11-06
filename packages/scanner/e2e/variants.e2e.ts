@@ -7,6 +7,7 @@ import type { Server } from 'node:http';
 import { join } from 'node:path';
 import { scan } from '../src/index.js';
 import {
+  flatLeaks,
   buildFixture,
   HOST_RULES,
   PAGE_PORT,
@@ -33,13 +34,13 @@ afterAll(async () => {
 
 describe.each(['ethers', 'wagmi'] as const)('variant %s', (variant) => {
   it(`leaks the address to the RPC provider via ${variant}`, async () => {
-    const report = await scan({
+    const result = await scan({
       url: `http://leaky-dapp.test:${PAGE_PORT}/?variant=${variant}`,
       hostResolverRules: HOST_RULES,
       dwellMs: 1500,
     });
-    expect(report.status).toBe('completed');
-    const rpcLeaks = report.findings.filter(
+    expect(result.report.scan.status).toBe('completed');
+    const rpcLeaks = flatLeaks(result).filter(
       (f) => f.class === 'rpc-provider' && f.location === 'request-body' && f.category === 'exact',
     );
     expect(rpcLeaks.length).toBeGreaterThanOrEqual(1);

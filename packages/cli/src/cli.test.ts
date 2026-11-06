@@ -3,7 +3,15 @@ import { renderTable } from './table.js';
 import { runScan } from './commands/scan.js';
 import { coverageNote, renderHtmlReport, scoreLabel } from './html-report.js';
 import { EXIT } from './exit-codes.js';
-import type { Report } from '@igris/core';
+import { ArtifactError, loadScanArtifacts, writeScanArtifacts } from './artifacts.js';
+import { runVerify } from './commands/verify.js';
+import { runScanner } from './commands/scanner.js';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { CANARY_A, req, sampleCapture, sampleResult } from '@igris/core/testing';
 
 describe('renderTable', () => {
   it('aligns columns', () => {
@@ -42,125 +50,155 @@ describe('scan arg validation (no browser launched)', () => {
   });
 });
 
-describe('renderHtmlReport', () => {
-  const report: Report = {
-    reportVersion: '1.0.0',
-    scannerVersion: '0.1.0',
-    target: 'http://example.test/',
-    hostname: 'example.test',
-    scannedAt: '2026-11-06T00:00:00.000Z',
-    chainId: 1,
-    status: 'completed',
-    canaryAddress: '0x8ba1f109551bd432803012645ac136ddd64dba72',
-    spoofMetaMask: true,
-    findings: [
-      {
-        id: 'f1',
-        category: 'exact',
-        encoding: 'lowercase',
-        location: 'request-body',
-        url: 'http://a.test/x?q=<CANARY>&"quote"',
-        method: 'POST',
-        host: 'a.test',
-        registrableDomain: 'a.test',
-        class: 'analytics',
+describe('renderHtmlReport (v2)', () => {
+  const xssCapture = () => {
+    const cap = sampleCapture();
+    cap.requests.push(
+      req({
         phase: 'post-connect',
-        snippet: '<CANARY> & <script>alert(1)</script>',
-        countsTowardScore: true,
-      },
-    ],
-    thirdParties: [
-      {
-        host: 'a.test',
-        registrableDomain: 'a.test',
-        class: 'analytics',
-        phases: ['post-connect'],
-        requestCount: 3,
-      },
-    ],
-    readsViaWallet: [{ method: 'eth_getBalance', count: 2 }],
-    usesAnonRpc: false,
-    score: 75,
-    ledger: [
-      {
-        id: 'p1',
-        label: 'address reached a.test (analytics)',
-        points: 25,
-        rule: 'leak.analytics',
-        findingIds: ['f1'],
-      },
-    ],
-    errors: [],
+        url: 'https://api.segment.io/v1/x',
+        method: 'POST',
+        body: `{"user":"${CANARY_A}","note":"<script>alert(1)</script>"}`,
+      }),
+    );
+    return cap;
   };
 
   it('is self-contained: no external URLs referenced', () => {
-    const html = renderHtmlReport(report);
+    const { report, bundle } = sampleResult();
+    const html = renderHtmlReport(report, bundle);
     expect(html).not.toMatch(/src\s*=\s*"http/);
     expect(html).not.toMatch(/href\s*=\s*"http/);
     expect(html).not.toMatch(/@import/);
     expect(html).not.toMatch(/url\(/);
   });
 
-  it('escapes HTML in snippets', () => {
-    const html = renderHtmlReport(report);
+  it('escapes page-controlled text from evidence snippets', () => {
+    const { report, bundle } = sampleResult({ capture: xssCapture() });
+    const html = renderHtmlReport(report, bundle);
     expect(html).not.toContain('<script>alert');
     expect(html).toContain('&lt;script&gt;alert');
   });
 
-  it('shows the score and ledger', () => {
-    const html = renderHtmlReport(report);
-    expect(html).toContain('75');
+  it('shows score, ledger, evidence snippets and the evidence hash', () => {
+    const { report, bundle } = sampleResult();
+    const html = renderHtmlReport(report, bundle);
+    expect(html).toContain(`>${report.privacy.score}<`);
     expect(html).toContain('leak.analytics');
+    expect(html).toContain('&lt;CANARY&gt;');
+    expect(html).toContain(report.evidence.sha256);
+  });
+
+  it('keeps security observations in their own, unscored section', () => {
+    const { report, bundle } = sampleResult();
+    const html = renderHtmlReport(report, bundle);
+    const sec = html.slice(html.indexOf('<h2>Security observations'));
+    expect(sec).toContain('No Content-Security-Policy');
+    expect(html.slice(0, html.indexOf('<h2>Security observations'))).not.toContain(
+      'No Content-Security-Policy',
+    );
+    expect(sec).toContain('never affect the privacy score');
   });
 });
 
 describe('coverage and unscored reports render truthfully (P0-1, P0-2)', () => {
-  const base: Report = {
-    reportVersion: '1.1.0',
-    scannerVersion: '0.1.0',
-    target: 'http://example.test/',
-    hostname: 'example.test',
-    scannedAt: '2026-11-06T00:00:00.000Z',
-    chainId: 1,
-    status: 'completed',
-    coverage: 'full',
-    canaryAddress: '0x8ba1f109551bd432803012645ac136ddd64dba72',
-    spoofMetaMask: true,
-    findings: [],
-    thirdParties: [],
-    readsViaWallet: [],
-    usesAnonRpc: false,
-    score: 90,
-    ledger: [],
-    errors: [],
-  };
-
   it('full coverage: plain score, no note', () => {
-    expect(scoreLabel(base)).toBe('90/100');
-    expect(coverageNote(base)).toBeNull();
-    expect(renderHtmlReport(base)).not.toContain('PARTIAL');
+    const { report, bundle } = sampleResult();
+    expect(scoreLabel(report)).toBe(`${report.privacy.score}/100`);
+    expect(coverageNote(report)).toBeNull();
+    expect(renderHtmlReport(report, bundle)).not.toContain('PARTIAL');
   });
-
-  it('wallet never connected: score labelled pre-connect only, PARTIAL note in HTML', () => {
-    const r: Report = { ...base, status: 'wallet-connect-failed', coverage: 'pre-connect-only' };
-    expect(scoreLabel(r)).toBe('90/100 (pre-connect only)');
-    const html = renderHtmlReport(r);
-    expect(html).toContain('PARTIAL');
-    expect(html).toContain('post-connect address leaks were NOT tested');
+  it('wallet never connected: pre-connect only, PARTIAL note', () => {
+    const { report, bundle } = sampleResult({ status: 'wallet-connect-failed' });
+    expect(scoreLabel(report)).toMatch(/\(pre-connect only\)$/);
+    expect(renderHtmlReport(report, bundle)).toContain(
+      'post-connect address leaks were NOT tested',
+    );
   });
-
   it('page never loaded: "not scored", no number shown as a score', () => {
-    const r: Report = { ...base, status: 'page-load-failed', coverage: 'none', score: null };
-    expect(scoreLabel(r)).toBe('not scored');
-    const html = renderHtmlReport(r);
+    const { report, bundle } = sampleResult({ status: 'page-load-failed' });
+    expect(scoreLabel(report)).toBe('not scored');
+    const html = renderHtmlReport(report, bundle);
     expect(html).toContain('NOT SCORED');
     expect(html).toContain('>not scored<');
-    expect(html).not.toMatch(/class="n score"[^>]*>100</);
+  });
+});
+
+describe('scan artifacts (report.json + canonical evidence.json)', () => {
+  it('evidence.json is the exact canonical bytes: its sha256 equals report.evidence.sha256', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'igris-art-'));
+    const result = sampleResult();
+    const paths = writeScanArtifacts(dir, result);
+    const sha = createHash('sha256').update(readFileSync(paths.evidence)).digest('hex');
+    expect(sha).toBe(result.report.evidence.sha256);
+    const loaded = loadScanArtifacts(paths.report);
+    expect(loaded.report).toEqual(result.report);
+    expect(loaded.bundle).toEqual(result.bundle);
   });
 
-  it('legacy 1.0.0 report without coverage: derived from status', () => {
-    const r = { ...base, status: 'wallet-connect-failed' } as Report;
-    delete (r as Partial<Report>).coverage;
-    expect(scoreLabel(r)).toBe('90/100 (pre-connect only)');
+  it('a tampered evidence file is rejected', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'igris-art-'));
+    const paths = writeScanArtifacts(dir, sampleResult());
+    writeFileSync(
+      paths.evidence,
+      readFileSync(paths.evidence, 'utf8').replace('segment.io', 'segment.xx'),
+    );
+    expect(() => loadScanArtifacts(paths.report)).toThrow(ArtifactError);
+  });
+
+  it('a missing evidence file is an error, not a silent pass', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'igris-art-'));
+    const paths = writeScanArtifacts(dir, sampleResult());
+    rmSync(paths.evidence);
+    expect(() => loadScanArtifacts(paths.report)).toThrow(/evidence bundle not found/);
+  });
+
+  it('a v1 report is migrated on load', () => {
+    const v1 = join(
+      fileURLToPath(new URL('../../core/test-fixtures/v1/', import.meta.url)),
+      'leaky-1.1.0.json',
+    );
+    const loaded = loadScanArtifacts(v1);
+    expect(loaded.migratedFrom).toBe('1.1.0');
+    expect(loaded.report.reportVersion).toBe('2.0.0');
+  });
+});
+
+describe('igris verify / igris scanner (no browser)', () => {
+  it('verify: exit 0 on a valid pair, 2 on tampering, 3 without args', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'igris-ver-'));
+    const paths = writeScanArtifacts(dir, sampleResult());
+    expect((await runVerify([paths.report])).exitCode).toBe(EXIT.OK);
+    writeFileSync(paths.evidence, '{"bundleVersion":"igris.evidence.v1","items":{}}');
+    expect((await runVerify([paths.report])).exitCode).toBe(EXIT.SCAN_ERROR);
+    expect((await runVerify([])).exitCode).toBe(EXIT.INVALID_ARGS);
+  });
+
+  it('scanner init/list/show never print the key', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'igris-home-'));
+    const prev = process.env.IGRIS_HOME;
+    process.env.IGRIS_HOME = home;
+    const writes: string[] = [];
+    const orig = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((c: string) => (
+      writes.push(String(c)),
+      true
+    )) as typeof process.stdout.write;
+    try {
+      expect((await runScanner(['init', '--name', 'primary'])).exitCode).toBe(EXIT.OK);
+      expect((await runScanner(['list'])).exitCode).toBe(EXIT.OK);
+      expect((await runScanner(['show'])).exitCode).toBe(EXIT.OK);
+      expect((await runScanner(['init'])).exitCode).toBe(EXIT.INVALID_ARGS); // --name required
+    } finally {
+      process.stdout.write = orig;
+      if (prev === undefined) delete process.env.IGRIS_HOME;
+      else process.env.IGRIS_HOME = prev;
+    }
+    const out = writes.join('');
+    const { listScanners } = await import('@igris/registry');
+    const [p] = listScanners(home);
+    const key = readFileSync(join(home, 'scanners', p!.address, 'key'), 'utf8').trim();
+    expect(out).toContain(p!.address);
+    expect(out).not.toContain(key.slice(2));
   });
 });

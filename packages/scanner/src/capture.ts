@@ -8,68 +8,21 @@
  * docs/METHODOLOGY.md.
  */
 import type { BrowserContext, Page } from 'playwright';
-import type { Phase } from '@igris/core';
+import type { Capture, CapturedRequest, Phase } from '@igris/core';
 
 /** Bodies larger than this are truncated before detection (documented cap). */
 export const BODY_CAP_BYTES = 512 * 1024;
 
-export interface CapturedRequest {
-  phase: Phase;
-  url: string;
-  method: string;
-  headers: Record<string, string>;
-  /** Request body, truncated at BODY_CAP_BYTES. */
-  body: string | null;
-  resourceType: string;
-  failed: boolean;
-  /** Set-Cookie headers observed on the response, if any. */
-  setCookies: string[];
-}
-
-export interface CapturedWsFrame {
-  phase: Phase;
-  url: string;
-  direction: 'sent' | 'received';
-  payload: string;
-}
-
-export interface CapturedStorage {
-  phase: Phase;
-  kind: 'local-storage' | 'session-storage';
-  key: string;
-  value: string;
-}
-
-export interface CapturedCookie {
-  phase: Phase;
-  name: string;
-  value: string;
-  domain: string;
-}
-
-/**
- * The main document's final (non-redirect) response during the pre-connect
- * phase: the page the user actually asked for. Security headers are judged on
- * THIS response only — later navigations (a connect heuristic clicking a
- * login link, say) are a different document.
- */
-export interface CapturedMainDocument {
-  url: string;
-  status: number;
-  /** Lower-cased header names; repeated headers joined with ", ". */
-  headers: Record<string, string>;
-}
-
-export interface Capture {
-  requests: CapturedRequest[];
-  wsFrames: CapturedWsFrame[];
-  /** Distinct WebSocket connections opened by the page. */
-  wsConnections: number;
-  storage: CapturedStorage[];
-  cookies: CapturedCookie[];
-  /** Undefined when no main-document response was observed (load failure). */
-  mainDocument?: CapturedMainDocument;
-}
+// The capture SHAPE is a core contract (detectors consume it); the recorder
+// that fills it lives here.
+export type {
+  Capture,
+  CapturedRequest,
+  CapturedWsFrame,
+  CapturedStorage,
+  CapturedCookie,
+  CapturedMainDocument,
+} from '@igris/core';
 
 function isRedirectStatus(status: number): boolean {
   return status >= 300 && status < 400;

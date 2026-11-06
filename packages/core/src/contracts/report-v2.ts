@@ -124,6 +124,20 @@ export interface EvidenceSummary {
   itemCount: number;
 }
 
+/**
+ * Digest of WHAT was found, independent of exact evidence bytes:
+ * sha256 over the canonical, sorted list of all finding fingerprints
+ * (privacy + security). Two scans that observe the same behaviour have the
+ * same findingSet hash even when evidence snippets differ (pages embed
+ * nonces, e.g. wallet-library connection ids). Use it to compare scans
+ * (re-scan confirmation, independent reproduction); use evidence.sha256 to
+ * prove the exact observations.
+ */
+export interface FindingSetDigest {
+  sha256: string;
+  count: number;
+}
+
 export interface ReportV2 {
   reportVersion: typeof REPORT_V2_VERSION;
   scan: ScanMetaV2;
@@ -146,6 +160,7 @@ export interface ReportV2 {
   /** null when the source report recorded no telemetry (migrated reports). */
   telemetry: TelemetryV2 | null;
   evidence: EvidenceSummary;
+  findingSet: FindingSetDigest;
   /** Present when this report was produced by migrating an older one. */
   migratedFrom?: string;
 }
@@ -203,6 +218,7 @@ export const REPORT_V2_KEYS = [
   'wallet',
   'telemetry',
   'evidence',
+  'findingSet',
   'migratedFrom',
 ] as const;
 export const REPORT_V2_REQUIRED = REPORT_V2_KEYS.filter((k) => k !== 'migratedFrom');
@@ -378,6 +394,12 @@ export const REPORT_V2_SCHEMA = {
         sha256: SHA256,
         itemCount: COUNT,
       },
+    },
+    findingSet: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['sha256', 'count'],
+      properties: { sha256: SHA256, count: COUNT },
     },
     migratedFrom: { type: 'string', pattern: '^1\\.\\d+\\.\\d+$' },
   },

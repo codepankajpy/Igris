@@ -74,12 +74,12 @@ describe('igris CLI', () => {
       '--json',
     ]);
     expect(r.code).toBe(2);
-    const report = JSON.parse(r.stdout);
-    expect(report.status).toBe('page-load-failed');
+    const { report } = JSON.parse(r.stdout);
+    expect(report.scan.status).toBe('page-load-failed');
     // P0-1: nothing was measured, so there is no score (was 100 before).
-    expect(report.score).toBeNull();
-    expect(report.coverage).toBe('none');
-    expect(report.ledger).toEqual([]);
+    expect(report.privacy.score).toBeNull();
+    expect(report.privacy.coverage).toBe('none');
+    expect(report.privacy.ledger).toEqual([]);
   });
 
   it('publish refuses an unscored report (exit 2, nothing written)', async () => {
@@ -94,7 +94,9 @@ describe('igris CLI', () => {
     ]);
     const dir = mkdtempSync(join(tmpdir(), 'igris-unpub-'));
     const reportPath = join(dir, 'report.json');
-    writeFileSync(reportPath, r.stdout);
+    const parsed = JSON.parse(r.stdout);
+    writeFileSync(reportPath, JSON.stringify(parsed.report));
+    writeFileSync(join(dir, 'evidence.json'), JSON.stringify(parsed.evidence));
     const registryPath = join(dir, 'registry.json');
     const pub = await runCli([
       'publish',
@@ -133,14 +135,15 @@ describe('igris CLI', () => {
       '90',
       '--json',
     ]);
-    // --json: stdout must be exactly one JSON document.
-    const report = JSON.parse(r.stdout);
+    // --json: stdout must be exactly one JSON document: {report, evidence}.
+    const { report, evidence } = JSON.parse(r.stdout);
     expect(
-      report.status,
-      `status=${report.status} errors=${JSON.stringify(report.errors)} stderr=${r.stderr.slice(0, 300)}`,
+      report.scan.status,
+      `status=${report.scan.status} notes=${JSON.stringify(report.scan.notes)} stderr=${r.stderr.slice(0, 300)}`,
     ).toBe('completed');
     expect(r.code).toBe(1);
-    expect(report.score).toBeLessThan(90);
+    expect(report.privacy.score).toBeLessThan(90);
+    expect(evidence.bundleVersion).toBe('igris.evidence.v1');
 
     // Default mode writes report.json + report.html.
     const r2 = await runCli([
@@ -157,8 +160,45 @@ describe('igris CLI', () => {
     expect(r2.code).toBe(0); // no --fail-under
     expect(r2.stdout).toContain('penalty ledger');
     expect(existsSync(join(outDir, 'report.json'))).toBe(true);
+    expect(existsSync(join(outDir, 'evidence.json'))).toBe(true);
     const html = readFileSync(join(outDir, 'report.html'), 'utf8');
-    expect(html).toContain('Igris scan');
+    expect(html).toContain('IGRIS scan');
     expect(html).toContain('<CANARY>'.replace('<', '&lt;').replace('>', '&gt;'));
+
+    // The written artifacts verify, and publish (local) accepts them and
+    // records the evidence hash.
+    const v = await runCli(['verify', join(outDir, 'report.json')]);
+    expect(v.code, v.stderr).toBe(0);
+    expect(v.stdout).toMatch(/^OK /);
+    const registryPath = join(outDir, 'registry.json');
+    const pub = await runCli([
+      'publish',
+      join(outDir, 'report.json'),
+      '--registry',
+      'local',
+      '--local-file',
+      registryPath,
+    ]);
+    expect(pub.code, pub.stderr).toBe(0);
+    const reg = JSON.parse(readFileSync(registryPath, 'utf8'));
+    const written = JSON.parse(readFileSync(join(outDir, 'report.json'), 'utf8'));
+    expect(reg.records[0].summary.evidenceSha256).toBe(written.evidence.sha256);
+
+    // Tampering with the evidence makes verify AND publish refuse.
+    writeFileSync(
+      join(outDir, 'evidence.json'),
+      '{"bundleVersion":"igris.evidence.v1","items":{}}',
+    );
+    expect((await runCli(['verify', join(outDir, 'report.json')])).code).toBe(2);
+    const pub2 = await runCli([
+      'publish',
+      join(outDir, 'report.json'),
+      '--registry',
+      'local',
+      '--local-file',
+      registryPath,
+    ]);
+    expect(pub2.code).toBe(2);
+    expect(pub2.stderr).toMatch(/evidence does not match/);
   }, 400_000);
 });

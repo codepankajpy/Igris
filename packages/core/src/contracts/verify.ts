@@ -5,13 +5,22 @@
  * resolve to an item of the claimed type whose id matches its content?
  */
 import { bundleHash, evidenceId, type EvidenceBundleV1 } from './evidence.js';
-import type { ReportV2 } from './report-v2.js';
+import type { FindingSetDigest, FindingV2, ReportV2 } from './report-v2.js';
+import { contentHash } from './hash.js';
 
 export interface IntegrityResult {
   ok: boolean;
   problems: string[];
   /** Hash recomputed from the bundle. */
   bundleSha256: string;
+}
+
+/** The finding-set digest of a list of findings (order-independent). */
+export function findingSetDigest(
+  findings: readonly Pick<FindingV2, 'fingerprint'>[],
+): FindingSetDigest {
+  const fps = findings.map((f) => f.fingerprint).sort();
+  return { sha256: contentHash(fps), count: fps.length };
 }
 
 export function verifyReportIntegrity(report: ReportV2, bundle: EvidenceBundleV1): IntegrityResult {
@@ -37,6 +46,12 @@ export function verifyReportIntegrity(report: ReportV2, bundle: EvidenceBundleV1
       else if (item.type !== ref.type)
         problems.push(`${f.id} references ${ref.id} as ${ref.type} but it is ${item.type}`);
     }
+  }
+  const digest = findingSetDigest(all);
+  if (digest.sha256 !== report.findingSet.sha256 || digest.count !== report.findingSet.count) {
+    problems.push(
+      `findingSet digest ${digest.sha256}/${digest.count} != report ${report.findingSet.sha256}/${report.findingSet.count}`,
+    );
   }
   const findingIds = new Set(all.map((f) => f.id));
   for (const line of report.privacy.ledger) {

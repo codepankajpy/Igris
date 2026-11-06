@@ -646,11 +646,12 @@ function wire(): void {
       const data = (await res.json()) as {
         provenance: 'unpublished';
         preview: ScanRecord | null;
-        report: { score: number | null; status: string; errors: string[] };
+        // Report v2 (only the fields this view needs).
+        report: { scan: { status: string; notes: string[] }; privacy: { score: number | null } };
       };
       if (!data.preview) {
         // Nothing was measured: no score, nothing to show as a result.
-        state.scanProgress = `Not scored: the page did not load (${data.report.status}). ${data.report.errors[0] ?? ''}`;
+        state.scanProgress = `Not scored: the page did not load (${data.report.scan.status}). ${data.report.scan.notes[0] ?? ''}`;
       } else {
         const record: ViewRecord = {
           ...data.preview,

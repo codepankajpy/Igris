@@ -41,7 +41,8 @@ function build(dir: string, name: string): void {
 
 async function main(): Promise<void> {
   const { scan } = await import('@igris/scanner');
-  const { renderHtmlReport } = await import('@igris/cli');
+  const { renderHtmlReport, writeScanArtifacts } = await import('@igris/cli');
+  const { countedLeaks } = await import('@igris/core');
   const { fix } = await import('@igris/patcher');
   const { LocalRegistry, recordFromReport } = await import('@igris/registry');
   const { startSink } = await import(join(ROOT, 'fixtures/third-party-sink/src/server.js'));
@@ -71,10 +72,11 @@ async function main(): Promise<void> {
   // --- 1. scan the leaky fixture ---
   log('scanning the LEAKY fixture …');
   const leaky = await scan({ url: `http://leaky-dapp.test:${LEAKY_PORT}/`, ...scanOpts });
-  const leakyJson = JSON.stringify(leaky, null, 2);
-  writeFileSync(join(EXAMPLES, 'leaky/report.json'), leakyJson);
-  writeFileSync(join(EXAMPLES, 'leaky/report.html'), renderHtmlReport(leaky));
-  log(`leaky: score ${leaky.score}, ${leaky.findings.length} findings`);
+  writeScanArtifacts(join(EXAMPLES, 'leaky'), leaky);
+  writeFileSync(join(EXAMPLES, 'leaky/report.html'), renderHtmlReport(leaky.report, leaky.bundle));
+  log(
+    `leaky: score ${leaky.report.privacy.score}, ${leaky.report.privacy.findings.length} privacy findings, ${leaky.report.security.observations.length} security observations`,
+  );
 
   // --- 2. igris fix (dry run) on a pristine copy ---
   log('running igris fix (dry run) …');
@@ -90,16 +92,15 @@ async function main(): Promise<void> {
   // --- 3. scan the FIXED fixture ---
   log('scanning the FIXED fixture (committed output of igris fix --write) …');
   const fixed = await scan({ url: `http://leaky-dapp.test:${FIXED_PORT}/`, ...scanOpts });
-  const fixedJson = JSON.stringify(fixed, null, 2);
-  writeFileSync(join(EXAMPLES, 'fixed/report.json'), fixedJson);
-  writeFileSync(join(EXAMPLES, 'fixed/report.html'), renderHtmlReport(fixed));
-  log(`fixed: score ${fixed.score}, usesAnonRpc=${fixed.usesAnonRpc}`);
+  writeScanArtifacts(join(EXAMPLES, 'fixed'), fixed);
+  writeFileSync(join(EXAMPLES, 'fixed/report.html'), renderHtmlReport(fixed.report, fixed.bundle));
+  log(`fixed: score ${fixed.report.privacy.score}, usesAnonRpc=${fixed.report.wallet.usesAnonRpc}`);
 
   // --- 4./5. publish to the local registry and query back ---
   const registryPath = join(EXAMPLES, 'registry.json');
   const registry = new LocalRegistry(registryPath);
-  await registry.publish(recordFromReport(leaky, leakyJson));
-  await registry.publish(recordFromReport(fixed, fixedJson));
+  await registry.publish(recordFromReport(leaky.report, leaky.bundle));
+  await registry.publish(recordFromReport(fixed.report, fixed.bundle));
   const hits = await registry.query({ minScore: 0, leakClass: 'rpc-provider' });
   log(
     `local registry: published 2 records; query --class rpc-provider → ${hits.length} hit(s): ${hits.map((h) => `${h.hostname} (score ${h.score})`).join(', ')}`,
@@ -116,23 +117,26 @@ async function main(): Promise<void> {
     ...scanOpts,
     dwellMs: 1500,
   });
-  writeFileSync(join(EXAMPLES, 'viewer-scan/report.json'), JSON.stringify(viewerScan, null, 2));
-  writeFileSync(join(EXAMPLES, 'viewer-scan/report.html'), renderHtmlReport(viewerScan));
+  writeScanArtifacts(join(EXAMPLES, 'viewer-scan'), viewerScan);
+  writeFileSync(
+    join(EXAMPLES, 'viewer-scan/report.html'),
+    renderHtmlReport(viewerScan.report, viewerScan.bundle),
+  );
   log(
-    `viewer self-scan: score ${viewerScan.score} (coverage ${viewerScan.coverage}: it has no wallet flow; ${viewerScan.thirdParties.length} third parties)`,
+    `viewer self-scan: score ${viewerScan.report.privacy.score} (coverage ${viewerScan.report.privacy.coverage}: it has no wallet flow; ${viewerScan.report.contacts.length} third parties)`,
   );
 
   // --- 8. before/after table ---
   const rpcLeaks = (r: typeof leaky) =>
-    r.findings.filter((f) => f.class === 'rpc-provider' && f.countsTowardScore).length;
+    countedLeaks(r).filter((l) => l.evidence.recipientClass === 'rpc-provider').length;
   console.log('\n================ BEFORE / AFTER (igris fix) ================');
   console.log('| dapp              | score | RPC leaks | usesAnonRpc |');
   console.log('|-------------------|-------|-----------|-------------|');
   console.log(
-    `| leaky-dapp (before) | ${String(leaky.score).padEnd(5)} | ${String(rpcLeaks(leaky)).padEnd(9)} | ${leaky.usesAnonRpc}       |`,
+    `| leaky-dapp (before) | ${String(leaky.report.privacy.score).padEnd(5)} | ${String(rpcLeaks(leaky)).padEnd(9)} | ${leaky.report.wallet.usesAnonRpc}       |`,
   );
   console.log(
-    `| leaky-dapp (fixed)  | ${String(fixed.score).padEnd(5)} | ${String(rpcLeaks(fixed)).padEnd(9)} | ${fixed.usesAnonRpc}        |`,
+    `| leaky-dapp (fixed)  | ${String(fixed.report.privacy.score).padEnd(5)} | ${String(rpcLeaks(fixed)).padEnd(9)} | ${fixed.report.wallet.usesAnonRpc}        |`,
   );
   console.log('=============================================================');
   console.log(`\nexamples/ regenerated. Total: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
@@ -147,11 +151,13 @@ async function main(): Promise<void> {
     throw new Error('demo invariant broken: leaky fixture shows no RPC leak');
   if (rpcLeaks(fixed) > 0)
     throw new Error('demo invariant broken: fixed fixture still leaks to RPC');
-  if (!fixed.usesAnonRpc)
+  if (!fixed.report.wallet.usesAnonRpc)
     throw new Error('demo invariant broken: fixed fixture not detected as Anon-RPC');
-  if (leaky.score === null || fixed.score === null)
+  const before = leaky.report.privacy.score;
+  const after = fixed.report.privacy.score;
+  if (before === null || after === null)
     throw new Error('demo invariant broken: a fixture scan was not scored (page did not load)');
-  if (fixed.score <= leaky.score) throw new Error('demo invariant broken: score did not improve');
+  if (after <= before) throw new Error('demo invariant broken: score did not improve');
 }
 
 main().then(

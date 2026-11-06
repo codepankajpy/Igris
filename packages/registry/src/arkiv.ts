@@ -27,7 +27,7 @@ export const RABDI_EXPLORER_URL = 'https://rabdi.explorer.arkiv.network';
 export const DEFAULT_EXPIRY_DAYS = 30;
 
 export interface ArkivRegistryOptions {
-  /** Hex private key of the scanner wallet (publish only). */
+  /** Hex private key of the scanner (publish only) — from loadScanner(), never env. */
   privateKey?: string;
   /** Override the RPC endpoint (reads reveal the reader's IP to it). */
   rpcUrl?: string;
@@ -58,7 +58,7 @@ export class ArkivRegistry implements RegistryBackend {
   async publish(record: ScanRecord): Promise<PublishResult> {
     if (!this.options.privateKey) {
       throw new Error(
-        'ArkivRegistry.publish needs ARKIV_PRIVATE_KEY (fund it at https://hub.arkiv.network/faucet), or use --registry local',
+        'ArkivRegistry.publish needs a scanner key: run `igris scanner init --name <name>` and fund its address at https://hub.arkiv.network/faucet, or use --registry local',
       );
     }
     const account = privateKeyToAccount(this.options.privateKey as Hex);

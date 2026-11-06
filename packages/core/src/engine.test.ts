@@ -113,7 +113,12 @@ describe('security-headers detector (security domain, never scored)', () => {
       ...headers,
     },
   });
-  const checks = (ds: DraftFinding[]) => ds.map((d) => d.fingerprintInput.check).sort();
+  // The always-present 'summary' observation is filtered out of check lists.
+  const checks = (ds: DraftFinding[]) =>
+    ds
+      .map((d) => d.fingerprintInput.check)
+      .filter((c) => c !== 'summary')
+      .sort();
 
   it('nothing protective → CSP, framing and HSTS risks', () => {
     expect(checks(securityHeaderDrafts(doc({})))).toEqual([
@@ -122,15 +127,23 @@ describe('security-headers detector (security domain, never scored)', () => {
       'hsts-missing',
     ]);
   });
-  it('all protective headers → no observations', () => {
-    expect(
-      securityHeaderDrafts(
-        doc({
-          'content-security-policy': "default-src 'self'; frame-ancestors 'self'",
-          'strict-transport-security': 'max-age=1',
-        }),
-      ),
-    ).toEqual([]);
+  it('all protective headers → only the summary observation (info), evidenced', () => {
+    const ds = securityHeaderDrafts(
+      doc({
+        'content-security-policy': "default-src 'self'; frame-ancestors 'self'",
+        'strict-transport-security': 'max-age=1',
+      }),
+    );
+    expect(ds).toHaveLength(1);
+    expect(ds[0]).toMatchObject({
+      kind: 'observation',
+      severity: 'info',
+      fingerprintInput: { check: 'summary' },
+    });
+    expect(ds[0]!.title).toBe(
+      'Main-document security headers: CSP enforced, framing restricted, HSTS',
+    );
+    expect(ds[0]!.evidence[0]!.type).toBe('document-headers');
   });
   it('X-Frame-Options DENY also prevents framing; ALLOW-FROM does not', () => {
     expect(checks(securityHeaderDrafts(doc({ 'x-frame-options': 'DENY' })))).not.toContain(
@@ -295,6 +308,25 @@ describe('evidence bundle and determinism (P05-4)', () => {
     expect(a.report.scan.canaryAddress).not.toBe(b.report.scan.canaryAddress);
   });
 
+  it('a page nonce inside a snippet changes evidence.sha256 but NOT findingSet.sha256', () => {
+    const withNonce = (nonce: string) => {
+      const cap = sampleCapture();
+      cap.storage = [
+        {
+          phase: 'post-connect',
+          kind: 'local-storage',
+          key: 'wagmi.store',
+          value: `["${nonce}",{"accounts":["${CANARY_A}"]}]`,
+        },
+      ];
+      return sampleResult({ capture: cap });
+    };
+    const a = withNonce('93bd40c535f');
+    const b = withNonce('d845a1354bd');
+    expect(a.report.evidence.sha256).not.toBe(b.report.evidence.sha256);
+    expect(a.report.findingSet).toEqual(b.report.findingSet);
+  });
+
   it('the bundle never contains the canary, and the report records the bundle hash', () => {
     const { report, bundle } = sampleResult();
     const text = canonicalize(bundle).toLowerCase();
@@ -312,6 +344,9 @@ describe('evidence bundle and determinism (P05-4)', () => {
     const res = verifyReportIntegrity(report, tampered);
     expect(res.ok).toBe(false);
     expect(res.problems.join(' ')).toMatch(/does not match its content id|bundle hash/);
+    const forged = structuredClone(report);
+    forged.findingSet = { ...forged.findingSet, count: forged.findingSet.count + 1 };
+    expect(verifyReportIntegrity(forged, bundle).problems.join(' ')).toMatch(/findingSet digest/);
   });
 
   it('page-load-failed: null score, empty ledger, findings still evidenced', () => {

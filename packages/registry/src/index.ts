@@ -4,3 +4,4 @@ export * from './local.js';
 export * from './arkiv.js';
 export * from './schema.js';
 export * from './validate.js';
+export * from './identity.js';

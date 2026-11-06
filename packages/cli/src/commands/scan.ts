@@ -3,9 +3,10 @@
  * Exit codes: 0 ok · 1 below --fail-under · 2 scan error · 3 invalid args.
  */
 import { parseArgs } from 'node:util';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Report } from '@igris/core';
+import type { ReportV2, ScanResult } from '@igris/core';
+import { writeScanArtifacts } from '../artifacts.js';
 import { scan, type Recipe, type ScanOptions } from '@igris/scanner';
 import { EXIT } from '../exit-codes.js';
 import { coverageNote, renderHtmlReport, scoreLabel } from '../html-report.js';
@@ -14,8 +15,9 @@ import { renderTable } from '../table.js';
 export const SCAN_HELP = `igris scan <url> [options]
 
 Options:
-  --json                print report.json to stdout and nothing else
-  --out <dir>           write report.json + report.html here (default: igris-out)
+  --json                print {"report", "evidence"} as JSON to stdout, nothing else
+  --out <dir>           write report.json + evidence.json + report.html here
+                        (default: igris-out)
   --fail-under <n>      exit 1 when the score is below n
   --recipe <file>       JSON click-path for custom connect flows (recipes/)
   --dwell <ms>          settle time per phase (default 8000)
@@ -31,7 +33,7 @@ Options:
 
 export interface ScanCliResult {
   exitCode: number;
-  report?: Report;
+  result?: ScanResult;
 }
 
 export async function runScan(argv: string[]): Promise<ScanCliResult> {
@@ -105,76 +107,69 @@ export async function runScan(argv: string[]): Promise<ScanCliResult> {
     ...(values['host-resolver-rules'] ? { hostResolverRules: values['host-resolver-rules'] } : {}),
   };
 
-  let report: Report;
+  let result: ScanResult;
   try {
-    report = await scan(options);
+    result = await scan(options);
   } catch (err) {
     process.stderr.write(`igris scan: scan failed: ${String(err)}\n`);
     return { exitCode: EXIT.SCAN_ERROR };
   }
-
-  const json = JSON.stringify(report, null, 2);
+  const { report } = result;
 
   if (values.json) {
-    process.stdout.write(json + '\n');
+    process.stdout.write(JSON.stringify({ report, evidence: result.bundle }, null, 2) + '\n');
   } else {
     const outDir = values.out ?? 'igris-out';
-    mkdirSync(outDir, { recursive: true });
-    writeFileSync(join(outDir, 'report.json'), json);
-    writeFileSync(join(outDir, 'report.html'), renderHtmlReport(report));
+    writeScanArtifacts(outDir, result);
+    writeFileSync(join(outDir, 'report.html'), renderHtmlReport(report, result.bundle));
     printSummary(report, values.explain);
-    process.stdout.write(`\nreport.json and report.html written to ${outDir}/\n`);
+    process.stdout.write(
+      `\nreport.json, evidence.json (sha256 ${report.evidence.sha256.slice(0, 16)}…) and report.html written to ${outDir}/\n`,
+    );
   }
 
-  if (report.status === 'page-load-failed' || report.score === null)
-    return { exitCode: EXIT.SCAN_ERROR, report };
-  if (failUnder !== undefined && report.score < failUnder)
-    return { exitCode: EXIT.BELOW_THRESHOLD, report };
-  return { exitCode: EXIT.OK, report };
+  const score = report.privacy.score;
+  if (report.scan.status === 'page-load-failed' || score === null)
+    return { exitCode: EXIT.SCAN_ERROR, result };
+  if (failUnder !== undefined && score < failUnder)
+    return { exitCode: EXIT.BELOW_THRESHOLD, result };
+  return { exitCode: EXIT.OK, result };
 }
 
-function printSummary(report: Report, explain: boolean): void {
+function printSummary(report: ReportV2, explain: boolean): void {
   const w = process.stdout.write.bind(process.stdout);
-  w(`\nIgris scan: ${report.hostname}  —  status: ${report.status}\n`);
+  w(`\nIGRIS scan: ${report.scan.hostname}  —  status: ${report.scan.status}\n`);
   w(
-    `score: ${scoreLabel(report)}   usesAnonRpc: ${report.usesAnonRpc}   canary: ${report.canaryAddress}\n`,
+    `privacy score: ${scoreLabel(report)}   usesAnonRpc: ${report.wallet.usesAnonRpc}   canary: ${report.scan.canaryAddress}\n`,
   );
   const note = coverageNote(report);
   w(note ? `${note}\n\n` : '\n');
 
-  const counted = report.findings.filter((f) => f.countsTowardScore);
-  const informational = report.findings.filter((f) => !f.countsTowardScore);
-  if (report.findings.length === 0) {
-    w('no canary leaks found.\n');
+  const findings = report.privacy.findings;
+  if (findings.length === 0) {
+    w('no privacy findings.\n');
   } else {
     w(
       renderTable(
-        ['id', 'class', 'destination', 'where', 'encoding', 'phase', 'counted'],
-        report.findings.map((f) => [
+        ['id', 'severity', 'kind', 'scored', 'finding'],
+        findings.map((f) => [
           f.id,
-          f.class,
-          f.host,
-          f.location,
-          f.encoding,
-          f.phase,
-          f.countsTowardScore ? 'yes' : 'no',
+          f.severity,
+          f.kind,
+          f.countsTowardPrivacyScore ? 'yes' : 'no',
+          f.title,
         ]),
       ) + '\n',
     );
-    w(`\n${counted.length} counted finding(s), ${informational.length} informational.\n`);
   }
 
-  w(`\nthird parties contacted (IP exposure): ${report.thirdParties.length}\n`);
-  if (report.thirdParties.length) {
+  const obs = report.security.observations;
+  if (obs.length) {
+    w(`\nsecurity observations (not scored):\n`);
     w(
       renderTable(
-        ['host', 'class', 'phases', 'requests'],
-        report.thirdParties.map((t) => [
-          t.host,
-          t.class,
-          t.phases.join('+'),
-          String(t.requestCount),
-        ]),
+        ['id', 'severity', 'kind', 'observation'],
+        obs.map((o) => [o.id, o.severity, o.kind, o.title]),
       ) + '\n',
     );
   }
@@ -184,7 +179,7 @@ function printSummary(report: Report, explain: boolean): void {
     w(
       renderTable(
         ['#', 'rule', 'points', 'findings', 'why'],
-        report.ledger.map((l) => [
+        report.privacy.ledger.map((l) => [
           l.id,
           l.rule,
           `−${l.points}`,

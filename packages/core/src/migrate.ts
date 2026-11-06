@@ -30,6 +30,7 @@ import {
 } from './contracts/evidence.js';
 import { REPORT_V2_VERSION, type ReportV2, type TelemetryV2 } from './contracts/report-v2.js';
 import { validateEvidenceBundle, validateReportV2 } from './contracts/validate.js';
+import { findingSetDigest } from './contracts/verify.js';
 import {
   CANARY_LEAK_DETECTOR_ID,
   CANARY_LEAK_DETECTOR_VERSION,
@@ -214,6 +215,7 @@ export function migrateReportV1toV2(input: unknown): ScanResult {
       sha256: bundleHash(bundle),
       itemCount: items.size,
     },
+    findingSet: findingSetDigest([...privacy, ...security]),
     migratedFrom: v1.reportVersion,
   };
   validateEvidenceBundle(bundle);

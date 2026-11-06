@@ -259,7 +259,7 @@ describe('registry viewer — untrusted data and provenance (P0-4, P0-8)', () =>
         body: JSON.stringify({
           provenance: 'unpublished',
           preview,
-          report: { score: 97, status: 'completed', errors: [] },
+          report: { scan: { status: 'completed', notes: [] }, privacy: { score: 97 } },
         }),
       }),
     );
@@ -288,9 +288,8 @@ describe('registry viewer — untrusted data and provenance (P0-4, P0-8)', () =>
           provenance: 'unpublished',
           preview: null,
           report: {
-            score: null,
-            status: 'page-load-failed',
-            errors: ['page load failed: HTTP 404'],
+            scan: { status: 'page-load-failed', notes: ['page load failed: HTTP 404'] },
+            privacy: { score: null },
           },
         }),
       }),

@@ -223,6 +223,9 @@ export function parseSummaryPayload(input: unknown): SummaryPayload {
     ),
   );
   const coverage = optional(o, 'coverage', (v) => oneOf(v, 'summary.coverage', COVERAGES));
+  const evidenceSha256 = optional(o, 'evidenceSha256', (v) =>
+    str(v, 'summary.evidenceSha256', 64, SHA256_RE),
+  );
   const canaryAddress = str(o.canaryAddress, 'summary.canaryAddress', 42);
   if (canaryAddress !== '' && !ADDRESS_RE.test(canaryAddress)) fail('summary.canaryAddress');
 
@@ -232,6 +235,7 @@ export function parseSummaryPayload(input: unknown): SummaryPayload {
     ...(coverage !== undefined ? { coverage } : {}),
     spoofMetaMask: bool(o.spoofMetaMask, 'summary.spoofMetaMask'),
     canaryAddress,
+    ...(evidenceSha256 !== undefined ? { evidenceSha256 } : {}),
     findings,
     thirdParties,
     ledger,

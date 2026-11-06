@@ -9,7 +9,8 @@ import type { Server } from 'node:http';
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Report } from '@igris/core';
+import type { ReportV2, ScanResult } from '@igris/core';
+import { sampleResult } from '@igris/core/testing';
 import type { ScanOptions } from '@igris/scanner';
 import { isPublicAddress } from '@igris/scanner';
 import { recordFromReport } from '@igris/registry';
@@ -30,28 +31,8 @@ function config(over: Partial<ApiConfig> = {}): ApiConfig {
   return { ...loadConfig({}), ...over };
 }
 
-function fakeReport(over: Partial<Report> = {}): Report {
-  return {
-    reportVersion: '1.1.0',
-    scannerVersion: 'test',
-    target: 'https://app.example.org/',
-    hostname: 'app.example.org',
-    scannedAt: '2026-11-06T00:00:00.000Z',
-    chainId: 1,
-    status: 'completed',
-    coverage: 'full',
-    canaryAddress: '0x8ba1f109551bd432803012645ac136ddd64dba72',
-    spoofMetaMask: true,
-    findings: [],
-    thirdParties: [],
-    readsViaWallet: [],
-    usesAnonRpc: false,
-    score: 100,
-    ledger: [],
-    errors: [],
-    ...over,
-  };
-}
+const fakeResult = (over: Parameters<typeof sampleResult>[0] = {}): ScanResult =>
+  sampleResult(over);
 
 let server: Server | undefined;
 afterEach(async () => {
@@ -64,7 +45,7 @@ async function start(cfg: ApiConfig, deps: Partial<ApiDeps> = {}) {
   const app = createApp(cfg, {
     scan: async (o) => {
       calls.push(o);
-      return fakeReport();
+      return fakeResult();
     },
     fix: () => ({ diff: '', changedFiles: [], notes: [] }),
     recordFromReport,
@@ -123,6 +104,10 @@ describe('POST /api/scan', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.provenance).toBe('unpublished');
+    expect((body.evidence as { bundleVersion: string }).bundleVersion).toBe('igris.evidence.v1');
+    expect((body.preview as { summary: { evidenceSha256: string } }).summary.evidenceSha256).toBe(
+      (body.report as ReportV2).evidence.sha256,
+    );
     expect(JSON.stringify(body)).not.toMatch(/"scanner"/); // never attributed to a key
     expect(calls[0]!.egress).toEqual({ mode: 'public-only', allowedPorts: [80, 443] });
     expect(calls[0]!.signal).toBeInstanceOf(AbortSignal);
@@ -130,14 +115,14 @@ describe('POST /api/scan', () => {
 
   it('an unmeasured scan has preview null (never publishable)', async () => {
     const { post } = await start(config(), {
-      scan: async () => fakeReport({ status: 'page-load-failed', coverage: 'none', score: null }),
+      scan: async () => fakeResult({ status: 'page-load-failed' }),
     });
     const body = (await (await post('/api/scan', { url: 'https://down.example.org/' })).json()) as {
       preview: unknown;
-      report: Report;
+      report: ReportV2;
     };
     expect(body.preview).toBeNull();
-    expect(body.report.score).toBeNull();
+    expect(body.report.privacy.score).toBeNull();
   });
 
   it('400 on internal targets, 400 on malformed JSON, 413 on oversized bodies', async () => {
@@ -162,7 +147,7 @@ describe('POST /api/scan', () => {
     const { post } = await start(config({ concurrency: 1, maxQueued: 0, rateLimitMax: 100 }), {
       scan: async () => {
         await gate;
-        return fakeReport();
+        return fakeResult();
       },
     });
     const first = post('/api/scan', { url: 'https://a.example.org/' });

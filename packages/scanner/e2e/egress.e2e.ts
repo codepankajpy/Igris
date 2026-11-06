@@ -11,7 +11,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { createSocket, type Socket as UdpSocket } from 'node:dgram';
-import type { Report } from '@igris/core';
+import type { ReportV2 } from '@igris/core';
 import { scan } from '../src/index.js';
 import { HOST_RULES, PAGE_PORT } from './helpers.js';
 
@@ -57,8 +57,8 @@ const resolve = async (h: string) => {
   return ips;
 };
 
-function publicOnlyScan(url: string, allowTarget: boolean): Promise<Report> {
-  return scan({
+async function publicOnlyScan(url: string, allowTarget: boolean): Promise<ReportV2> {
+  const result = await scan({
     url,
     dwellMs: 1500,
     egress: {
@@ -69,6 +69,7 @@ function publicOnlyScan(url: string, allowTarget: boolean): Promise<Report> {
       ...(allowTarget ? { allowAddresses: [{ ip: '127.0.0.1', port: TARGET_PORT }] } : {}),
     },
   });
+  return result.report;
 }
 
 beforeAll(async () => {
@@ -139,34 +140,35 @@ describe('egress isolation (public-only)', () => {
     const report = await publicOnlyScan(`http://target.test:${TARGET_PORT}/`, true);
     expect(secretHits).toEqual([]);
     expect(stunPackets, 'WebRTC/STUN UDP must not bypass the proxy').toBe(0);
-    expect(report.status).not.toBe('page-load-failed');
-    const blocked = report.errors.filter((e) => e.startsWith('egress blocked:'));
+    expect(report.scan.status).not.toBe('page-load-failed');
+    expect(report.scan.egress).toBe('public-only');
+    const blocked = report.scan.notes.filter((e) => e.startsWith('egress blocked:'));
     expect(blocked.some((e) => e.includes(`127.0.0.1:${SECRET_PORT}`))).toBe(true);
     expect(blocked.some((e) => e.includes(`internal.test:${SECRET_PORT}`))).toBe(true);
     expect(blocked.some((e) => e.includes('169.254.169.254:80'))).toBe(true);
     expect(blocked.some((e) => e.includes('meta.test:80'))).toBe(true);
     // Refused requests never left the scanner: not third-party contacts.
-    const hosts = report.thirdParties.map((t) => t.host);
+    const hosts = report.contacts.map((t) => t.host);
     expect(hosts).not.toContain('internal.test');
     expect(hosts).not.toContain('169.254.169.254');
   });
 
   it('an internal scan target never loads (direct)', async () => {
     const report = await publicOnlyScan(`http://127.0.0.1:${SECRET_PORT}/`, false);
-    expect(report.status).toBe('page-load-failed');
-    expect(report.score).toBeNull();
+    expect(report.scan.status).toBe('page-load-failed');
+    expect(report.privacy.score).toBeNull();
     expect(secretHits).toEqual([]);
   });
 
   it('an internal scan target never loads (via a hostname that resolves privately)', async () => {
     const report = await publicOnlyScan(`http://internal.test:${SECRET_PORT}/`, false);
-    expect(report.status).toBe('page-load-failed');
+    expect(report.scan.status).toBe('page-load-failed');
     expect(secretHits).toEqual([]);
   });
 
   it('a main-document redirect into the internal network is blocked', async () => {
     const report = await publicOnlyScan(`http://target.test:${TARGET_PORT}/go`, true);
-    expect(report.status).toBe('page-load-failed');
+    expect(report.scan.status).toBe('page-load-failed');
     expect(secretHits).toEqual([]);
   });
 });

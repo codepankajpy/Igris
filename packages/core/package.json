@@ -14,7 +14,8 @@
       "types": "./src/contracts/index.ts",
       "igris-dist": "./dist/contracts/index.js",
       "default": "./src/contracts/index.ts"
-    }
+    },
+    "./testing": "./src/test-helpers.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

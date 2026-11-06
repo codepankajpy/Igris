@@ -2,7 +2,7 @@
   "name": "igris-monorepo",
   "version": "0.1.0",
   "private": true,
-  "description": "Igris — Lighthouse for dapp privacy: scan, explain, fix, publish.",
+  "description": "Igris \u2014 Lighthouse for dapp privacy: scan, explain, fix, publish.",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@9.15.9",
@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "build": "pnpm -r build",
+    "build": "pnpm -r build && pnpm typecheck:scripts",
     "test": "pnpm -r --no-bail test",
     "test:e2e": "pnpm --filter @igris/scanner test:e2e",
     "web:dev": "pnpm --filter @igris/web dev",
@@ -22,7 +22,8 @@
     "api:build": "pnpm --filter @igris/api build",
     "api:start": "pnpm --filter @igris/api start",
     "igris": "tsx packages/cli/src/main.ts",
-    "demo": "tsx scripts/demo.ts"
+    "demo": "tsx scripts/demo.ts",
+    "typecheck:scripts": "tsc -p scripts/tsconfig.json"
   },
   "devDependencies": {
     "@igris/cli": "workspace:*",

@@ -45,6 +45,7 @@ import {
   validateEvidenceBundle,
   validateReportV2,
 } from './contracts/validate.js';
+import { findingSetDigest } from './contracts/verify.js';
 import { canaryLeakDetector } from './detectors/canary-leak.js';
 import { computeContacts, ipExposureDetector } from './detectors/ip-exposure.js';
 import { securityHeadersDetector } from './detectors/security-headers.js';
@@ -318,6 +319,7 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
       sha256: bundleHash(bundle),
       itemCount: items.size,
     },
+    findingSet: findingSetDigest([...privacy, ...security]),
   };
   // The engine validates its own output: drift between code and published
   // schema fails the scan instead of producing an invalid artifact.

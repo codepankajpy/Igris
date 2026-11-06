@@ -1,17 +1,25 @@
 /**
- * Node-side conversion of a Report into a publishable ScanRecord.
- * `reportJson` must be the exact bytes written to report.json so the
- * embedded sha256 is reproducible by anyone holding that file.
+ * Node-side conversion of a scan result (Report v2 + evidence bundle) into a
+ * publishable ScanRecord (entity schema igris.scan.v1, summary v2).
+ *
+ * Hashes are content hashes (sha256 over RFC 8785 canonical JSON), so they
+ * do not depend on how report.json was formatted:
+ *  - reportSha256   = contentHash(report)
+ *  - evidenceSha256 = contentHash(bundle) = report.evidence.sha256
+ * Integrity is verified before anything is built: a report whose bundle does
+ * not match is never turned into a record.
  */
-import { createHash } from 'node:crypto';
-import { coverageForStatus, type Report } from '@igris/core';
-import { RECORD_VERSION, type ScanRecord } from './record.js';
+import {
+  contentHash,
+  verifyReportIntegrity,
+  type CanaryMatchEvidence,
+  type DocumentHeadersEvidence,
+  type EvidenceBundleV1,
+  type ReportV2,
+} from '@igris/core';
+import { RECORD_VERSION, type ScanRecord, type SummaryPayload } from './record.js';
 
-export function sha256Hex(bytes: string | Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex');
-}
-
-/** Thrown when a report must not be published (nothing was measured). */
+/** Thrown when a report must not be published. */
 export class UnpublishableReportError extends Error {
   constructor(message: string) {
     super(message);
@@ -19,87 +27,98 @@ export class UnpublishableReportError extends Error {
   }
 }
 
-export function recordFromReport(report: Report, reportJson: string): ScanRecord {
-  // A report without a score measured nothing (page never loaded). Publishing
-  // it would put an unfounded claim on a public registry.
-  if (report.score === null || report.status === 'page-load-failed') {
+export function recordFromReport(report: ReportV2, bundle: EvidenceBundleV1): ScanRecord {
+  const host = report.scan.hostname;
+  // Nothing measured (page never loaded) → no claim on a public registry.
+  if (report.privacy.score === null || report.scan.status === 'page-load-failed') {
     throw new UnpublishableReportError(
-      `refusing to publish ${report.hostname}: status ${report.status}, no score (nothing was measured)`,
+      `refusing to publish ${host}: status ${report.scan.status}, no score (nothing was measured)`,
     );
   }
-  const leakClasses = [
-    ...new Set(report.findings.filter((f) => f.countsTowardScore).map((f) => f.class)),
-  ].sort();
+  const integrity = verifyReportIntegrity(report, bundle);
+  if (!integrity.ok) {
+    throw new UnpublishableReportError(
+      `refusing to publish ${host}: evidence does not match the report (${integrity.problems[0]})`,
+    );
+  }
+
+  const canary = report.privacy.findings.filter((f) => f.detector === 'canary-leak');
+  const matches = canary.map((f) => ({
+    finding: f,
+    e: bundle.items[f.evidence[0]!.id] as CanaryMatchEvidence,
+  }));
+  const counted = matches.filter((m) => m.finding.countsTowardPrivacyScore);
+  const leakClasses = [...new Set(counted.map((m) => m.e.recipientClass))].sort();
+  const doc = Object.values(bundle.items).find(
+    (i): i is DocumentHeadersEvidence => i.type === 'document-headers',
+  );
+  const t = report.telemetry;
+
+  const summary: SummaryPayload = {
+    v: RECORD_VERSION,
+    status: report.scan.status,
+    coverage: report.privacy.coverage,
+    spoofMetaMask: report.scan.spoofMetaMask,
+    canaryAddress: report.scan.canaryAddress,
+    evidenceSha256: report.evidence.sha256,
+    findings: matches.map(({ finding, e }) => ({
+      class: e.recipientClass,
+      location: e.location,
+      encoding: e.encoding,
+      category: e.category,
+      host: e.host,
+      phase: e.phase,
+      counted: finding.countsTowardPrivacyScore,
+    })),
+    thirdParties: report.contacts.map((c) => ({
+      host: c.host,
+      class: c.class,
+      phases: c.phases,
+      requestCount: c.requestCount,
+      ...(c.methods ? { methods: c.methods } : {}),
+    })),
+    ledger: report.privacy.ledger.map((l) => ({ rule: l.rule, points: l.points, label: l.label })),
+    readsViaWallet: report.wallet.readsViaWallet,
+    ...(t && t.wsConnections !== null
+      ? {
+          telemetry: {
+            totalRequests: t.totalRequests,
+            preConnectRequests: t.preConnectRequests,
+            postConnectRequests: t.postConnectRequests,
+            wsConnections: t.wsConnections,
+            ...(t.wsFrames !== null ? { wsFrames: t.wsFrames } : {}),
+          },
+        }
+      : {}),
+    ...(doc
+      ? {
+          securityHeaders: {
+            source: 'main-document' as const,
+            documentStatus: doc.status,
+            cspPresent: doc.headers['content-security-policy'] !== null,
+            cspReportOnly: doc.headers['content-security-policy-report-only'] !== null,
+            hstsPresent: doc.headers['strict-transport-security'] !== null,
+            ...(doc.headers['x-frame-options'] !== null
+              ? { xFrameOptions: doc.headers['x-frame-options'] }
+              : {}),
+          },
+        }
+      : {}),
+    ...(report.scan.connectionLog.length ? { connectionLog: report.scan.connectionLog } : {}),
+  };
+
   return {
-    hostname: report.hostname,
-    score: report.score,
-    scannedAt: Math.floor(new Date(report.scannedAt).getTime() / 1000),
-    scannerVersion: report.scannerVersion,
+    hostname: host,
+    score: report.privacy.score,
+    scannedAt: Math.floor(new Date(report.scan.scannedAt).getTime() / 1000),
+    scannerVersion: report.scan.scannerVersion,
     reportVersion: report.reportVersion,
-    chainId: report.chainId,
-    thirdPartyCount: report.thirdParties.length,
-    leakCount: report.findings.filter((f) => f.countsTowardScore).length,
+    chainId: report.scan.chainId,
+    thirdPartyCount: report.contacts.length,
+    leakCount: counted.length,
     leakClasses: leakClasses.join(','),
-    usesAnonRpc: report.usesAnonRpc,
-    reportSha256: sha256Hex(reportJson),
-    summary: {
-      v: RECORD_VERSION,
-      status: report.status,
-      coverage: report.coverage ?? coverageForStatus(report.status),
-      spoofMetaMask: report.spoofMetaMask,
-      canaryAddress: report.canaryAddress,
-      findings: report.findings.map((f) => ({
-        class: f.class,
-        location: f.location,
-        encoding: f.encoding,
-        category: f.category,
-        host: f.host,
-        phase: f.phase,
-        counted: f.countsTowardScore,
-      })),
-      thirdParties: report.thirdParties.map((t) => ({
-        host: t.host,
-        class: t.class,
-        phases: t.phases,
-        ...(t.requestCount !== undefined ? { requestCount: t.requestCount } : {}),
-        ...(t.methods ? { methods: t.methods } : {}),
-      })),
-      ledger: report.ledger.map((l) => ({ rule: l.rule, points: l.points, label: l.label })),
-      readsViaWallet: report.readsViaWallet,
-      ...(report.summary
-        ? {
-            telemetry: {
-              totalRequests: report.summary.totalRequests,
-              preConnectRequests: report.summary.preConnectRequests,
-              postConnectRequests: report.summary.postConnectRequests,
-              wsConnections: report.summary.wsConnections,
-              ...(report.summary.wsFrames !== undefined
-                ? { wsFrames: report.summary.wsFrames }
-                : {}),
-            },
-          }
-        : {}),
-      // No URL in the summary (summaries never carry URLs); `source` marks
-      // the headers as main-document headers (legacy rows lack it).
-      ...(report.securityHeaders
-        ? {
-            securityHeaders: {
-              source: 'main-document' as const,
-              ...(report.securityHeaders.documentStatus !== undefined
-                ? { documentStatus: report.securityHeaders.documentStatus }
-                : {}),
-              cspPresent: report.securityHeaders.cspPresent,
-              ...(report.securityHeaders.cspReportOnly !== undefined
-                ? { cspReportOnly: report.securityHeaders.cspReportOnly }
-                : {}),
-              hstsPresent: report.securityHeaders.hstsPresent,
-              ...(report.securityHeaders.xFrameOptions !== undefined
-                ? { xFrameOptions: report.securityHeaders.xFrameOptions }
-                : {}),
-            },
-          }
-        : {}),
-      ...(report.connectionLog ? { connectionLog: report.connectionLog } : {}),
-    },
+    usesAnonRpc: report.wallet.usesAnonRpc,
+    reportSha256: contentHash(report),
+    summary,
   };
 }

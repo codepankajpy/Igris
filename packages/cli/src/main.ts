@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The `igris` CLI. Subcommands: scan, fix, publish, query, snapshot.
+ * The `igris` CLI. Subcommands: scan, fix, verify, publish, query, snapshot, scanner.
  * Exit codes: 0 ok · 1 score below threshold · 2 scan error · 3 invalid args.
  */
 import { EXIT } from './exit-codes.js';
@@ -10,7 +10,9 @@ const HELP = `igris — Lighthouse for dapp privacy: scan, explain, fix, publish
 Usage:
   igris scan <url> [options]        scan a dapp with a canary wallet
   igris fix <path> [options]        patch a dapp repo to use Anon-RPC
+  igris verify <report.json>        validate a report + evidence bundle (hashes, schemas)
   igris publish <report.json>       publish a scan result to the registry
+  igris scanner <init|import|list|show>   manage this node's scanner identities
   igris query [filters]             query the registry
   igris snapshot [--out file]       dump the registry for offline use
 
@@ -27,6 +29,14 @@ async function main(): Promise<number> {
     case 'fix': {
       const { runFix } = await import('./commands/fix.js');
       return (await runFix(rest)).exitCode;
+    }
+    case 'verify': {
+      const { runVerify } = await import('./commands/verify.js');
+      return (await runVerify(rest)).exitCode;
+    }
+    case 'scanner': {
+      const { runScanner } = await import('./commands/scanner.js');
+      return (await runScanner(rest)).exitCode;
     }
     case 'publish': {
       const { runPublish } = await import('./commands/publish.js');

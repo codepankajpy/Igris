@@ -6,8 +6,8 @@
  *
  * Usage: pnpm exec tsx scripts/ci-compare.ts <baseline-report.json> <new-report.json>
  */
-import { readFileSync } from 'node:fs';
-import type { Report } from '@igris/core';
+import { loadScanArtifacts } from '@igris/cli';
+import { countedLeaks, type ScanResult } from '@igris/core';
 
 const [baselinePath, newPath] = process.argv.slice(2);
 if (!baselinePath || !newPath) {
@@ -15,14 +15,19 @@ if (!baselinePath || !newPath) {
   process.exit(3);
 }
 
-const baseline = JSON.parse(readFileSync(baselinePath, 'utf8')) as Report;
-const next = JSON.parse(readFileSync(newPath, 'utf8')) as Report;
+// Both artifacts are schema-validated and integrity-checked (v1 migrated).
+const baselineResult: ScanResult = loadScanArtifacts(baselinePath);
+const nextResult: ScanResult = loadScanArtifacts(newPath);
+const baseline = {
+  score: baselineResult.report.privacy.score,
+  status: baselineResult.report.scan.status,
+};
+const next = { score: nextResult.report.privacy.score, status: nextResult.report.scan.status };
 
-const classesOf = (r: Report) =>
-  new Set(r.findings.filter((f) => f.countsTowardScore).map((f) => f.class));
+const classesOf = (r: ScanResult) => new Set(countedLeaks(r).map((l) => l.evidence.recipientClass));
 
-const before = classesOf(baseline);
-const after = classesOf(next);
+const before = classesOf(baselineResult);
+const after = classesOf(nextResult);
 const newClasses = [...after].filter((c) => !before.has(c));
 
 let failed = false;

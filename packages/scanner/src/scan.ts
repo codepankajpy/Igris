@@ -9,7 +9,13 @@
  */
 import { chromium, type Browser, type LaunchOptions } from 'playwright';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { loadThirdPartyDb, type Report, type ScanStatus, type ThirdPartyEntry } from '@igris/core';
+import {
+  buildScanResult,
+  loadThirdPartyDb,
+  type ScanResult,
+  type ScanStatus,
+  type ThirdPartyEntry,
+} from '@igris/core';
 import { TrafficRecorder } from './capture.js';
 import { connectWallet, isWalletConnected, type Recipe } from './connect.js';
 import { WalletReadHandler } from './stub-rpc.js';
@@ -21,7 +27,7 @@ import {
   type EgressProxyOptions,
 } from './egress/proxy.js';
 
-export const SCANNER_VERSION = '0.1.0';
+export const SCANNER_VERSION = '0.2.0'; // 0.2.0: emits Report v2 + evidence bundle
 
 /**
  * Network egress policy for the scanned page.
@@ -71,7 +77,7 @@ async function settle(page: import('playwright').Page, dwellMs: number): Promise
   await page.waitForTimeout(dwellMs);
 }
 
-export async function scan(options: ScanOptions): Promise<Report> {
+export async function scan(options: ScanOptions): Promise<ScanResult> {
   const chainId = options.chainId ?? 1;
   const dwellMs = options.dwellMs ?? 8000;
   const spoofMetaMask = options.spoofMetaMask ?? true;
@@ -245,10 +251,9 @@ interface InternalBuildArgs {
   egressBlockedHosts?: Set<string>;
 }
 
-async function buildReportFromScan(args: InternalBuildArgs): Promise<Report> {
-  const { buildReport } = await import('./report-builder.js');
+function buildReportFromScan(args: InternalBuildArgs): ScanResult {
   const db = args.options.thirdPartyDb ?? loadThirdPartyDb().entries;
-  return buildReport({
+  return buildScanResult({
     target: args.options.url,
     canaryAddress: args.canaryAddress,
     chainId: args.chainId,
@@ -256,11 +261,16 @@ async function buildReportFromScan(args: InternalBuildArgs): Promise<Report> {
     scannerVersion: SCANNER_VERSION,
     scannedAt: (args.options.now?.() ?? new Date()).toISOString(),
     status: args.status,
+    egress: args.options.egress?.mode ?? 'unrestricted',
     capture: args.recorder.capture,
-    readHandler: args.readHandler,
+    wallet: {
+      readsViaWallet: args.readHandler.summary(),
+      usesAnonRpc: args.readHandler.anonRpcBootstrapSeen,
+    },
     thirdPartyDb: db,
     ...(args.options.firstParty ? { firstParty: args.options.firstParty } : {}),
-    errors: args.errors,
+    notes: args.errors.filter((e) => !e.startsWith('connect: ')),
+    connectionLog: args.errors.filter((e) => e.startsWith('connect: ')),
     ...(args.egressBlockedHosts ? { excludeHosts: args.egressBlockedHosts } : {}),
   });
 }

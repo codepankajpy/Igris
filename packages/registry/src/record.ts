@@ -8,9 +8,10 @@
 // Node-only pieces (hashing, report conversion) live in from-report.ts.
 // (Type-only import — erased at compile time, so no Node code reaches the
 // browser bundle.)
-import type { Report } from '@igris/core';
+import type { ScanStatus } from '@igris/core';
 
-export const RECORD_VERSION = 1;
+/** Summary payload version. 2: built from Report v2; adds evidenceSha256. */
+export const RECORD_VERSION = 2;
 
 /** Queryable attributes (one Arkiv entity per scan). */
 export interface ScanRecord {
@@ -27,7 +28,10 @@ export interface ScanRecord {
   /** Comma-joined recipient classes that saw the address (≤128 bytes). */
   leakClasses: string;
   usesAnonRpc: boolean;
-  /** sha256 (hex) of the exact report.json bytes this record was made from. */
+  /**
+   * sha256 (hex) of the report's RFC 8785 canonical JSON (summary v2+).
+   * Summary v1 records hashed the exact report.json bytes instead.
+   */
   reportSha256: string;
   /** Compact JSON summary (bytes payload, see SummaryPayload). */
   summary: SummaryPayload;
@@ -35,11 +39,13 @@ export interface ScanRecord {
 
 export interface SummaryPayload {
   v: number;
-  status: Report['status'];
+  status: ScanStatus;
   /** Which phases the score covers (absent on records made before report 1.1.0). */
   coverage?: 'full' | 'pre-connect-only' | 'none';
   spoofMetaMask: boolean;
   canaryAddress: string;
+  /** sha256 (hex) of the canonical evidence bundle (summary v2+). */
+  evidenceSha256?: string;
   findings: Array<{
     class: string;
     location: string;

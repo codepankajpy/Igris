@@ -1,11 +1,12 @@
 /** Shared --registry plumbing for publish/query/snapshot. */
-import { ArkivRegistry, LocalRegistry, type RegistryBackend } from '@igris/registry';
+import { ArkivRegistry, LocalRegistry, loadScanner, type RegistryBackend } from '@igris/registry';
 
 export interface RegistryFlags {
   registry?: string;
   'local-file'?: string;
   'rpc-url'?: string;
   'expiry-days'?: string;
+  scanner?: string;
 }
 
 export const REGISTRY_FLAG_OPTIONS = {
@@ -15,7 +16,15 @@ export const REGISTRY_FLAG_OPTIONS = {
   'expiry-days': { type: 'string' as const },
 };
 
-export function makeBackend(flags: RegistryFlags): RegistryBackend {
+/** publish only: which scanner identity signs (default: this node's only scanner). */
+export const SCANNER_FLAG_OPTION = { scanner: { type: 'string' as const } };
+
+/**
+ * `forWrite`: load this node's scanner key (signing). Reads never touch keys.
+ * Keys come only from the node's scanner store (igris scanner init), never
+ * from environment variables.
+ */
+export function makeBackend(flags: RegistryFlags, forWrite = false): RegistryBackend {
   if (flags.registry === 'local') {
     return new LocalRegistry(flags['local-file']);
   }
@@ -28,7 +37,9 @@ export function makeBackend(flags: RegistryFlags): RegistryBackend {
   }
   const rpcUrl = flags['rpc-url'] ?? process.env.ARKIV_RPC_URL;
   return new ArkivRegistry({
-    ...(process.env.ARKIV_PRIVATE_KEY ? { privateKey: process.env.ARKIV_PRIVATE_KEY } : {}),
+    ...(forWrite
+      ? { privateKey: loadScanner(flags.scanner ? { selector: flags.scanner } : {}).privateKey }
+      : {}),
     ...(rpcUrl ? { rpcUrl } : {}),
     ...(process.env.ARKIV_ACCESS_KEY ? { accessKey: process.env.ARKIV_ACCESS_KEY } : {}),
     ...(expiryDays !== undefined ? { expiryDays } : {}),

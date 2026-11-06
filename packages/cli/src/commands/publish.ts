@@ -1,13 +1,15 @@
 /** `igris publish <report.json>` — write a scan entity to the registry. */
 import { parseArgs } from 'node:util';
-import { readFileSync } from 'node:fs';
 import { EXIT } from '../exit-codes.js';
-import { makeBackend, REGISTRY_FLAG_OPTIONS } from './registry-common.js';
+import { loadScanArtifacts } from '../artifacts.js';
+import { makeBackend, REGISTRY_FLAG_OPTIONS, SCANNER_FLAG_OPTION } from './registry-common.js';
 
 export const PUBLISH_HELP = `igris publish <report.json> [options]
 
 Options:
-  --registry <arkiv|local>   backend (default: arkiv; needs ARKIV_PRIVATE_KEY)
+  --registry <arkiv|local>   backend (default: arkiv; signs with this node's scanner key)
+  --scanner <name|address>   which scanner signs (default: the node's only scanner)
+  --evidence <file>          evidence bundle (default: evidence.json next to the report)
   --local-file <path>        local registry file (default: igris-registry.json)
   --rpc-url <url>            override the Arkiv RPC endpoint
   --expiry-days <n>          entity lifetime (default 30; max ~182)
@@ -19,7 +21,12 @@ export async function runPublish(argv: string[]): Promise<{ exitCode: number }> 
     parsed = parseArgs({
       args: argv,
       allowPositionals: true,
-      options: { ...REGISTRY_FLAG_OPTIONS, help: { type: 'boolean', default: false } },
+      options: {
+        ...REGISTRY_FLAG_OPTIONS,
+        ...SCANNER_FLAG_OPTION,
+        evidence: { type: 'string' },
+        help: { type: 'boolean', default: false },
+      },
     });
   } catch (err) {
     process.stderr.write(`invalid arguments: ${String(err)}\n${PUBLISH_HELP}`);
@@ -37,10 +44,15 @@ export async function runPublish(argv: string[]): Promise<{ exitCode: number }> 
 
   try {
     const { recordFromReport } = await import('@igris/registry');
-    const raw = readFileSync(file, 'utf8');
-    const report = JSON.parse(raw);
-    const record = recordFromReport(report, raw);
-    const backend = makeBackend(parsed.values);
+    // Schema + integrity verified (v1 reports are migrated) before anything is signed.
+    const loaded = loadScanArtifacts(file, parsed.values.evidence);
+    if (loaded.migratedFrom) {
+      process.stderr.write(
+        `note: ${file} is report ${loaded.migratedFrom}; migrated to 2.0.0 before publishing\n`,
+      );
+    }
+    const record = recordFromReport(loaded.report, loaded.bundle);
+    const backend = makeBackend(parsed.values, true);
     const result = await backend.publish(record);
     process.stdout.write(
       [
@@ -50,6 +62,7 @@ export async function runPublish(argv: string[]): Promise<{ exitCode: number }> 
         ...(result.txHash ? [`  tx:        ${result.txHash}`] : []),
         ...(result.expiresAt ? [`  expires:   ${result.expiresAt}`] : []),
         `  reportSha: ${record.reportSha256}`,
+        `  evidence:  ${loaded.report.evidence.sha256}`,
         '',
       ].join('\n'),
     );

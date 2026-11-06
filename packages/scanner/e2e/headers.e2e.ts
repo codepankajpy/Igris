@@ -5,7 +5,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
-import type { Report } from '@igris/core';
+import type { DocumentHeadersEvidence, ScanResult } from '@igris/core';
 import { scan } from '../src/index.js';
 import { HOST_RULES, PAGE_PORT } from './helpers.js';
 
@@ -46,50 +46,70 @@ afterAll(async () => {
   await new Promise((r) => server.close(() => r(undefined)));
 });
 
-function scanPath(path: string): Promise<Report> {
+function scanPath(path: string): Promise<ScanResult> {
   return scan({ url: `${BASE}${path}`, hostResolverRules: HOST_RULES, dwellMs: 200 });
 }
 
+/** The single document-headers evidence item of a result, if any. */
+function docHeaders(r: ScanResult): DocumentHeadersEvidence | undefined {
+  return Object.values(r.bundle.items).find(
+    (i): i is DocumentHeadersEvidence => i.type === 'document-headers',
+  );
+}
+const checks = (r: ScanResult) => r.report.security.observations.map((o) => o.title).sort();
+
 describe('security headers (main document)', () => {
-  it('positive: CSP, HSTS and XFO sent by the page are detected', async () => {
+  it('positive: CSP, HSTS and XFO sent by the page are recorded as evidence; no risk raised', async () => {
     const r = await scanPath('/secure');
-    expect(r.securityHeaders).toMatchObject({
+    expect(docHeaders(r)).toMatchObject({
       documentUrl: `${BASE}/secure`,
-      documentStatus: 200,
-      cspPresent: true,
-      hstsPresent: true,
-      xFrameOptions: 'DENY',
+      status: 200,
+      headers: {
+        'content-security-policy': "default-src 'self'",
+        'strict-transport-security': 'max-age=31536000',
+        'x-frame-options': 'DENY',
+      },
     });
+    // Only the always-present summary observation (info).
+    expect(r.report.security.observations.map((o) => o.kind)).toEqual(['observation']);
   });
 
-  it('negative: a page without them is reported as missing', async () => {
+  it('negative: a page without them raises CSP and framing risks', async () => {
     const r = await scanPath('/plain');
-    expect(r.securityHeaders).toMatchObject({ cspPresent: false, hstsPresent: false });
+    expect(docHeaders(r)?.headers['content-security-policy']).toBeNull();
+    expect(checks(r)).toEqual(
+      expect.arrayContaining([
+        'No Content-Security-Policy on the main document',
+        'Page can be embedded by any site (clickjacking)',
+      ]),
+    );
+    // Never scored.
+    expect(r.report.security.observations.every((o) => !o.countsTowardPrivacyScore)).toBe(true);
   });
 
   it('redirect chain: the final document decides, not the redirect hop', async () => {
     const r = await scanPath('/redirect');
-    expect(r.securityHeaders).toMatchObject({
+    expect(docHeaders(r)).toMatchObject({
       documentUrl: `${BASE}/secure`,
-      cspPresent: true,
-      hstsPresent: true,
+      headers: { 'content-security-policy': "default-src 'self'" },
     });
   });
 });
 
 describe('HTTP error pages are not scored', () => {
-  it('a 404 main document → page-load-failed, score null, no headers claimed', async () => {
+  it('a 404 main document → page-load-failed, score null, no security claims', async () => {
     const r = await scanPath('/missing');
-    expect(r.status).toBe('page-load-failed');
-    expect(r.score).toBeNull();
-    expect(r.coverage).toBe('none');
-    expect(r.errors.join(' ')).toMatch(/HTTP 404/);
+    expect(r.report.scan.status).toBe('page-load-failed');
+    expect(r.report.privacy.score).toBeNull();
+    expect(r.report.privacy.coverage).toBe('none');
+    expect(r.report.security.observations).toEqual([]);
+    expect(r.report.scan.notes.join(' ')).toMatch(/HTTP 404/);
   });
 
   it('a page with no wallet flow is scored with coverage pre-connect-only', async () => {
     const r = await scanPath('/plain');
-    expect(r.status).toBe('wallet-connect-failed');
-    expect(r.coverage).toBe('pre-connect-only');
-    expect(typeof r.score).toBe('number');
+    expect(r.report.scan.status).toBe('wallet-connect-failed');
+    expect(r.report.privacy.coverage).toBe('pre-connect-only');
+    expect(typeof r.report.privacy.score).toBe('number');
   });
 });

@@ -131,6 +131,24 @@ export function securityHeaderDrafts(e: DocumentHeadersEvidence): DraftFinding[]
       remediation: 'Serve the dapp only over HTTPS and redirect HTTP to HTTPS.',
     });
   }
+  // Always record what was observed, so "all headers present" is evidenced
+  // too and distinguishable from "no main document seen".
+  const state = [
+    csp !== null ? 'CSP enforced' : cspRo !== null ? 'CSP report-only' : 'no CSP',
+    frameAncestors || xfo === 'DENY' || xfo === 'SAMEORIGIN'
+      ? 'framing restricted'
+      : 'framing allowed',
+    url?.protocol === 'https:' ? (hsts !== null ? 'HSTS' : 'no HSTS') : 'plain HTTP',
+  ].join(', ');
+  drafts.push({
+    ...base,
+    fingerprintInput: { check: 'summary' },
+    kind: 'observation',
+    severity: 'info',
+    title: `Main-document security headers: ${state}`,
+    impact: 'Reference record of the protective headers the main document was served with.',
+    remediation: 'None by itself; see the individual header findings, if any.',
+  });
   return drafts;
 }
 

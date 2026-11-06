@@ -104,6 +104,7 @@ describe('schema validation of real and hostile documents', () => {
     ],
     ['score out of range', (r) => (r.privacy.score = 101)],
     ['bad evidence hash', (r) => (r.evidence.sha256 = 'abc')],
+    ['missing findingSet', (r) => delete r.findingSet],
     ['wrong report version', (r) => (r.reportVersion = '1.1.0')],
     ['bad finding id', (r) => (r.privacy.findings[0].id = 'f1')],
   ];

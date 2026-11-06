@@ -62,3 +62,31 @@ export async function startSinkServer(): Promise<{ server: Server; close: () => 
     close: () => new Promise((r) => server.close(() => r(undefined))),
   };
 }
+
+/**
+ * Flat, v1-shaped view of a v2 result's canary leaks (finding + its
+ * canary-match evidence), so e2e assertions stay readable.
+ */
+export function flatLeaks(result: import('@igris/core').ScanResult) {
+  return result.report.privacy.findings
+    .filter((f) => f.detector === 'canary-leak')
+    .map((f) => {
+      const e = result.bundle.items[f.evidence[0]!.id] as import('@igris/core').CanaryMatchEvidence;
+      return {
+        id: f.id,
+        severity: f.severity,
+        kind: f.kind,
+        countsTowardScore: f.countsTowardPrivacyScore,
+        class: e.recipientClass,
+        location: e.location,
+        encoding: e.encoding,
+        category: e.category,
+        phase: e.phase,
+        host: e.host,
+        registrableDomain: e.registrableDomain,
+        url: e.url,
+        method: e.method,
+        snippet: e.snippet,
+      };
+    });
+}

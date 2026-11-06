@@ -10,9 +10,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
-import type { Report } from '@igris/core';
+import type { ScanResult } from '@igris/core';
 import { scan } from '../src/index.js';
 import {
+  flatLeaks,
   buildFixture,
   HOST_RULES,
   PAGE_PORT,
@@ -27,7 +28,7 @@ const FIXED_PAGE_PORT = PAGE_PORT + 2; // own port: avoid cross-file conflicts
 let pageServer: Server;
 let sink: { close: () => Promise<void> };
 
-async function scanVariant(variant: string): Promise<Report> {
+async function scanVariant(variant: string): Promise<ScanResult> {
   return scan({
     url: `http://leaky-dapp.test:${FIXED_PAGE_PORT}/?variant=${variant}`,
     hostResolverRules: HOST_RULES,
@@ -48,20 +49,21 @@ afterAll(async () => {
 
 describe.each(['viem', 'ethers', 'wagmi'] as const)('fixed fixture, %s variant', (variant) => {
   it('no address reaches any RPC provider, and Anon-RPC usage is detected', async () => {
-    const report = await scanVariant(variant);
-    expect(report.status).toBe('completed');
+    const result = await scanVariant(variant);
+    const { report } = result;
+    expect(report.scan.status).toBe('completed');
 
-    const rpcLeaks = report.findings.filter((f) => f.class === 'rpc-provider');
+    const rpcLeaks = flatLeaks(result).filter((f) => f.class === 'rpc-provider');
     expect(rpcLeaks, JSON.stringify(rpcLeaks, null, 2)).toEqual([]);
 
     // No traffic to the RPC sink host at all.
-    const rpcContacts = report.thirdParties.filter((t) => t.class === 'rpc-provider');
+    const rpcContacts = report.contacts.filter((t) => t.class === 'rpc-provider');
     expect(rpcContacts).toEqual([]);
 
     // The harness's one bootstrap eth_call went through our mock wallet.
-    expect(report.usesAnonRpc).toBe(true);
+    expect(report.wallet.usesAnonRpc).toBe(true);
 
     // The non-RPC leaks are untouched (igris fix fixes RPC reads, nothing else).
-    expect(report.findings.some((f) => f.class === 'analytics')).toBe(true);
+    expect(flatLeaks(result).some((f) => f.class === 'analytics')).toBe(true);
   }, 180_000);
 });
