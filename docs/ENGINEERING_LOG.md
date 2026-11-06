@@ -119,3 +119,81 @@ after the fix.
 
 **P0 status: PASS.** The Chromium-sandbox limitation stays recorded as
 P4-6 and gates any public deployment.
+
+---
+
+## 2026-11-06 — P0.5 Foundations → PASS
+
+Branch `p05-foundations` (from `p0-integrity`). Specification:
+[CONTRACTS.md](./CONTRACTS.md).
+
+### Per criterion
+
+| Criterion             | Delivered                                                                                                                                                           | Verified by                                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P05-1 Report v2       | `contracts/report-v2.ts`: detector-agnostic findings with fingerprint-derived ids; types + JSON Schema (Ajv 2020, strict, `additionalProperties:false`)             | compile-time key exhaustiveness in `lockstep.ts` (part of the build; drift proven to fail it), runtime key/schema tests, 13 hostile-document rejections                    |
+| P05-2 separation      | `privacy` vs `security` sections; `SecurityObservation.countsTowardPrivacyScore: false` literal; `scorePrivacy` refuses non-privacy findings; schema `const: false` | `@ts-expect-error` assertions in `lockstep.ts`; runtime and schema tests; score identical with or without the security detector                                            |
+| P05-3 detector API    | `contracts/detector.ts`, `engine.ts`; canary-leak, ip-exposure, security-headers ported to core as pure detectors                                                   | contract tests: missing evidence, invalid evidence, scored security finding, missing scoring rule, duplicate identity, duplicate detector, canary in evidence → scan fails |
+| P05-4 evidence bundle | `igris.evidence.v1`, content-addressed, canary-free, RFC 8785 + sha256; `evidence.json` written as canonical bytes                                                  | RFC 8785 vectors; same capture → byte-identical report and bundle; `shasum evidence.json` == report hash on all examples; tamper detection                                 |
+| P05-5 migration       | `migrate.ts`; 9 frozen v1 fixtures (1.0.0/1.1.0; completed/partial/failed; synthetic + real uniswap/github/dead-URL)                                                | 69 regression tests: schema-valid, every finding kept field-for-field, scores identical (cross-checked with the v1 scorer), deterministic, canary-free                     |
+| P05-6 identity        | `registry/src/identity.ts`, `igris scanner init/import/list/show`; node-bound profiles; publish signs only with this node's key                                     | 10 identity tests + CLI test (keys never printed)                                                                                                                          |
+
+### Decisions
+
+- **Two digests, not one.** Measuring two real scans of the fixture showed
+  the evidence bundles differ: wagmi stores a random connection id next to
+  the address in localStorage, so a faithful snippet differs between scans.
+  Rather than normalize evidence (lossy, heuristic), Report v2 also carries
+  `findingSet.sha256`, a digest of the sorted finding fingerprints. It is
+  stable across scans with different canaries (asserted in the real-browser
+  e2e, repeated 5×). ROADMAP P2-5 and P6-2 were updated to compare
+  `findingSet`. I first wrote an assertion that the evidence hash is equal
+  across scans; it failed, the cause was diagnosed, and the assertion was
+  replaced with the property that actually holds.
+- **The finding identity excludes the canary.** Fingerprints exclude the
+  canary, timestamps and snippets, so ids are stable across scans and nodes
+  — the basis for history diffs (P2-4).
+- **Hex label precedence fixed.** A canary whose EIP-55 checksum is
+  all-lowercase or all-uppercase letters was labelled
+  "lowercase"/"uppercase" rather than "checksummed", so its fingerprint
+  depended on the random canary (probability ≈ 2^-letters). A match equal to
+  the checksummed form is now always "checksummed". There is a regression
+  test with a real such address.
+- **The detector always records header evidence.** The security-headers
+  detector always emits an info "summary" observation carrying the
+  document-headers evidence, so "all headers present" is evidenced and
+  distinguishable from "no main document observed".
+- **Scanner keys are never read from env.** This is stricter than the
+  roadmap text ("file or env"): env keys leak into process listings, CI
+  logs and Docker layers, and cannot be bound to a node. `.env.example`
+  no longer mentions a key.
+- **Report hash semantics changed:** `reportSha256` in registry records is
+  now the canonical content hash (summary v2). It was the hash of the raw
+  report.json bytes. The evidence hash is added as `summary.evidenceSha256`.
+- **The scripts are typechecked now** (`scripts/tsconfig.json`, part of
+  `pnpm build`). This immediately caught a latent P0 type error in
+  `batch-scan.ts`.
+
+### Deviations from the roadmap text (stated, not hidden)
+
+- P05-1 lists a field `kind`. v2 splits it into `domain` (privacy/security)
+  and `kind` (issue/risk/observation), because the roadmap's "confirmed
+  issue vs potential risk vs observation" distinction and the
+  privacy/security split are independent axes.
+- P05-5 "scores identically wherever the v1 score was valid". One real
+  fixture (app.uniswap.org, pre-b915636) had an invalid v1 score: it charged
+  for a "third party" with an empty hostname. The migration removes that
+  contact and records 82 → 83 with the reason in `scan.notes`. Any other
+  mismatch throws `MigrationError`.
+
+### Known limitations
+
+- Two machines that each import the same key by hand cannot be detected
+  locally (on Arkiv they are one owner, i.e. one scanner).
+- Evidence-bundle hashes are not reproducible across scans of pages that
+  embed nonces near the address. Use `findingSet` to compare.
+- The viewer still renders registry summaries (summary v2). It does not yet
+  consume Report v2 or evidence bundles directly (P2-3/P5-4).
+- Docker re-verified on the P0.5 code: build, non-root user, health,
+  internal target refused, real github.com scan producing Report v2 with
+  public-only egress.

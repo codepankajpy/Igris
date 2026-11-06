@@ -2,26 +2,36 @@
   "version": 1,
   "records": [
     {
-      "id": "local-leaky-dapp.test-1793964966-1",
+      "id": "local-leaky-dapp.test-1793968689-1",
       "scanner": "local",
       "hostname": "leaky-dapp.test",
       "score": 0,
-      "scannedAt": 1793964966,
-      "scannerVersion": "0.1.0",
-      "reportVersion": "1.1.0",
+      "scannedAt": 1793968689,
+      "scannerVersion": "0.2.0",
+      "reportVersion": "2.0.0",
       "chainId": 1,
       "thirdPartyCount": 6,
       "leakCount": 5,
       "leakClasses": "analytics,cdn,error-monitoring,rpc-provider",
       "usesAnonRpc": false,
-      "reportSha256": "11f786c0c226ee042cff74847b21366e2af08c567778eeb34d54394fdc56620f",
+      "reportSha256": "72b133e96ae1afcffdc6776b8670efb0497832558a937548bfc1f38c1ab6b62e",
       "summary": {
-        "v": 1,
+        "v": 2,
         "status": "completed",
         "coverage": "full",
         "spoofMetaMask": true,
-        "canaryAddress": "0x1c519591249F217bCEf54c824Dfc58791e922562",
+        "canaryAddress": "0xe0CEA1d532aE9d727F1D086Da7988DD5B65A88C2",
+        "evidenceSha256": "7b357a613b2c19d1e7b51ed0dfb57db721d41eb83918b09a0777da9b367eba66",
         "findings": [
+          {
+            "class": "error-monitoring",
+            "location": "request-body",
+            "encoding": "checksummed",
+            "category": "exact",
+            "host": "o1.igris-errors.test",
+            "phase": "post-connect",
+            "counted": true
+          },
           {
             "class": "analytics",
             "location": "request-body",
@@ -41,11 +51,11 @@
             "counted": true
           },
           {
-            "class": "error-monitoring",
-            "location": "request-body",
+            "class": "cdn",
+            "location": "url",
             "encoding": "checksummed",
             "category": "exact",
-            "host": "o1.igris-errors.test",
+            "host": "img.igris-cdn.test",
             "phase": "post-connect",
             "counted": true
           },
@@ -55,15 +65,6 @@
             "encoding": "checksummed",
             "category": "exact",
             "host": "rpc.igris-rpc.test",
-            "phase": "post-connect",
-            "counted": true
-          },
-          {
-            "class": "cdn",
-            "location": "url",
-            "encoding": "checksummed",
-            "category": "exact",
-            "host": "img.igris-cdn.test",
             "phase": "post-connect",
             "counted": true
           }
@@ -189,26 +190,36 @@
       }
     },
     {
-      "id": "local-leaky-dapp.test-1793964973-2",
+      "id": "local-leaky-dapp.test-1793968696-2",
       "scanner": "local",
       "hostname": "leaky-dapp.test",
       "score": 17,
-      "scannedAt": 1793964973,
-      "scannerVersion": "0.1.0",
-      "reportVersion": "1.1.0",
+      "scannedAt": 1793968696,
+      "scannerVersion": "0.2.0",
+      "reportVersion": "2.0.0",
       "chainId": 1,
       "thirdPartyCount": 5,
       "leakCount": 4,
       "leakClasses": "analytics,cdn,error-monitoring",
       "usesAnonRpc": true,
-      "reportSha256": "0ad6a6fa8cf4b094e427477974bd3ffd45ee1f6452d525c1deadcf36c4e21b4b",
+      "reportSha256": "5d8479716a24dfcf973f4821918a00160d6ef4832fe0e130ba900b2d68e4ac03",
       "summary": {
-        "v": 1,
+        "v": 2,
         "status": "completed",
         "coverage": "full",
         "spoofMetaMask": true,
-        "canaryAddress": "0xb578fD8b909945cE8Ac9737ef937f844184b13dc",
+        "canaryAddress": "0x05539007990690062824aD4Feaa86bCBd3Ea005b",
+        "evidenceSha256": "4bf0404de696b8bb2358910f8d25652b002115de80562409e16982e3bf14c1ec",
         "findings": [
+          {
+            "class": "error-monitoring",
+            "location": "request-body",
+            "encoding": "checksummed",
+            "category": "exact",
+            "host": "o1.igris-errors.test",
+            "phase": "post-connect",
+            "counted": true
+          },
           {
             "class": "analytics",
             "location": "request-body",
@@ -224,15 +235,6 @@
             "encoding": "checksummed",
             "category": "exact",
             "host": "ingest.igris-analytics.test",
-            "phase": "post-connect",
-            "counted": true
-          },
-          {
-            "class": "error-monitoring",
-            "location": "request-body",
-            "encoding": "checksummed",
-            "category": "exact",
-            "host": "o1.igris-errors.test",
             "phase": "post-connect",
             "counted": true
           },

@@ -35,8 +35,17 @@ Scan a real dapp:
 pnpm igris scan https://app.example.org --fail-under 80
 ```
 
-Outputs `igris-out/report.json` + a self-contained `report.html`; exit codes
-0 / 1 (below threshold) / 2 (scan error) / 3 (bad args) for CI. Patch a repo:
+Outputs to `igris-out/`: `report.json` (Report v2), `evidence.json` (the
+evidence bundle as canonical bytes, so `shasum -a 256 evidence.json` matches
+the hash in the report) and a self-contained `report.html`. Exit codes are
+0 / 1 (below threshold) / 2 (scan error) / 3 (bad args), for CI. Formats and
+hashing: [docs/CONTRACTS.md](docs/CONTRACTS.md).
+
+```bash
+pnpm igris verify igris-out/report.json   # schemas, evidence hash, references
+```
+
+Patch a repo:
 
 ```bash
 pnpm igris fix path/to/dapp            # dry run: unified diff + manual notes
@@ -49,7 +58,15 @@ Publish and query (local file or Arkiv testnet):
 pnpm igris publish igris-out/report.json --registry local
 pnpm igris query --registry local --min-score 50 --class analytics
 pnpm igris snapshot --registry local --out snapshot.json
-# Arkiv (Rabdi testnet): set ARKIV_PRIVATE_KEY (see .env.example), drop --registry local
+```
+
+Publishing to Arkiv (Rabdi testnet) is signed by this machine's own scanner
+key. Keys are never read from environment variables:
+
+```bash
+pnpm igris scanner init --name my-scanner   # new key in ~/.igris, bound to this machine
+# fund the printed address at https://hub.arkiv.network/faucet, then:
+pnpm igris publish igris-out/report.json
 ```
 
 `pnpm demo` runs: scan the deliberately leaky fixture → `igris fix` diff →
@@ -72,7 +89,7 @@ flowchart LR
     W[Canary wallet<br/>EIP-1193/6963] --> S[Playwright<br/>two-phase capture]
     S --> C["@igris/core<br/>detect / classify / score"]
   end
-  C --> R[report.json + report.html]
+  C --> R[report.json + evidence.json + report.html]
   R --> P[igris publish]
   subgraph fixcmd [igris fix]
     F["ts-morph codemod<br/>viem / ethers / wagmi"] --> A[Anon-RPC shim<br/>hash-pinned worker]
@@ -128,10 +145,13 @@ code on branch `p0-integrity`; open gaps are named, not hidden.
   row is schema-validated and every rendered value escaped. Hosted scans are
   egress-filtered (public addresses, ports 80/443, DNS checked once,
   rebinding-safe). Trust assumptions: an entity is an _attestation by its
-  owner address_, not a fact — you choose which scanners to pin. Open gaps:
-  the report a `reportSha256` points to is not yet published, so the hash
-  cannot be checked independently (ROADMAP P2-3); Chromium runs without its
-  own sandbox in the API container (ENGINEERING_LOG).
+  owner address_, not a fact — you choose which scanners to pin. Every
+  finding carries content-addressed evidence, and reports and bundles verify
+  by hash (`igris verify`). Each scanner key lives only on its own machine
+  (`igris scanner init`, mode 0600, bound to that node). Open gaps: the
+  evidence bundle is not yet published to Arkiv, so a registry entity's
+  hashes cannot be checked by a third party yet (ROADMAP P2-3); Chromium runs
+  without its own sandbox in the API container (ENGINEERING_LOG).
 
 ## Registry (Arkiv)
 

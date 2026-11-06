@@ -5,14 +5,20 @@
 `igris publish <report.json>` →
 [packages/registry/src/arkiv.ts](../packages/registry/src/arkiv.ts):
 
-- wallet from `ARKIV_PRIVATE_KEY` (never committed; `.env.example` documents
-  it), chain `rabdi({ accessKey })`, transport `http()` (endpoint overridable
-  with `ARKIV_RPC_URL` / `--rpc-url`);
+- signed by this machine's scanner key (`igris scanner init`; stored mode
+  0600 in `~/.igris`, bound to this node, never read from env); chain
+  `rabdi({ accessKey })`, transport `http()` (endpoint overridable with
+  `ARKIV_RPC_URL` / `--rpc-url`);
+- before signing, the report and its evidence bundle are schema-validated
+  and integrity-checked (`igris verify` semantics);
 - `walletClient.createEntity(ScanSchema, values, { expiration:
 ExpirationTime.fromDays(30) })` — one entity per scan, schema
   `igris.scan.v1` ([schema.md](./schema.md));
-- the `summary` bytes column holds redacted compact JSON; `reportSha256`
-  binds the entity to the exact `report.json`.
+- the `summary` bytes column holds redacted compact JSON (summary v2);
+  `reportSha256` is the canonical content hash of the Report v2 and
+  `summary.evidenceSha256` the hash of its evidence bundle
+  ([docs/CONTRACTS.md](../docs/CONTRACTS.md)). Publishing the bundle itself
+  so third parties can check it is ROADMAP P2-3.
 
 ## Reads (CLI and the static viewer — reads drive visible features)
 

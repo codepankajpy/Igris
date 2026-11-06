@@ -19,7 +19,7 @@ Every scan is cheap (one CLI run), every publish is one small entity, and
 disagreement is productive: a dapp team that disputes a finding re-runs the
 scan themselves — the report embeds everything needed to reproduce it
 (scanner version, methodology docs, deterministic findings) and
-`reportSha256` ties each claim to exact evidence.
+`reportSha256` and `summary.evidenceSha256` tie each claim to an exact report and evidence bundle (docs/CONTRACTS.md).
 
 ## Honest limits
 

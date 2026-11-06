@@ -119,18 +119,20 @@ funded.
 
 ## P0.5 — Foundations (data contracts)
 
+**Status (2026-11-06): PASS — all six criteria verified; contracts specified in [CONTRACTS.md](./CONTRACTS.md). Deviations and additions are recorded in ENGINEERING_LOG (2026-11-06 — P0.5).**
+
 **Goal:** freeze the versioned contracts every later phase builds on.
 
 **Depends on:** P0. **Blocks:** P1, P2, P3, P5.
 
 | ID    | Acceptance criterion                                                                                                                                                                                                                                                                                                                                                         | Status |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| P05-1 | **Report v2** (`reportVersion: "2.0.0"`) is detector-agnostic. A finding has `id, detector, detectorVersion, kind, severity (critical/high/medium/low/info), confidence (confirmed/likely/possible), title, impact, remediation, evidence[] (≥1, typed), countsTowardPrivacyScore`. TypeScript types and a JSON Schema (draft 2020-12) are kept in lockstep by a test.       | TODO   |
-| P05-2 | **Privacy score is separate from security observations.** `privacy.score` is computed only from findings of privacy detectors. `security.observations[]` never affect it. A test enforces this by type and at runtime.                                                                                                                                                       | TODO   |
-| P05-3 | **Detector interface v1** (`Detector { id, version, kind, run(capture, ctx): Finding[] }`). The existing canary-leak, ip-exposure and security-headers logic becomes three detectors. Contract test: every finding from every detector carries ≥1 schema-valid evidence item. A detector that emits one without evidence fails the run.                                      | TODO   |
-| P05-4 | **Evidence bundle v1**: a redacted, self-contained artifact of everything findings reference. **Deterministic serialization** (canonical JSON, RFC 8785-style key ordering, no `undefined`, normalized numbers). Hashes are `sha256` over the canonical bytes. The same capture produces byte-identical bundles across runs (tested). The report references the bundle hash. | TODO   |
-| P05-5 | **v1 → v2 migration** (`migrateReportV1toV2`) with regression tests over every committed v1 report in `examples/`. Migrated reports validate against the v2 schema, preserve every v1 finding, and score identically wherever the v1 score was valid.                                                                                                                        | TODO   |
-| P05-6 | **Scanner identity**: one key per scanner node, loaded from a file or env, never hardcoded and never shared. `igris scanner init` creates a key and a local profile. The profile shape is versioned (`igris.scanner.v1`). Two nodes never share credentials (the CLI refuses a key file that another profile on disk has already claimed).                                   | TODO   |
+| P05-1 | **Report v2** (`reportVersion: "2.0.0"`) is detector-agnostic. A finding has `id, detector, detectorVersion, kind, severity (critical/high/medium/low/info), confidence (confirmed/likely/possible), title, impact, remediation, evidence[] (≥1, typed), countsTowardPrivacyScore`. TypeScript types and a JSON Schema (draft 2020-12) are kept in lockstep by a test.       | PASS   |
+| P05-2 | **Privacy score is separate from security observations.** `privacy.score` is computed only from findings of privacy detectors. `security.observations[]` never affect it. A test enforces this by type and at runtime.                                                                                                                                                       | PASS   |
+| P05-3 | **Detector interface v1** (`Detector { id, version, kind, run(capture, ctx): Finding[] }`). The existing canary-leak, ip-exposure and security-headers logic becomes three detectors. Contract test: every finding from every detector carries ≥1 schema-valid evidence item. A detector that emits one without evidence fails the run.                                      | PASS   |
+| P05-4 | **Evidence bundle v1**: a redacted, self-contained artifact of everything findings reference. **Deterministic serialization** (canonical JSON, RFC 8785-style key ordering, no `undefined`, normalized numbers). Hashes are `sha256` over the canonical bytes. The same capture produces byte-identical bundles across runs (tested). The report references the bundle hash. | PASS   |
+| P05-5 | **v1 → v2 migration** (`migrateReportV1toV2`) with regression tests over every committed v1 report in `examples/`. Migrated reports validate against the v2 schema, preserve every v1 finding, and score identically wherever the v1 score was valid.                                                                                                                        | PASS   |
+| P05-6 | **Scanner identity**: one key per scanner node, loaded from a file or env, never hardcoded and never shared. `igris scanner init` creates a key and a local profile. The profile shape is versioned (`igris.scanner.v1`). Two nodes never share credentials (the CLI refuses a key file that another profile on disk has already claimed).                                   | PASS   |
 
 ---
 
@@ -159,7 +161,7 @@ funded.
 | P2-2 | A **second independent scanner** (second Mac, its own key, its own `igris.scanner.v1` profile) publishes scans of the same targets. The viewer shows agreement and disagreement per finding class.                                                   | BLOCKED(human: second node)        |
 | P2-3 | Scan entities are created `readonly`. The full redacted evidence bundle is stored in the entity (≤128 KiB) or chunked, so `evidenceSha256` resolves to published bytes. The viewer recomputes the hash in the browser before showing "hash matches". | TODO                               |
 | P2-4 | History: a `prevScan` (key) attribute plus a per-host query → timeline and finding-class diff in the viewer.                                                                                                                                         | TODO                               |
-| P2-5 | `extendEntity` when a re-scan reproduces the identical evidence hash ("still true at block N"), instead of a duplicate create.                                                                                                                       | TODO                               |
+| P2-5 | `extendEntity` when a re-scan reproduces the identical **finding set** (`findingSet.sha256`; the evidence hash legitimately varies when pages embed nonces — see CONTRACTS.md), instead of a duplicate create.                                       | TODO                               |
 | P2-6 | One indexed bool attribute per finding class, so class filters run on the server (fixes friction #2).                                                                                                                                                | TODO                               |
 | P2-7 | Updated `arkiv/*.md` (schema, friction, why, how, reach), each with links, numbers or a runnable query.                                                                                                                                              | TODO                               |
 
@@ -209,12 +211,12 @@ at least one real-dapp finding confirmed by hand (or `UNVERIFIED` with the reaso
 
 ## P6 — Validation
 
-| ID   | Acceptance criterion                                                                                                                            | Status              |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| P6-1 | Corpus rerun by both scanner nodes. Results are published as Arkiv entities, not prose.                                                         | BLOCKED(P2-1, P2-2) |
-| P6-2 | Independent reproducibility: for deterministic targets the second node reproduces the same evidence hashes. Divergence is explained per target. | BLOCKED(P2-2)       |
-| P6-3 | Demo video ≤3 min showing the lead property end to end, including the moment the backend is switched off.                                       | TODO                |
-| P6-4 | `AI_USAGE.md` human-review column completed by the humans.                                                                                      | BLOCKED(human)      |
+| ID   | Acceptance criterion                                                                                                                                                            | Status              |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| P6-1 | Corpus rerun by both scanner nodes. Results are published as Arkiv entities, not prose.                                                                                         | BLOCKED(P2-1, P2-2) |
+| P6-2 | Independent reproducibility: the second node reproduces the same `findingSet.sha256` (and, for nonce-free targets, the same evidence hash). Divergence is explained per target. | BLOCKED(P2-2)       |
+| P6-3 | Demo video ≤3 min showing the lead property end to end, including the moment the backend is switched off.                                                                       | TODO                |
+| P6-4 | `AI_USAGE.md` human-review column completed by the humans.                                                                                                                      | BLOCKED(human)      |
 
 ---
 

@@ -11,6 +11,13 @@ is `null` and the report cannot be published. A scan whose wallet never
 connected is scored but marked `coverage: pre-connect-only` — see
 [METHODOLOGY.md](./METHODOLOGY.md#when-a-scan-is-not-scored).
 
+Since Report v2 the score is computed only from **privacy findings**, by
+rules registered per detector that read the findings' evidence
+(`packages/core/src/scoring-v2.ts`). Security observations are a separate
+type and never reach the scorer. The arithmetic below is unchanged from v1;
+the migration tests and the live demo (leaky 0, fixed 17) confirm identical
+scores.
+
 Every number lives in one file:
 [packages/core/src/weights.ts](../packages/core/src/weights.ts). The engine
 ([scoring.ts](../packages/core/src/scoring.ts)) starts at 100, subtracts the

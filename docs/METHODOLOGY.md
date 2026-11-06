@@ -56,6 +56,28 @@ not bypassed, QUIC is disabled, and WebRTC may not use non-proxied UDP.
 Refused requests never left the scanner, so they are neither leaks nor
 third-party contacts; they are listed in the report's notes.
 
+## From capture to findings (Report v2)
+
+Captured traffic is never published. Three detectors turn it into findings,
+each backed by redacted, content-addressed evidence
+([CONTRACTS.md](./CONTRACTS.md)):
+
+- **canary-leak** (privacy): one finding per (phase, location, method, host,
+  path, encoding). Severity depends on the recipient class: analytics,
+  error-monitoring, support-chat and unknown third parties are high; RPC,
+  relay, CDN and gateway recipients are medium; hashed forms rank one level
+  lower; partial forms are low and `possible`; storage and first-party
+  observations are info.
+- **ip-exposure** (privacy): one finding per third-party registrable domain
+  (low; Anon-RPC contacts are info and never counted).
+- **security-headers** (security, never scored): CSP missing (medium) or
+  report-only (low); framing allowed (medium); HSTS missing on https (low);
+  plain HTTP on a non-local host (high). It always records a summary
+  observation with the document-headers evidence.
+
+Finding ids derive from what was observed, not from the canary or timing,
+so the same behaviour has the same id on every scan and every scanner node.
+
 ## What we capture
 
 All HTTP requests (failed/aborted and `keepalive`/sendBeacon included: URL,

@@ -14,7 +14,7 @@
    │ @igris/core         │  encodings → detector → classifier → scoring
    │ report schema v1    │  (all pure, heavily unit-tested)
    └──────────┬──────────┘
-              │ report.json (+ report.html via @igris/cli)
+              │ Report v2 + evidence bundle (+ report.html via @igris/cli)
    ┌──────────▼──────────┐     same interface      ┌───────────────────┐
    │ @igris/registry     │ ──────────────────────▶ │ LocalRegistry     │
    │ ArkivRegistry       │                         │ (JSON file)       │
@@ -29,7 +29,15 @@
 
 ## Packages
 
-- **@igris/core** — pure logic, no I/O except reading third-parties.json:
+Data contracts (report, evidence bundle, detector API, hashing, scanner
+identity) are specified in [CONTRACTS.md](./CONTRACTS.md).
+
+- **@igris/core** — contracts (`contracts/`: canonical JSON, hashing,
+  capture, evidence bundle, Report v2, detector API, schemas, integrity
+  verification; browser-safe subpath `@igris/core/contracts`), the detector
+  engine (`engine.ts`), built-in detectors (`detectors/`), v2 scoring and the
+  v1→v2 migration. Also (from v1), pure logic with no I/O except reading
+  third-parties.json:
   canary encoding catalogue (`encodings.ts`), detector with overlap rules
   (`detect.ts`), host classifier on tldts + data/third-parties.json
   (`classify.ts`), transparent scoring with a single weights file
