@@ -104,9 +104,14 @@ exact, decoded matches count as leaks.
 ## Wallet behaviour
 
 EIP-1193 + EIP-6963 (name "Igris Canary Wallet", rdns `network.igris.canary`).
-Supports accounts/chain methods, permissions, `personal_sign`,
-`eth_signTypedData_v4`; **rejects `eth_sendTransaction` and `eth_sign` with
-code 4001** — a scanner must never move funds or sign reusable blobs. Read
+Supports accounts/chain methods, permissions, `personal_sign` and
+`eth_signTypedData_v4`: **it signs any such request with the scan's
+throwaway key** (generated per scan, never funded, discarded afterwards), so
+sign-in flows complete and their traffic is observed. A signature can only
+ever authorise something for an empty address. It **rejects
+`eth_sendTransaction`, `eth_signTransaction`, `eth_sendRawTransaction` and
+`eth_sign` with code 4001** — a scanner never moves funds or signs raw
+hashes. Read
 calls the dapp routes through the wallet go to a Node-side stub (zero
 balance, fixed block) and **nothing is sent to any network** — a scan cannot
 leak the canary from the scanner's own IP. `--live-reads <url>` opts into
@@ -121,14 +126,51 @@ true` so those dapps connect. Trade-off: a dapp could behave differently for
 MetaMask than for unknown wallets, so what we measure is the MetaMask code
 path. `--no-spoof-metamask` scans as an honest unknown wallet.
 
-## Connect heuristics
+## Connecting the wallet (connect engine, scanner 0.3.0)
 
-Buttons/links matching `/connect( wallet)?|sign in|log ?in|launch app|get
-started/i`, then a wallet-picker entry matching our name, "Injected",
-"Browser Wallet", "Detected" or "MetaMask" — all magic strings live in
-[packages/scanner/src/connect.ts](../packages/scanner/src/connect.ts) with
-reasons. Harder sites use a recipe (recipes/README.md). The report
-distinguishes `completed` / `wallet-connect-failed` / `page-load-failed`.
+1. **Open the connect UI.** Interactive controls are scored strictly by
+   whole accessible name ("Connect Wallet", "Connect", "Log in" / "Sign in",
+   …); navigating links are never eligible. After one click the engine waits
+   for a known kit modal (RainbowKit, ConnectKit, AppKit, Privy, Dynamic —
+   markers verified live) or for a dialog that appeared after the click and
+   offers a wallet choice (custom modals such as Uniswap's). Dialogs that
+   were already open before the click (cookie or consent banners) are never
+   searched.
+2. **Choose the wallet inside that dialog only**, never page-wide: our
+   EIP-6963 entry by rdns test id or exact name "Igris Canary Wallet"; else
+   at most two "reveal the list" steps ("Continue with a wallet", "Other
+   wallets", …); else an exact generic entry ("Browser Wallet", "Injected",
+   "MetaMask"). Rules and live evidence:
+   [packages/scanner/src/connect/choice.ts](../packages/scanner/src/connect/choice.ts).
+3. **Connected means the dApp's main frame called `eth_requestAccounts`**
+   (calls from iframes or popups do not count).
+4. **Sign-in confirmation.** If the dialog then shows an exact "Sign" /
+   "Sign message" / "Verify" button (SIWE), the engine clicks it once, as a
+   user would; the canary key signs the message (see Wallet behaviour).
+5. A change of origin at any step aborts with `unexpected-navigation`. Every
+   step, its result and its duration is recorded in `scan.connection`
+   (Report 2.1.0), with a failure category when it did not connect. There is
+   no fallback to page-wide clicking: the legacy heuristic clicked marketing
+   text on relay.link ("…powering Phantom, MetaMask…").
+
+Recipe files (recipes/README.md) remain supported for flows the engine
+cannot handle (terms gates, multi-step onboarding).
+
+## Recipient classification
+
+1. First party: the target's registrable domain, the domain the target
+   redirected to (stated in `scan.notes`), and `--first-party` entries.
+2. `data/third-parties.json`: exact host or registrable domain, then suffix
+   rules. Every entry cites a source.
+3. **RPC by behaviour**: an unknown registrable domain becomes
+   `rpc-provider` only if **every** request the page sent to any of its
+   hosts is a pure Ethereum JSON-RPC 2.0 call (`eth_` / `net_` / `web3_`
+   methods; batches must contain nothing else; WebSocket messages count;
+   body-less OPTIONS/HEAD are ignored). One GET, tracking POST or mixed batch
+   disqualifies the whole domain, so a tracker cannot soften its own leak by
+   also answering an RPC call. The report notes each such domain and the
+   methods that qualified it.
+4. Otherwise `unknown-third-party`.
 
 ## `usesAnonRpc` detection
 

@@ -8,6 +8,10 @@
  *   3. a suffix rule in third-parties.json (for providers spread across many
  *      subdomains, e.g. *.ingest.sentry.io)
  *   4. unknown-third-party
+ * The scan engine (engine.ts) adds two capture-based rules around this:
+ * the domain the target redirected to is first party, and an unknown domain
+ * whose every observed request is pure Ethereum JSON-RPC becomes
+ * rpc-provider (rpcOnlyDomains). Both are stated in the report's notes.
  */
 import { getDomain } from 'tldts';
 import type { RecipientClass } from './report.js';

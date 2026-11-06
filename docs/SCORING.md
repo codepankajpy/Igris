@@ -44,6 +44,11 @@ cannot dominate the score (dedup rule, tested in scoring.test.ts).
 | first-party         | 0      | the user chose to visit them                                                                                    |
 | anon-rpc            | 0      | the privacy-preserving path we recommend                                                                        |
 
+- **How a recipient gets its class**: first party (target, redirect
+  target, `--first-party`), then `data/third-parties.json`, then **RPC by
+  behaviour** — an unknown domain whose every observed request was pure
+  Ethereum JSON-RPC is scored as `rpc-provider` (one non-RPC request keeps it
+  `unknown-third-party`) — see METHODOLOGY.md "Recipient classification".
 - **Hashed forms** (keccak256/sha256 of the address): ×0.5. Deterministic
   hashes are still linkable across datasets — reduced, not forgiven.
 - **Partial display forms** (0x1234…abcd): excluded from the score (low

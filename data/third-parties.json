@@ -280,6 +280,181 @@
       "source": "https://techdocs.akamai.com/"
     },
     {
+      "name": "Tenderly Node RPC",
+      "class": "rpc-provider",
+      "domains": ["gateway.tenderly.co"],
+      "suffixes": ["gateway.tenderly.co"],
+      "source": "https://docs.tenderly.co/node"
+    },
+    {
+      "name": "Nodies",
+      "class": "rpc-provider",
+      "domains": ["nodies.app"],
+      "source": "https://docs.nodies.app/rpc-services/public-endpoints"
+    },
+    {
+      "name": "OnFinality",
+      "class": "rpc-provider",
+      "domains": ["api.onfinality.io"],
+      "suffixes": ["api.onfinality.io"],
+      "source": "https://onfinality.io/en/networks/eth"
+    },
+    {
+      "name": "Pocket Network public API portal",
+      "class": "rpc-provider",
+      "domains": ["api.pocket.network"],
+      "suffixes": ["api.pocket.network"],
+      "source": "https://docs.pocket.network/foundation/api-portal/"
+    },
+    {
+      "name": "thirdweb RPC Edge",
+      "class": "rpc-provider",
+      "domains": ["rpc.thirdweb.com"],
+      "suffixes": ["rpc.thirdweb.com"],
+      "source": "https://portal.thirdweb.com/typescript/v5/client"
+    },
+    {
+      "name": "Base public RPC",
+      "class": "rpc-provider",
+      "domains": ["mainnet.base.org", "sepolia.base.org"],
+      "source": "https://docs.base.org/base-chain/quickstart/connecting-to-base"
+    },
+    {
+      "name": "Abstract public RPC",
+      "class": "rpc-provider",
+      "domains": ["api.mainnet.abs.xyz", "api.testnet.abs.xyz"],
+      "source": "https://docs.abs.xyz/connect-to-abstract"
+    },
+    {
+      "name": "Google Ads / DoubleClick / Floodlight",
+      "class": "analytics",
+      "domains": [
+        "doubleclick.net",
+        "googleadservices.com",
+        "googlesyndication.com",
+        "adservice.google.com"
+      ],
+      "source": "https://developers.google.com/tag-platform/security/guides/csp"
+    },
+    {
+      "name": "Microsoft Clarity",
+      "class": "analytics",
+      "domains": ["clarity.ms", "c.bing.com"],
+      "source": "https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-csp"
+    },
+    {
+      "name": "Meta Pixel",
+      "class": "analytics",
+      "domains": ["connect.facebook.net", "www.facebook.com"],
+      "source": "https://developers.facebook.com/docs/meta-pixel/get-started"
+    },
+    {
+      "name": "LinkedIn Insight Tag",
+      "class": "analytics",
+      "domains": [
+        "snap.licdn.com",
+        "adsymptotic.com",
+        "bizographics.com",
+        "cdn.linkedin.oribi.io",
+        "gw.linkedin.oribi.io"
+      ],
+      "suffixes": ["ads.linkedin.com"],
+      "source": "https://www.linkedin.com/help/lms/answer/a425696"
+    },
+    {
+      "name": "Heap",
+      "class": "analytics",
+      "domains": ["heapanalytics.com", "heap-api.com"],
+      "source": "https://developers.heap.io/docs/web"
+    },
+    {
+      "name": "FullStory",
+      "class": "analytics",
+      "domains": ["fullstory.com"],
+      "source": "https://help.fullstory.com/hc/en-us/articles/360020622854"
+    },
+    {
+      "name": "Mouseflow",
+      "class": "analytics",
+      "domains": ["mouseflow.com"],
+      "source": "https://help.mouseflow.com/en/articles/4270388-content-security-policy-csp"
+    },
+    {
+      "name": "Matomo Cloud",
+      "class": "analytics",
+      "domains": ["matomo.cloud"],
+      "source": "https://matomo.org/faq/how-to/how-do-i-install-the-matomo-analytics-tracking-code-on-an-html-website/"
+    },
+    {
+      "name": "Pendo",
+      "class": "analytics",
+      "domains": ["pendo.io", "pendo-io-static.storage.googleapis.com"],
+      "source": "https://support.pendo.io/hc/en-us/articles/360032209131-Content-Security-Policy-CSP"
+    },
+    {
+      "name": "June",
+      "class": "analytics",
+      "domains": ["june.so"],
+      "source": "https://www.june.so/docs/tracking/http-api/authentication"
+    },
+    {
+      "name": "Datadog RUM (regional intake)",
+      "class": "error-monitoring",
+      "domains": [
+        "browser-intake-us3-datadoghq.com",
+        "browser-intake-us5-datadoghq.com",
+        "browser-intake-ap1-datadoghq.com",
+        "browser-intake-ap2-datadoghq.com",
+        "browser-intake-uk1-datadoghq.com",
+        "browser-intake-ddog-gov.com",
+        "browser-intake-us2-ddog-gov.com"
+      ],
+      "source": "https://docs.datadoghq.com/real_user_monitoring/guide/proxy-rum-data/"
+    },
+    {
+      "name": "Datadog Browser SDK CDN",
+      "class": "error-monitoring",
+      "domains": ["datadoghq-browser-agent.com"],
+      "source": "https://docs.datadoghq.com/real_user_monitoring/browser/setup/client/"
+    },
+    {
+      "name": "New Relic Browser",
+      "class": "error-monitoring",
+      "domains": ["nr-data.net", "js-agent.newrelic.com"],
+      "source": "https://docs.newrelic.com/docs/browser/new-relic-browser/getting-started/compatibility-requirements-browser-monitoring/"
+    },
+    {
+      "name": "Dynatrace RUM",
+      "class": "error-monitoring",
+      "domains": ["js-cdn.dynatrace.com"],
+      "suffixes": ["bf.dynatrace.com"],
+      "source": "https://docs.dynatrace.com/docs/observe/digital-experience/rum/web-frontends/initial-setup/adapt-csp-rules"
+    },
+    {
+      "name": "Google Hosted Libraries",
+      "class": "cdn",
+      "domains": ["ajax.googleapis.com"],
+      "source": "https://developers.google.com/speed/libraries"
+    },
+    {
+      "name": "Google static content (gstatic)",
+      "class": "cdn",
+      "domains": ["www.gstatic.com", "ssl.gstatic.com"],
+      "source": "https://docs.cloud.google.com/docs/get-started/required-domains"
+    },
+    {
+      "name": "GitHub user content",
+      "class": "cdn",
+      "domains": ["githubusercontent.com"],
+      "source": "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-anonymized-urls"
+    },
+    {
+      "name": "CoinGecko image host",
+      "class": "cdn",
+      "domains": ["coin-images.coingecko.com"],
+      "source": "https://docs.coingecko.com/reference/search-data"
+    },
+    {
       "name": "Arkiv testnet RPC",
       "class": "rpc-provider",
       "domains": ["arkiv.network"],

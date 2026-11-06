@@ -8,7 +8,12 @@ import { DetectorContractError, type Detector, type DraftFinding } from './contr
 import { bundleHash, evidenceId, type CanaryMatchEvidence } from './contracts/evidence.js';
 import type { PrivacyFinding, SecurityObservation } from './contracts/report-v2.js';
 import { verifyReportIntegrity } from './contracts/verify.js';
-import { DEFAULT_DETECTORS, RedactionError, buildScanResult } from './engine.js';
+import {
+  DEFAULT_DETECTORS,
+  RedactionError,
+  buildScanResult,
+  pureJsonRpcMethods,
+} from './engine.js';
 import { securityHeadersDetector, securityHeaderDrafts } from './detectors/security-headers.js';
 import { ScoringError, scorePrivacy } from './scoring-v2.js';
 import {
@@ -405,5 +410,179 @@ describe('first party follows the page that loaded (redirects)', () => {
       .filter((f) => f.detector === 'canary-leak' && f.countsTowardPrivacyScore)
       .flatMap((f) => evidenceOf<CanaryMatchEvidence>(r, f).map((e) => e.registrableDomain));
     expect(new Set(leakDomains)).toEqual(new Set(['infura.io', 'segment.io', 'sentry.io']));
+  });
+});
+
+describe('RPC endpoints are recognised by behaviour (JSON-RPC), not only by the DB', () => {
+  const rpcCapture = () => {
+    const c = sampleCapture();
+    c.requests.push(
+      req({
+        phase: 'post-connect',
+        url: 'https://node.mainnet.chain-x.example/',
+        method: 'POST',
+        resourceType: 'fetch',
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'eth_call',
+          params: [
+            { data: `0x70a08231000000000000000000000000${CANARY_A.slice(2).toLowerCase()}` },
+            'latest',
+          ],
+        }),
+      }),
+      // A non-RPC JSON POST to another unknown host stays unknown.
+      req({
+        phase: 'post-connect',
+        url: 'https://api.tracker-y.example/collect',
+        method: 'POST',
+        resourceType: 'fetch',
+        body: JSON.stringify({ user: CANARY_A, method: 'eth_call' }),
+      }),
+    );
+    return c;
+  };
+
+  it('an unknown host answering eth_* JSON-RPC is an rpc-provider; the report says why', () => {
+    const r = sampleResult({ capture: rpcCapture() });
+    const contact = r.report.contacts.find((c) => c.host === 'node.mainnet.chain-x.example');
+    expect(contact?.class).toBe('rpc-provider');
+    const leak = r.report.privacy.findings.find((f) => f.title.includes('chain-x.example'));
+    expect(leak?.severity).toBe('medium');
+    expect(r.report.scan.notes.join(' ')).toContain('chain-x.example (eth_call)');
+  });
+
+  it('JSON without a jsonrpc envelope does not make a host an RPC provider', () => {
+    const r = sampleResult({ capture: rpcCapture() });
+    const contact = r.report.contacts.find((c) => c.host === 'api.tracker-y.example');
+    expect(contact?.class).toBe('unknown-third-party');
+  });
+
+  it('the third-party DB always wins over behaviour', () => {
+    const r = sampleResult();
+    expect(r.report.contacts.find((c) => c.host === 'mainnet.infura.io')?.class).toBe(
+      'rpc-provider',
+    );
+    expect(r.report.contacts.find((c) => c.host === 'api.segment.io')?.class).toBe('analytics');
+    expect(r.report.scan.notes).toEqual([]);
+  });
+});
+
+describe('behaviour rule cannot soften a tracker leak (review findings)', () => {
+  const post = (url: string, body: unknown) =>
+    req({
+      phase: 'post-connect',
+      url,
+      method: 'POST',
+      resourceType: 'fetch',
+      body: JSON.stringify(body),
+    });
+  const rpc = (method = 'eth_chainId') => ({ jsonrpc: '2.0', id: 1, method, params: [] });
+  const leakOf = (r: ReturnType<typeof sampleResult>, domain: string) =>
+    r.report.privacy.findings.filter(
+      (f) => f.detector === 'canary-leak' && f.countsTowardPrivacyScore && f.title.includes(domain),
+    );
+  const withRequests = (...extra: ReturnType<typeof req>[]) => {
+    const c = sampleCapture();
+    c.requests.push(...extra);
+    return c;
+  };
+
+  it('a tracker that also answers one RPC call stays unidentified (high)', () => {
+    const r = sampleResult({
+      capture: withRequests(
+        post('https://collect.tracker.example/e', { event: 'wallet_connected', address: CANARY_A }),
+        post('https://collect.tracker.example/ping', rpc()),
+      ),
+    });
+    const [f] = leakOf(r, 'tracker.example');
+    expect(f).toMatchObject({ severity: 'high' });
+    expect(f!.title).toContain('unknown-third-party');
+  });
+
+  it('a mixed batch (RPC + analytics event) is not RPC', () => {
+    const r = sampleResult({
+      capture: withRequests(
+        post('https://collect.tracker.example/batch', [
+          rpc(),
+          { type: 'identify', userId: CANARY_A },
+        ]),
+      ),
+    });
+    expect(leakOf(r, 'tracker.example')[0]).toMatchObject({ severity: 'high' });
+  });
+
+  it('a domain with an RPC host and a REST host is classified once (not charged twice)', () => {
+    const r = sampleResult({
+      capture: withRequests(
+        post('https://rpc.vendor.example/', rpc('eth_getBalance')),
+        req({
+          phase: 'post-connect',
+          url: `https://api.vendor.example/v1/user?addr=${CANARY_A}`,
+          resourceType: 'fetch',
+        }),
+      ),
+    });
+    const lines = r.report.privacy.ledger.filter(
+      (l) => l.rule.startsWith('leak.') && l.label.includes('vendor.example'),
+    );
+    expect(lines.map((l) => l.rule)).toEqual(['leak.unknown-third-party']);
+  });
+
+  it('JSON-RPC over WebSocket qualifies like HTTP', () => {
+    const c = sampleCapture();
+    c.wsFrames.push({
+      phase: 'post-connect',
+      url: 'wss://ws.chain.example/',
+      direction: 'sent',
+      payload: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_getBalance',
+        params: [CANARY_A, 'latest'],
+      }),
+    });
+    const r = sampleResult({ capture: c });
+    expect(leakOf(r, 'chain.example')[0]).toMatchObject({ severity: 'medium' });
+  });
+
+  it('body-less preflights do not disqualify an RPC domain', () => {
+    const r = sampleResult({
+      capture: withRequests(
+        req({
+          phase: 'post-connect',
+          url: 'https://node.chain-z.example/',
+          method: 'OPTIONS',
+          resourceType: 'preflight',
+        }),
+        post('https://node.chain-z.example/', {
+          ...rpc('eth_call'),
+          params: [
+            { data: `0x70a08231000000000000000000000000${CANARY_A.slice(2).toLowerCase()}` },
+          ],
+        }),
+      ),
+    });
+    expect(r.report.contacts.find((c) => c.host === 'node.chain-z.example')?.class).toBe(
+      'rpc-provider',
+    );
+  });
+});
+
+describe('pureJsonRpcMethods', () => {
+  it('accepts single calls and pure batches only', () => {
+    expect(pureJsonRpcMethods('{"jsonrpc":"2.0","id":1,"method":"eth_call","params":[]}')).toEqual([
+      'eth_call',
+    ]);
+    expect(
+      pureJsonRpcMethods(
+        '[{"jsonrpc":"2.0","method":"eth_chainId"},{"jsonrpc":"2.0","method":"net_version"}]',
+      ),
+    ).toEqual(['eth_chainId', 'net_version']);
+    expect(pureJsonRpcMethods('[]')).toBeNull();
+    expect(pureJsonRpcMethods('{"method":"eth_call"}')).toBeNull();
+    expect(pureJsonRpcMethods('{"jsonrpc":"2.0","method":"track"}')).toBeNull();
+    expect(pureJsonRpcMethods('not json')).toBeNull();
   });
 });

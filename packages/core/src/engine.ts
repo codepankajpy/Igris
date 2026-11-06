@@ -223,6 +223,82 @@ function defaultPort(protocol: string): number {
   return protocol === 'https:' || protocol === 'wss:' ? 443 : 80;
 }
 
+const JSON_RPC_METHOD = /^(?:eth|net|web3)_[A-Za-z]+$/;
+
+/**
+ * The Ethereum JSON-RPC methods in `text` when it is a PURE JSON-RPC 2.0
+ * call or a non-empty batch made only of such calls; otherwise null. A batch
+ * mixing an RPC call with anything else (e.g. an analytics event) is not pure.
+ */
+export function pureJsonRpcMethods(text: string): string[] | null {
+  if (text.length > 1_000_000) return null;
+  const head = text.trimStart()[0];
+  if (head !== '{' && head !== '[') return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const calls = Array.isArray(parsed) ? parsed : [parsed];
+  if (calls.length === 0) return null;
+  const methods: string[] = [];
+  for (const c of calls) {
+    if (typeof c !== 'object' || c === null) return null;
+    const { jsonrpc, method } = c as { jsonrpc?: unknown; method?: unknown };
+    if (jsonrpc !== '2.0' || typeof method !== 'string' || !JSON_RPC_METHOD.test(method))
+      return null;
+    methods.push(method);
+  }
+  return methods;
+}
+
+/**
+ * Registrable domains that behave ONLY as Ethereum RPC endpoints in this
+ * capture: every HTTP request to any of their hosts carries a pure JSON-RPC
+ * body (body-less OPTIONS/HEAD preflights are neutral) and every WebSocket
+ * message the page sent them is pure JSON-RPC. One non-RPC request — a GET,
+ * a tracking POST, a mixed batch — disqualifies the whole domain, so a
+ * tracker can never soften its own leak by also answering an RPC call.
+ * Decided per registrable domain, the unit the score ledger charges.
+ * Returns domain → sorted distinct methods seen.
+ */
+export function rpcOnlyDomains(capture: Capture): Map<string, string[]> {
+  const seen = new Map<string, Set<string>>();
+  const disqualified = new Set<string>();
+  const consider = (url: string, text: string | null, neutral: boolean) => {
+    let host: string;
+    try {
+      host = new URL(url).hostname.toLowerCase();
+    } catch {
+      return;
+    }
+    if (!host) return;
+    const rd = registrableDomain(host);
+    if (neutral) return;
+    const methods = text ? pureJsonRpcMethods(text) : null;
+    if (!methods) {
+      disqualified.add(rd);
+      return;
+    }
+    const set = seen.get(rd) ?? new Set<string>();
+    for (const m of methods) set.add(m);
+    seen.set(rd, set);
+  };
+  for (const r of capture.requests) {
+    const neutral = !r.body && (r.method === 'OPTIONS' || r.method === 'HEAD');
+    consider(r.url, r.body, neutral);
+  }
+  for (const f of capture.wsFrames) {
+    if (f.direction === 'sent') consider(f.url, f.payload, false);
+  }
+  const out = new Map<string, string[]>();
+  for (const [rd, methods] of seen) {
+    if (!disqualified.has(rd)) out.set(rd, [...methods].sort());
+  }
+  return out;
+}
+
 /** The main document's registrable domain when it differs from the target's. */
 function landedRegistrableDomain(
   capture: Capture,
@@ -261,13 +337,31 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
     db: input.thirdPartyDb,
     ...(firstParty.length ? { firstParty } : {}),
   };
+  // A domain the DB does not know, whose every request in this capture is
+  // Ethereum JSON-RPC, is acting as an RPC provider (chain RPCs such as
+  // node.mainnet.etherlink.com). The DB always wins; the report notes every
+  // domain classified this way and the methods that qualified it.
+  const rpcDomains = rpcOnlyDomains(input.capture);
+  const byBehaviour = new Set<string>();
+  const classify = (host: string) => {
+    const c = classifyHost(host, classifyOpts);
+    if (c.class === 'unknown-third-party' && rpcDomains.has(c.registrableDomain)) {
+      byBehaviour.add(c.registrableDomain);
+      return {
+        ...c,
+        class: 'rpc-provider' as const,
+        matchedEntry: 'observed JSON-RPC-only endpoint',
+      };
+    }
+    return c;
+  };
   const exclude = input.excludeHosts;
   const ctx: DetectorContext = {
     target: targetUrl,
     targetRegistrableDomain: targetRd,
     status: input.status,
     coverage,
-    classify: (host) => classifyHost(host, classifyOpts),
+    classify,
     canary,
     wasBlocked: (u) => {
       if (!exclude || exclude.size === 0) return false;
@@ -330,7 +424,17 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
       canaryAddress: input.canaryAddress,
       egress: input.egress,
       connectionLog: input.connectionLog ?? [],
-      notes,
+      notes: byBehaviour.size
+        ? [
+            ...notes,
+            `classified as RPC providers by behaviour (not in the third-party DB; every request they received was Ethereum JSON-RPC): ${[
+              ...byBehaviour,
+            ]
+              .sort()
+              .map((d) => `${d} (${(rpcDomains.get(d) ?? []).slice(0, 6).join(', ')})`)
+              .join('; ')}`,
+          ]
+        : notes,
       ...(input.connection ? { connection: input.connection } : {}),
       ...(input.failure ? { failure: input.failure } : {}),
     },
