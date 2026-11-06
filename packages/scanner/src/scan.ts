@@ -30,7 +30,7 @@ import {
   type EgressProxyOptions,
 } from './egress/proxy.js';
 
-export const SCANNER_VERSION = '0.4.0'; // 0.4.0: wallet requests recorded and decoded; 0.3.0: connect engine (dialog-scoped wallet choice), RPC by behaviour; 0.2.0: Report v2 + evidence bundle
+export const SCANNER_VERSION = '0.4.1'; // 0.4.1: connect controls named without icon-font text (app.ens.domains); 0.4.0: wallet requests recorded and decoded; 0.3.0: connect engine (dialog-scoped wallet choice), RPC by behaviour; 0.2.0: Report v2 + evidence bundle
 
 /**
  * Network egress policy for the scanned page.

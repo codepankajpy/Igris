@@ -282,10 +282,13 @@ async function open(
  * after the context is closed and never be seen. Instead we watch the
  * context's own request lifecycle and only return once NO request is in
  * flight AND none has started or ended for QUIET_MS (and at least QUIET_MS
- * has passed in total). The app does not poll — its only interval is the live
- * scan's clock, which makes no request (test/styles.test.ts keeps it that way)
- * — and every event stream the stub serves is finite, so a page does go
- * quiet; SETTLE_MAX_MS bounds one that never does (reported, not hidden).
+ * has passed in total). The app does not poll fast: its intervals are the
+ * live scan's clock (no request) and the header's same-origin registry check
+ * every 20 s (test/styles.test.ts keeps it that way); the site page re-checks
+ * a site every 20 s only while a scan runs or a request is under 10 minutes
+ * old (rounds.ts shouldRecheck). Every event stream the stub serves is
+ * finite, so a page does go quiet; SETTLE_MAX_MS bounds one that never does
+ * (reported, not hidden).
  */
 const QUIET_MS = 1500;
 const SETTLE_MAX_MS = 12_000;

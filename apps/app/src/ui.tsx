@@ -29,7 +29,8 @@ export const VERDICT: Record<Verdict, { label: string; meaning: string }> = {
 };
 
 export const STATE: Record<SummaryState, string> = {
-  'address-to-trackers': 'Address reached trackers',
+  // The state covers tracking AND unidentified recipients (core assessment.ts).
+  'address-to-trackers': 'Address reached tracking or unidentified parties',
   'address-to-services': 'Address reached services only',
   'no-address-observed': 'No address leak observed',
   'not-observed': 'Not observed',

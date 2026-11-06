@@ -27,9 +27,37 @@ const HELPERS = `
     const cs = getComputedStyle(el);
     return cs.visibility !== 'hidden' && cs.display !== 'none' && Number(cs.opacity) > 0.01;
   };
+  // Icons drawn from text (Material Symbols ligatures such as "login" or
+  // "account_balance_wallet"), hidden decorations and graphics are not part
+  // of a control's name: app.ens.domains' button reads "CONNECT login" to
+  // innerText but "Connect" to its users.
+  const ICON_CLASS = /^(material-(symbols?|icons)(-[a-z]+)?|icon|icons|glyph|glyphicon)$/i;
+  const ICON_FONT = /^["']?(material (symbols|icons)|font ?awesome|glyphicons)/i;
+  const isDecoration = (n) => {
+    if (n.getAttribute('aria-hidden') === 'true') return true;
+    const tag = n.tagName.toLowerCase();
+    if (tag === 'svg' || tag === 'img') return true;
+    if ([...n.classList].some((c) => ICON_CLASS.test(c))) return true;
+    return ICON_FONT.test(getComputedStyle(n).fontFamily);
+  };
+  const visibleText = (el) => {
+    let s = '';
+    for (const n of el.childNodes) {
+      if (n.nodeType === 3) s += n.textContent;
+      else if (n.nodeType === 1 && !isDecoration(n)) {
+        const cs = getComputedStyle(n);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        const inline = cs.display === 'inline' || cs.display === 'contents';
+        s += inline ? visibleText(n) : ' ' + visibleText(n) + ' ';
+      }
+    }
+    return s;
+  };
   const accName = (el) => {
     const aria = el.getAttribute('aria-label');
-    const text = aria && aria.trim() ? aria : (el.innerText || el.textContent || '');
+    if (aria && aria.trim()) return aria.replace(/\\s+/g, ' ').trim();
+    const own = visibleText(el).replace(/\\s+/g, ' ').trim();
+    const text = own || el.innerText || el.textContent || '';
     return text.replace(/\\s+/g, ' ').trim();
   };
 `;

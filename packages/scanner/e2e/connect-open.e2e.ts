@@ -32,6 +32,13 @@ const PAGES: Record<string, string> = {
   navigates: `<button onclick="location.href='${OTHER}/'">Connect Wallet</button>`,
   nomodal: `<button>Connect Wallet</button>`,
   late: `<button onclick="setTimeout(() => { ${MODAL.replaceAll('"', '&quot;')} }, 2500)">Connect Wallet</button>`,
+  // app.ens.domains: a Material Symbols ligature ("login") inside the button
+  // is an icon, not part of its name; same for an icon font named by style
+  // and for aria-hidden decorations. <i> without an icon class stays text.
+  icons: `<button onclick="${MODAL.replaceAll('"', '&quot;')}">Connect <span class="material-symbol">login</span></button>
+    <button>Connect wallet <span style="font-family:'Material Symbols Outlined'">account_balance_wallet</span></button>
+    <button><span aria-hidden="true">→</span> Log in</button>
+    <button>Connect <i>now</i></button>`,
   hidden: `<button style="display:none">Connect Wallet</button><button onclick="${MODAL.replaceAll('"', '&quot;')}">Log in</button>`,
 };
 
@@ -70,6 +77,13 @@ describe('openConnectUi (offline)', () => {
     expect(r.candidates.map((c) => c.name)).toEqual(['Connect Wallet']);
     expect(r.fingerprint).toMatchObject({ id: 'privy', confidence: 'high' });
     expect(r.urlChanges).toEqual([]);
+    await page.close();
+  });
+
+  it('names controls without their icon text (Material Symbols, icon fonts, aria-hidden)', async () => {
+    const { page, r } = await open('icons');
+    expect(r.candidates.map((c) => c.name).sort()).toEqual(['Connect', 'Connect wallet', 'Log in']);
+    expect(r.clicked?.name).toBe('Connect wallet');
     await page.close();
   });
 

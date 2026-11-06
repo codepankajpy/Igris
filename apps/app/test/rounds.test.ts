@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { Agreement, PublishedScan, RoundSummary, ScanRequest } from '../src/api.js';
+import type {
+  Agreement,
+  PublishedScan,
+  RoundSummary,
+  ScanRequest,
+  SiteResponse,
+} from '../src/api.js';
 import {
   AGREEMENT_EXPLAINED,
+  RECHECK_WINDOW_S,
   REQUEST_EXPIRED,
   comparableKey,
   nodeLabel,
@@ -9,6 +16,7 @@ import {
   roundLabel,
   roundOf,
   roundRequestKey,
+  shouldRecheck,
   statusText,
 } from '../src/rounds.js';
 
@@ -156,5 +164,43 @@ describe('scanner nodes are shown by label, never by address', () => {
     expect(nodeLabel('0x5c0f3e2d9a1b4c6e8f7a9b0c1d2e3f4a5b6c7d8e')).toBe('Unnamed scanner');
     expect(nodeLabel('node 0x5C0F3E2D9A1B4C6E8F7A9B0C1D2E3F4A5B6C7D8E')).toBe('Unnamed scanner');
     expect(nodeLabel('  ')).toBe('Unnamed scanner');
+  });
+});
+
+describe('shouldRecheck', () => {
+  const req = (requestedAt: number): ScanRequest => ({
+    key: '0x' + 'ab'.repeat(32),
+    hostname: 'a.example',
+    url: 'https://a.example/',
+    requestedAt,
+    expiresAtBlock: null,
+  });
+  const site = (over: Partial<SiteResponse>): SiteResponse => ({
+    hostname: 'a.example',
+    versions: [],
+    scanning: null,
+    rounds: [],
+    ...over,
+  });
+  const now = 1_800_000_000;
+  it('re-checks while a scan is running', () => {
+    expect(shouldRecheck(site({ scanning: { id: 'j', state: 'running' } }), now)).toBe(true);
+  });
+  it('re-checks while a recent request may still be answered', () => {
+    expect(shouldRecheck(site({ rounds: [{ request: req(now - 60), scans: [] }] }), now)).toBe(
+      true,
+    );
+  });
+  it('stops once the window has passed, for expired requests and for no rounds', () => {
+    expect(
+      shouldRecheck(site({ rounds: [{ request: req(now - RECHECK_WINDOW_S), scans: [] }] }), now),
+    ).toBe(false);
+    expect(shouldRecheck(site({ rounds: [{ request: null, scans: [] }] }), now)).toBe(false);
+    expect(shouldRecheck(site({}), now)).toBe(false);
+  });
+  it('ignores a request dated far in the future', () => {
+    expect(shouldRecheck(site({ rounds: [{ request: req(now + 3600), scans: [] }] }), now)).toBe(
+      false,
+    );
   });
 });

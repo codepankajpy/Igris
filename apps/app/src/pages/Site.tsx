@@ -17,7 +17,15 @@ import {
 import { go, paths } from '../router.js';
 import { Empty, ErrorNote, Loading, StateChip, day, plural } from '../ui.js';
 import { railChange } from '../wording.js';
-import { comparableKey, nodeLabel, railGroups, roundOf, type RailItem } from '../rounds.js';
+import {
+  RECHECK_MS,
+  comparableKey,
+  nodeLabel,
+  railGroups,
+  roundOf,
+  shouldRecheck,
+  type RailItem,
+} from '../rounds.js';
 import { AgreementPanel } from './Agreement.js';
 import { loadReport, type ReportData } from '../report/data.js';
 import { ReportView } from './Report.js';
@@ -76,15 +84,46 @@ export function SitePage({
   registry: RegistryInfo | null;
 }) {
   const [site, setSite] = useState<SiteResponse | null>(null);
+  // The newest version when the page loaded: shown by default, so a version
+  // that another scanner publishes meanwhile is added to the rail without
+  // replacing the report being read.
+  const [shown, setShown] = useState<number | null>(null);
   const [error, setError] = useState<unknown>(null);
   useEffect(() => {
     setSite(null);
+    setShown(null);
     setError(null);
+    let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // While a scan runs or a recent request may still be answered by other
+    // scanner nodes, look again (one same-origin GET every RECHECK_MS); stop
+    // once neither holds. A failed re-check keeps what is shown.
+    const schedule = (s: SiteResponse) => {
+      if (live && shouldRecheck(s, Math.floor(Date.now() / 1000)))
+        timer = setTimeout(recheck, RECHECK_MS);
+    };
+    const recheck = () =>
+      api.site(hostname).then(
+        (s) => {
+          if (!live) return;
+          setSite(s);
+          setShown((n) => n ?? s.versions[0]?.version ?? null);
+          schedule(s);
+        },
+        () => undefined,
+      );
     api.site(hostname).then((s) => {
+      if (!live) return;
       // Nothing published yet but a scan is running: show it live.
-      if (s.versions.length === 0 && s.scanning) go(paths.scan(s.scanning.id), true);
-      else setSite(s);
+      if (s.versions.length === 0 && s.scanning) return go(paths.scan(s.scanning.id), true);
+      setSite(s);
+      setShown(s.versions[0]?.version ?? null);
+      schedule(s);
     }, setError);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
   }, [hostname]);
 
   if (error)
@@ -114,7 +153,7 @@ export function SitePage({
     );
 
   const latest = site.versions[0]!;
-  const n = version ?? latest.version;
+  const n = version ?? shown ?? latest.version;
   // An API older than scanner nodes sends no rounds: every version stands alone.
   const round = roundOf(n, site.versions, site.rounds ?? []);
   const roundKey = comparableKey(round, site.versions);
@@ -146,7 +185,7 @@ export function SitePage({
       )}
       {round !== null && roundKey !== null && (
         <AgreementPanel
-          key={roundKey}
+          key={`${roundKey}:${round.scans.length}`}
           hostname={hostname}
           requestKey={roundKey}
           scanners={round.scans.length}

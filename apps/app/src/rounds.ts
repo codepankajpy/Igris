@@ -5,7 +5,7 @@
  * the rounds, the node labels and every agree / differ / partial status.
  * Unit-tested in test/rounds.test.ts.
  */
-import type { Agreement, PublishedScan, RoundSummary } from './api.js';
+import type { Agreement, PublishedScan, RoundSummary, SiteResponse } from './api.js';
 
 const ADDRESS = /0x[0-9a-fA-F]{40}/;
 
@@ -137,3 +137,28 @@ export function statusText(row: Row, nodes: readonly string[]): string {
 
 export const AGREEMENT_EXPLAINED =
   'Live pages vary between runs — A/B tests, location, timing — so two scanners’ reports almost never match byte for byte, and agreement is shown per third party. For each recipient the API checks that every scanner saw it, gave it the same verdict, and saw the same about the address.';
+
+/**
+ * How long after a request other scanner nodes may still publish scans of it
+ * (their workers poll every ~15 s; a scan takes about a minute; queues add
+ * delay). The site page re-checks within this window only.
+ */
+export const RECHECK_WINDOW_S = 10 * 60;
+/** Interval between site page re-checks (one same-origin GET). */
+export const RECHECK_MS = 20_000;
+
+/**
+ * Should the site page fetch GET /api/sites/:hostname again soon? Yes while a
+ * scan of the site is running here, or while a request made in the last
+ * RECHECK_WINDOW_S may still be answered by other nodes. Otherwise the page
+ * makes no further requests.
+ */
+export function shouldRecheck(site: SiteResponse, nowS: number): boolean {
+  if (site.scanning !== null) return true;
+  return (site.rounds ?? []).some(
+    (r) =>
+      r.request !== null &&
+      nowS - r.request.requestedAt >= -300 &&
+      nowS - r.request.requestedAt < RECHECK_WINDOW_S,
+  );
+}
