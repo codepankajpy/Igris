@@ -1,0 +1,152 @@
+{
+  "reportVersion": "1.0.0",
+  "scannerVersion": "0.1.0",
+  "target": "http://leaky-dapp.test:38548/",
+  "hostname": "leaky-dapp.test",
+  "scannedAt": "2026-11-06T09:39:25.116Z",
+  "chainId": 1,
+  "status": "completed",
+  "canaryAddress": "0x0Fd7fA0A0b6804C07df457860AD657931b7Ec27c",
+  "spoofMetaMask": true,
+  "findings": [
+    {
+      "id": "f1",
+      "category": "exact",
+      "encoding": "base64(checksummed)",
+      "location": "request-body",
+      "url": "http://ingest.igris-analytics.test:38545/v1/track",
+      "method": "POST",
+      "host": "ingest.igris-analytics.test",
+      "registrableDomain": "igris-analytics.test",
+      "class": "analytics",
+      "phase": "post-connect",
+      "snippet": "…t_connected\",\"wallet\":\"<CANARY>\",\"uid\":\"<CANARY>\"}",
+      "countsTowardScore": true
+    },
+    {
+      "id": "f2",
+      "category": "exact",
+      "encoding": "checksummed",
+      "location": "request-body",
+      "url": "http://ingest.igris-analytics.test:38545/v1/track",
+      "method": "POST",
+      "host": "ingest.igris-analytics.test",
+      "registrableDomain": "igris-analytics.test",
+      "class": "analytics",
+      "phase": "post-connect",
+      "snippet": "{\"event\":\"wallet_connected\",\"wallet\":\"<CANARY>\",\"uid\":\"<CANARY>\"}",
+      "countsTowardScore": true
+    },
+    {
+      "id": "f3",
+      "category": "exact",
+      "encoding": "checksummed",
+      "location": "request-body",
+      "url": "http://o1.igris-errors.test:38545/api/1/envelope",
+      "method": "POST",
+      "host": "o1.igris-errors.test",
+      "registrableDomain": "igris-errors.test",
+      "class": "error-monitoring",
+      "phase": "post-connect",
+      "snippet": "…\":[{\"category\":\"wallet\",\"message\":\"user <CANARY> connected\",\"level\":\"info\"}]}",
+      "countsTowardScore": true
+    },
+    {
+      "id": "f4",
+      "category": "exact",
+      "encoding": "checksummed",
+      "location": "url",
+      "url": "http://img.igris-cdn.test:38545/pixel?ref=<CANARY>&t=fixture",
+      "method": "GET",
+      "host": "img.igris-cdn.test",
+      "registrableDomain": "igris-cdn.test",
+      "class": "cdn",
+      "phase": "post-connect",
+      "snippet": "…tp://img.igris-cdn.test:38545/pixel?ref=<CANARY>&t=fixture",
+      "countsTowardScore": true
+    }
+  ],
+  "thirdParties": [
+    {
+      "host": "assets.igris-cdn.test",
+      "registrableDomain": "igris-cdn.test",
+      "class": "cdn",
+      "phases": ["pre-connect"],
+      "requestCount": 1
+    },
+    {
+      "host": "img.igris-cdn.test",
+      "registrableDomain": "igris-cdn.test",
+      "class": "cdn",
+      "phases": ["post-connect"],
+      "requestCount": 1
+    },
+    {
+      "host": "ingest.igris-analytics.test",
+      "registrableDomain": "igris-analytics.test",
+      "class": "analytics",
+      "phases": ["post-connect"],
+      "requestCount": 1
+    },
+    {
+      "host": "o1.igris-errors.test",
+      "registrableDomain": "igris-errors.test",
+      "class": "error-monitoring",
+      "phases": ["post-connect"],
+      "requestCount": 1
+    },
+    {
+      "host": "widget.igris-chat.test",
+      "registrableDomain": "igris-chat.test",
+      "class": "support-chat",
+      "phases": ["pre-connect"],
+      "requestCount": 1
+    }
+  ],
+  "readsViaWallet": [
+    {
+      "method": "eth_call",
+      "count": 2
+    }
+  ],
+  "usesAnonRpc": true,
+  "score": 17,
+  "ledger": [
+    {
+      "id": "p1",
+      "label": "address reached igris-analytics.test (analytics)",
+      "points": 25,
+      "rule": "leak.analytics",
+      "findingIds": ["f1", "f2"]
+    },
+    {
+      "id": "p2",
+      "label": "address reached igris-cdn.test (cdn)",
+      "points": 20,
+      "rule": "leak.cdn",
+      "findingIds": ["f4"]
+    },
+    {
+      "id": "p3",
+      "label": "address reached igris-errors.test (error-monitoring)",
+      "points": 25,
+      "rule": "leak.error-monitoring",
+      "findingIds": ["f3"]
+    },
+    {
+      "id": "p4",
+      "label": "2 third parties contacted before connect (IP exposure): igris-cdn.test, igris-chat.test",
+      "points": 4,
+      "rule": "contact.perDomainPreConnect",
+      "findingIds": []
+    },
+    {
+      "id": "p5",
+      "label": "3 third parties contacted after connect (IP exposure): igris-analytics.test, igris-cdn.test, igris-errors.test",
+      "points": 9,
+      "rule": "contact.perDomainPostConnect",
+      "findingIds": []
+    }
+  ],
+  "errors": ["connect: clicked connect button: \"Connect Wallet\""]
+}

@@ -1,0 +1,75 @@
+{
+  "reportVersion": "1.0.0",
+  "scannerVersion": "0.1.0",
+  "target": "https://github.com",
+  "hostname": "github.com",
+  "scannedAt": "2026-11-06T10:39:50.854Z",
+  "chainId": 1,
+  "status": "wallet-connect-failed",
+  "canaryAddress": "0x508Ac3FCECB39D32d80CDEA2474fBeF6b79e34A5",
+  "spoofMetaMask": true,
+  "findings": [],
+  "thirdParties": [
+    {
+      "host": "github.githubassets.com",
+      "registrableDomain": "githubassets.com",
+      "class": "unknown-third-party",
+      "phases": ["pre-connect", "post-connect"],
+      "requestCount": 182,
+      "methods": ["GET"],
+      "resourceTypes": ["script", "font", "stylesheet", "image", "fetch"]
+    },
+    {
+      "host": "images.ctfassets.net",
+      "registrableDomain": "ctfassets.net",
+      "class": "unknown-third-party",
+      "phases": ["pre-connect"],
+      "requestCount": 11,
+      "methods": ["GET"],
+      "resourceTypes": ["image"]
+    },
+    {
+      "host": "videos.ctfassets.net",
+      "registrableDomain": "ctfassets.net",
+      "class": "unknown-third-party",
+      "phases": ["pre-connect"],
+      "requestCount": 1,
+      "methods": ["GET"],
+      "resourceTypes": ["media"]
+    }
+  ],
+  "readsViaWallet": [],
+  "usesAnonRpc": false,
+  "score": 93,
+  "ledger": [
+    {
+      "id": "p1",
+      "label": "2 third parties contacted before connect (IP exposure): ctfassets.net, githubassets.com",
+      "points": 4,
+      "rule": "contact.perDomainPreConnect",
+      "findingIds": []
+    },
+    {
+      "id": "p2",
+      "label": "1 third party contacted after connect (IP exposure): githubassets.com",
+      "points": 3,
+      "rule": "contact.perDomainPostConnect",
+      "findingIds": []
+    }
+  ],
+  "errors": ["could not connect wallet (clicked connect button: \"Sign in\")"],
+  "summary": {
+    "totalRequests": 203,
+    "preConnectRequests": 133,
+    "postConnectRequests": 70,
+    "wsConnections": 0,
+    "cookiesCount": 13,
+    "localStorageCount": 0,
+    "sessionStorageCount": 0
+  },
+  "securityHeaders": {
+    "cspPresent": false,
+    "hstsPresent": false
+  },
+  "connectionLog": []
+}

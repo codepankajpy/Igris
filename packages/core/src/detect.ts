@@ -45,9 +45,13 @@ function labelHexCoreMatch(text: string, index: number, forms: CanaryForms): Can
   const matched = text.slice(index, index + 40);
   const prefixed = index >= 2 && text.slice(index - 2, index).toLowerCase() === '0x';
   let caseLabel: string;
-  if (matched === forms.coreLower) caseLabel = 'lowercase';
+  // Checksummed first: when a canary's EIP-55 checksum happens to be all
+  // lower- or all-upper-case letters, the match is still the checksummed
+  // form the wallet handed out. Checking it last made the label (and so the
+  // v2 finding fingerprint) depend on the random canary.
+  if ('0x' + matched === forms.checksummed) caseLabel = 'checksummed';
+  else if (matched === forms.coreLower) caseLabel = 'lowercase';
   else if (matched === forms.coreLower.toUpperCase()) caseLabel = 'uppercase';
-  else if ('0x' + matched === forms.checksummed) caseLabel = 'checksummed';
   else caseLabel = 'mixed-case';
   const encoding = prefixed ? caseLabel : `no-0x-${caseLabel}`;
   return {

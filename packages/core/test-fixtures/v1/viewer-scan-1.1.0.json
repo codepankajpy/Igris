@@ -1,0 +1,55 @@
+{
+  "reportVersion": "1.1.0",
+  "scannerVersion": "0.1.0",
+  "target": "http://igris-viewer.test:38550/",
+  "hostname": "igris-viewer.test",
+  "scannedAt": "2026-11-06T11:36:22.766Z",
+  "chainId": 1,
+  "status": "wallet-connect-failed",
+  "canaryAddress": "0x60B3Cd0A7cCe1f8f41036BF61957D44b66180F5F",
+  "spoofMetaMask": true,
+  "findings": [],
+  "thirdParties": [
+    {
+      "host": "rpc.rabdi.db-chain.testnet.arkiv.network",
+      "registrableDomain": "arkiv.network",
+      "class": "rpc-provider",
+      "phases": ["pre-connect"],
+      "requestCount": 1,
+      "methods": ["POST"],
+      "resourceTypes": ["fetch"]
+    }
+  ],
+  "readsViaWallet": [],
+  "usesAnonRpc": false,
+  "score": 98,
+  "coverage": "pre-connect-only",
+  "ledger": [
+    {
+      "id": "p1",
+      "label": "1 third party contacted before connect (IP exposure): arkiv.network",
+      "points": 2,
+      "rule": "contact.perDomainPreConnect",
+      "findingIds": []
+    }
+  ],
+  "errors": ["could not connect wallet (no connect button found by heuristic)"],
+  "summary": {
+    "totalRequests": 4,
+    "preConnectRequests": 4,
+    "postConnectRequests": 0,
+    "wsConnections": 0,
+    "wsFrames": 0,
+    "cookiesCount": 0,
+    "localStorageCount": 0,
+    "sessionStorageCount": 0
+  },
+  "securityHeaders": {
+    "documentUrl": "http://igris-viewer.test:38550/",
+    "documentStatus": 200,
+    "cspPresent": false,
+    "cspReportOnly": false,
+    "hstsPresent": false
+  },
+  "connectionLog": []
+}

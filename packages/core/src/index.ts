@@ -6,3 +6,12 @@ export * from './weights.js';
 export * from './report.js';
 export * from './third-parties.js';
 export * from './anon-rpc.js';
+// --- v2 contracts, detectors, engine ---
+export * from './contracts/index.js';
+export * from './contracts/validate.js';
+export * from './detectors/canary-leak.js';
+export * from './detectors/ip-exposure.js';
+export * from './detectors/security-headers.js';
+export * from './scoring-v2.js';
+export * from './engine.js';
+export * from './migrate.js';

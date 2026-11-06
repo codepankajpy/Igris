@@ -9,6 +9,11 @@
       "types": "./src/index.ts",
       "igris-dist": "./dist/index.js",
       "default": "./src/index.ts"
+    },
+    "./contracts": {
+      "types": "./src/contracts/index.ts",
+      "igris-dist": "./dist/contracts/index.js",
+      "default": "./src/contracts/index.ts"
     }
   },
   "scripts": {
@@ -18,7 +23,8 @@
   },
   "dependencies": {
     "tldts": "7.4.19",
-    "viem": "2.57.16"
+    "viem": "2.57.16",
+    "ajv": "8.20.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "5.1.0",

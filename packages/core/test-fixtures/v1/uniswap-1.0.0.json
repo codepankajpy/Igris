@@ -1,0 +1,111 @@
+{
+  "reportVersion": "1.0.0",
+  "scannerVersion": "0.1.0",
+  "target": "https://app.uniswap.org",
+  "hostname": "app.uniswap.org",
+  "scannedAt": "2026-11-06T09:48:53.915Z",
+  "chainId": 1,
+  "status": "wallet-connect-failed",
+  "canaryAddress": "0x522ecAe194a1aaC88266b08d74b6FbA2F7AeC475",
+  "spoofMetaMask": true,
+  "findings": [],
+  "thirdParties": [
+    {
+      "host": "",
+      "registrableDomain": "",
+      "class": "unknown-third-party",
+      "phases": ["pre-connect"],
+      "requestCount": 4
+    },
+    {
+      "host": "api.web3modal.org",
+      "registrableDomain": "web3modal.org",
+      "class": "unknown-third-party",
+      "phases": ["pre-connect"],
+      "requestCount": 1
+    },
+    {
+      "host": "assets.coingecko.com",
+      "registrableDomain": "coingecko.com",
+      "class": "unknown-third-party",
+      "phases": ["pre-connect"],
+      "requestCount": 1
+    },
+    {
+      "host": "auth.privy.io",
+      "registrableDomain": "privy.io",
+      "class": "unknown-third-party",
+      "phases": ["pre-connect"],
+      "requestCount": 1
+    },
+    {
+      "host": "challenges.cloudflare.com",
+      "registrableDomain": "cloudflare.com",
+      "class": "unknown-third-party",
+      "phases": ["pre-connect"],
+      "requestCount": 2
+    },
+    {
+      "host": "coin-images.coingecko.com",
+      "registrableDomain": "coingecko.com",
+      "class": "unknown-third-party",
+      "phases": ["pre-connect"],
+      "requestCount": 2
+    },
+    {
+      "host": "didcmo2jyrnku.cloudfront.net",
+      "registrableDomain": "cloudfront.net",
+      "class": "cdn",
+      "phases": ["pre-connect"],
+      "requestCount": 1
+    },
+    {
+      "host": "explorer-api.walletconnect.com",
+      "registrableDomain": "walletconnect.com",
+      "class": "walletconnect-relay",
+      "phases": ["pre-connect"],
+      "requestCount": 2
+    },
+    {
+      "host": "pulse.walletconnect.org",
+      "registrableDomain": "walletconnect.org",
+      "class": "walletconnect-relay",
+      "phases": ["post-connect"],
+      "requestCount": 1
+    },
+    {
+      "host": "raw.githubusercontent.com",
+      "registrableDomain": "githubusercontent.com",
+      "class": "unknown-third-party",
+      "phases": ["pre-connect"],
+      "requestCount": 13
+    },
+    {
+      "host": "tokens.coingecko.com",
+      "registrableDomain": "coingecko.com",
+      "class": "unknown-third-party",
+      "phases": ["pre-connect"],
+      "requestCount": 3
+    }
+  ],
+  "readsViaWallet": [],
+  "usesAnonRpc": false,
+  "score": 82,
+  "ledger": [
+    {
+      "id": "p1",
+      "label": "8 third parties contacted before connect (IP exposure): , cloudflare.com, cloudfront.net, coingecko.com, githubusercontent.com, privy.io, walletconnect.com, web3modal.org (capped at 15)",
+      "points": 15,
+      "rule": "contact.perDomainPreConnect",
+      "findingIds": []
+    },
+    {
+      "id": "p2",
+      "label": "1 third party contacted after connect (IP exposure): walletconnect.org",
+      "points": 3,
+      "rule": "contact.perDomainPostConnect",
+      "findingIds": []
+    }
+  ],
+  "errors": ["could not connect wallet (clicked connect button: \"Connect\")"]
+}

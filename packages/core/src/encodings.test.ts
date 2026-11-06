@@ -163,3 +163,16 @@ describe('redaction', () => {
     expect(snippet.match(/<CANARY>/g)!.length).toBe(2);
   });
 });
+
+describe('hex labelling precedence (P0.5 fingerprint stability)', () => {
+  // EIP-55 checksum of this address leaves every letter lowercase, so the
+  // checksummed form is ALSO the lowercase form. It must be labelled
+  // "checksummed" — the form the wallet handed out — like every other canary.
+  const ALL_LOWER_CHECKSUM = '0x1111111111111111111111111111111111111abf';
+  it('a match equal to the checksummed form is labelled checksummed', () => {
+    const forms = buildCanaryForms(ALL_LOWER_CHECKSUM);
+    expect(forms.checksummed).toBe(ALL_LOWER_CHECKSUM);
+    const [m] = findCanary(`{"user":"${ALL_LOWER_CHECKSUM}"}`, forms);
+    expect(m!.encoding).toBe('checksummed');
+  });
+});

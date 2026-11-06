@@ -1,0 +1,34 @@
+{
+  "reportVersion": "1.0.0",
+  "scannerVersion": "0.1.0",
+  "target": "http://127.0.0.1:9",
+  "hostname": "127.0.0.1",
+  "scannedAt": "2026-11-06T10:39:52.063Z",
+  "chainId": 1,
+  "status": "page-load-failed",
+  "canaryAddress": "0xBFF9fE2ebBcc5aE7Cabe23A1a41a5baD9d383752",
+  "spoofMetaMask": true,
+  "findings": [],
+  "thirdParties": [],
+  "readsViaWallet": [],
+  "usesAnonRpc": false,
+  "score": 100,
+  "ledger": [],
+  "errors": [
+    "page load failed: Error: page.goto: net::ERR_UNSAFE_PORT at http://127.0.0.1:9/\nCall log:\n  - navigating to \"http://127.0.0.1:9/\", waiting until \"domcontentloaded\"\n"
+  ],
+  "summary": {
+    "totalRequests": 1,
+    "preConnectRequests": 1,
+    "postConnectRequests": 0,
+    "wsConnections": 0,
+    "cookiesCount": 0,
+    "localStorageCount": 0,
+    "sessionStorageCount": 0
+  },
+  "securityHeaders": {
+    "cspPresent": false,
+    "hstsPresent": false
+  },
+  "connectionLog": []
+}
