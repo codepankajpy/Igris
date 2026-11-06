@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { connect, type AddressInfo } from 'node:net';
-import { expandIPv6, isPublicAddress } from './ip-policy.js';
+import { classifyRefusal, expandIPv6, isPublicAddress } from './ip-policy.js';
 import { parseAuthority, startEgressProxy, type EgressProxy } from './proxy.js';
 
 describe('ip-policy', () => {
@@ -61,6 +61,16 @@ describe('ip-policy', () => {
   ];
   for (const ip of blocked) it(`refuses ${ip}`, () => expect(isPublicAddress(ip)).toBe(false));
   for (const ip of allowed) it(`allows ${ip}`, () => expect(isPublicAddress(ip)).toBe(true));
+
+  it('names the refusal reason for IPv6 forms too', () => {
+    expect(classifyRefusal('::1')).toBe('loopback');
+    expect(classifyRefusal('::ffff:127.0.0.1')).toBe('loopback');
+    expect(classifyRefusal('::ffff:169.254.169.254')).toBe('link-local / cloud metadata');
+    expect(classifyRefusal('fe80::1')).toBe('link-local');
+    expect(classifyRefusal('fd00::1')).toBe('private network');
+    expect(classifyRefusal('10.1.1.1')).toBe('private network');
+    expect(classifyRefusal('224.0.0.1')).toBe('non-public address');
+  });
 
   it('expands IPv6 with :: and dotted tails', () => {
     expect(expandIPv6('::ffff:1.2.3.4')).toEqual([0, 0, 0, 0, 0, 0xffff, 0x0102, 0x0304]);

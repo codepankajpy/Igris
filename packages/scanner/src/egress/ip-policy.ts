@@ -120,5 +120,15 @@ export function classifyRefusal(ip: string): string {
     )
       return 'private network';
   }
+  const g = expandIPv6(ip);
+  if (g) {
+    const allZero = (from: number, to: number) => g.slice(from, to).every((x) => x === 0);
+    if (allZero(0, 7) && g[7] === 1) return 'loopback';
+    if (allZero(0, 5) && (g[5] === 0xffff || g[5] === 0)) {
+      return classifyRefusal(v4FromGroups(g[6]!, g[7]!)); // IPv4-mapped/compatible
+    }
+    if ((g[0]! & 0xffc0) === 0xfe80) return 'link-local';
+    if ((g[0]! & 0xfe00) === 0xfc00) return 'private network';
+  }
   return 'non-public address';
 }

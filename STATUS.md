@@ -8,10 +8,9 @@ verification notes are in [docs/ENGINEERING_LOG.md](docs/ENGINEERING_LOG.md).
 
 - **M0–M7 (original build):** scanner, core, patcher, CLI, registry, viewer,
   demo. Done at commit `b915636`.
-- **P0 Integrity:** implemented on branch `p0-integrity`. All criteria PASS
-  except the Docker half of P0-9 (UNVERIFIED: no Docker daemon). See
-  ROADMAP.md.
-- **P0.5 onwards:** not started (blocked on P0 = PASS).
+- **P0 Integrity:** PASS on branch `p0-integrity` (all 12 criteria; see
+  ROADMAP.md).
+- **P0.5 Foundations:** next.
 
 ## How to verify (clean clone, Node ≥ 20, pnpm 9)
 
@@ -31,10 +30,14 @@ pnpm demo        # offline end-to-end story, regenerates examples/
    keys with scanner profiles arrive in P0.5 (P05-6), so prefer generating a
    fresh key per node then rather than reusing that one.
 2. **Second independent scanner node** (P2-2): the second Mac, with its own key.
-3. **Docker image build/run** (P0-9, Docker part): the Docker daemon was not
-   running on the development machine. Repro: start Docker, then
-   `docker build -f apps/api/Dockerfile -t igris-api . && docker run --rm -p 3001:3001 igris-api`,
-   then `curl localhost:3001/api/health`.
+
+## Docker (verified 2026-11-06)
+
+```bash
+docker build -f apps/api/Dockerfile -t igris-api .
+docker run --rm -p 3001:3001 igris-api
+curl localhost:3001/api/health
+```
 
 ## UNVERIFIED (not yet demonstrated)
 

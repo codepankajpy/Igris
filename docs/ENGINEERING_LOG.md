@@ -90,3 +90,32 @@ docs/tests commit.
   It is superseded by per-node keys (P05-6).
 - **`allowAddresses`** in the egress proxy is an operator and test escape
   hatch. The API never sets it from request input.
+
+---
+
+## 2026-11-06 — P0-9 Docker verification → P0 PASS
+
+Docker 28.3.3 (arm64, Docker Desktop). Image `igris-api:p0`
+(`sha256:8148ef76…d8e3`, rebuilt after the fix below), built from
+`apps/api/Dockerfile`.
+
+| Check                                                                | Result                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker build`                                                       | succeeds; image config `User=igris`, `Cmd=node --conditions=igris-dist apps/api/dist/index.js`                                                                                                                                                                                   |
+| Runtime user                                                         | `id` → `10001:igris` (non-root)                                                                                                                                                                                                                                                  |
+| Secrets in image                                                     | no `.env` anywhere in the filesystem; no `ARKIV_PRIVATE_KEY=0x…` under `/app`                                                                                                                                                                                                    |
+| `/api/health`                                                        | 200, `egress: public-only`, no key held                                                                                                                                                                                                                                          |
+| Internal targets                                                     | `169.254.169.254` → 400 (fail-fast); `file:///app/.git` repo → 400                                                                                                                                                                                                               |
+| Egress inside the container, real public DNS that resolves privately | `localtest.me` (→ 127.0.0.1/::1), `127.0.0.1.nip.io`, `169.254.169.254.nip.io`: all `page-load-failed`, score null, preview null, `egress blocked: … (loopback / link-local / cloud metadata)`. These names pass the API's URL check by design, so the proxy alone stopped them. |
+| Real public scans in the container                                   | github.com: CSP + HSTS present, coverage pre-connect-only, score 93, provenance unpublished. example.com: document 200, score 100, pre-connect-only.                                                                                                                             |
+| Rate limit                                                           | 5 requests per minute per client, then 429 (rejected requests count too). This caused one empty probe response during verification; it was rerun on a fresh container.                                                                                                           |
+| Logs                                                                 | only listen line and `scan finished: status=… score=…` — no client IPs, no URLs                                                                                                                                                                                                  |
+
+**Fix made during verification:** the refusal reason for IPv6 forms
+(`::1`, IPv4-mapped, `fe80::/10`, `fc00::/7`) said "non-public address".
+It now names the class. Unit-tested. Blocking behaviour was already
+correct; only the reason label changed. The image was rebuilt and rechecked
+after the fix.
+
+**P0 status: PASS.** The Chromium-sandbox limitation stays recorded as
+P4-6 and gates any public deployment.
