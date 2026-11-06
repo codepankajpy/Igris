@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: igris-scanner-api
+    env: docker
+    dockerfilePath: apps/api/Dockerfile
+    plan: standard
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production

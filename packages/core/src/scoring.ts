@@ -16,9 +16,7 @@ import { WEIGHTS } from './weights.js';
  * cookie/storage findings stay on the user's machine (reported, not charged);
  * first-party and anon-rpc destinations are deliberate choices.
  */
-export function countsTowardScore(
-  f: Pick<Finding, 'category' | 'location' | 'class'>,
-): boolean {
+export function countsTowardScore(f: Pick<Finding, 'category' | 'location' | 'class'>): boolean {
   if (f.category === 'partial') return false;
   if (f.location === 'cookie' || f.location === 'local-storage' || f.location === 'session-storage')
     return false;
@@ -31,10 +29,7 @@ export interface ScoreResult {
   ledger: PenaltyLine[];
 }
 
-export function scoreReport(
-  findings: Finding[],
-  thirdParties: ThirdPartyContact[],
-): ScoreResult {
+export function scoreReport(findings: Finding[], thirdParties: ThirdPartyContact[]): ScoreResult {
   const ledger: PenaltyLine[] = [];
   let lineNo = 0;
   const nextId = () => `p${++lineNo}`;
@@ -76,8 +71,7 @@ export function scoreReport(
       ...new Set(
         thirdParties
           .filter(
-            (t) =>
-              t.class !== 'first-party' && t.class !== 'anon-rpc' && t.phases.includes(phase),
+            (t) => t.class !== 'first-party' && t.class !== 'anon-rpc' && t.phases.includes(phase),
           )
           .map((t) => t.registrableDomain),
       ),

@@ -14,23 +14,24 @@ Last updated: 2026-11-06 (M0–M7 done; polish/review pass in progress)
   for node_modules (an install didn't finish in 20+ minutes there; 7s on
   local disk). Development used a fast local clone pushing back to
   /Volumes/Igris after every commit (`receive.denyCurrentBranch=
-  updateInstead`). To resume: clone to a local directory and work there.
+updateInstead`). To resume: clone to a local directory and work there.
   Leftover: `/Volumes/Igris/.trash-node_modules` (a dead partial install) is
   gitignored and should be deleted by a human — automated deletion at the
   drive root is blocked on this machine.
 
 ## Milestones
 
-| Milestone | Status | Definition-of-done |
-| --- | --- | --- |
-| M0 scaffold | **done** | `pnpm install && pnpm lint && pnpm test` ✅ |
-| M1 core | **done** | 70 core unit tests incl. per-encoding, false-positive, dedup, ledger ✅ |
-| M2 scanner | **done** | `pnpm --filter @igris/scanner test:e2e` offline, 22 tests incl. determinism ✅ |
-| M3 CLI | **done** | leaky scan `--fail-under 90` exits 1; fixed exits 0 (cli.e2e.ts + demo) ✅ |
-| M4 patcher | **done** | fix prints expected diff; `--write` ×2 → empty diff; rescan proof on viem+ethers+wagmi ✅ |
-| M5 Arkiv+viewer | **done** (publish 🟡) | local publish/query round-trip ✅; viewer renders + zero-network e2e ✅; live Arkiv READ verified ✅; live publish needs funded key 🟡 |
-| M6 stretch | **done** | batch scan ✅ verified; CI gate ✅ verified; extension stub 🟡 untested in a real browser (honest README) |
-| M7 docs+demo | **done** | `pnpm demo` offline in ~21s warm / <2 min cold, regenerates examples/ ✅ |
+| Milestone                     | Status   | Definition-of-done                                                                                                   |
+| ----------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| M0 scaffold                   | **done** | `pnpm install && pnpm lint && pnpm test` ✅                                                                          |
+| M1 core                       | **done** | 70 core unit tests incl. per-encoding, false-positive, dedup, ledger ✅                                              |
+| M2 scanner                    | **done** | `pnpm --filter @igris/scanner test:e2e` offline, 22 tests incl. determinism ✅                                       |
+| M3 CLI                        | **done** | leaky scan `--fail-under 90` exits 1; fixed exits 0 (cli.e2e.ts + demo) ✅                                           |
+| M4 patcher                    | **done** | fix prints expected diff; `--write` ×2 → empty diff; rescan proof on viem+ethers+wagmi ✅                            |
+| M5 Arkiv+viewer               | **done** | local publish/query round-trip ✅; viewer renders + zero-network e2e ✅; live Arkiv READ verified ✅; pinned key set |
+| M6 stretch                    | **done** | batch scan ✅ verified; CI gate ✅ verified; extension stub 🟡 untested in a real browser (honest README)            |
+| M7 docs+demo                  | **done** | `pnpm demo` offline in ~20s warm / <2 min cold, regenerates examples/ ✅                                             |
+| M8 full-stack API + modern UI | **done** | `@igris/api` live scan & repo patch worker, Dockerfile, Railway/Render configs, modern web UI ✅                     |
 
 ## Assumptions (all documented in the named files)
 
@@ -57,7 +58,7 @@ Last updated: 2026-11-06 (M0–M7 done; polish/review pass in progress)
    `DEFAULT_PINNED` in apps/web/src/main.ts.
 2. **Live Anon-RPC round-trip** — browser-only harness: serve a patched dapp
    (`fixtures/leaky-dapp-fixed` via `pnpm --filter
-   @igris/fixture-leaky-dapp-fixed dev`) in a real browser with a real wallet
+@igris/fixture-leaky-dapp-fixed dev`) in a real browser with a real wallet
    on mainnet and watch the Nym worker bootstrap (18 MB bundle, seconds).
 3. **Extension in a real browser** — extension/README.md steps.
 4. **GitHub Actions green** — .github/workflows/ci.yml is written but this
@@ -71,9 +72,9 @@ well inside budget; remaining time goes to adversarial review + polish.
 ## How to resume
 
 1. Clone /Volumes/Igris to a local directory; `pnpm install && pnpm exec
-   playwright install chromium chromium-headless-shell`.
+playwright install chromium chromium-headless-shell`.
 2. `pnpm lint && pnpm test && pnpm --filter @igris/scanner test:e2e && pnpm
-   demo` — all should pass (they did at the last commit here).
+demo` — all should pass (they did at the last commit here).
 3. Read this table + SUBMISSION_CHECKLIST.md for what's left (mostly
    TODO(human) items above); docs/PLAN.md has the design.
 4. Push commits back with `git push origin main`.

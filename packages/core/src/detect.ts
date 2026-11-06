@@ -82,7 +82,12 @@ export function findCanary(text: string, forms: CanaryForms): CanaryMatch[] {
           length: prefixed ? v.value.length + 2 : v.value.length,
         });
       } else {
-        matches.push({ encoding: v.encoding, category: v.category, index: idx, length: v.value.length });
+        matches.push({
+          encoding: v.encoding,
+          category: v.category,
+          index: idx,
+          length: v.value.length,
+        });
       }
     }
   }
@@ -110,7 +115,9 @@ export function findCanary(text: string, forms: CanaryForms): CanaryMatch[] {
   );
   const kept: CanaryMatch[] = [];
   for (const m of matches) {
-    const overlapping = kept.find((k) => m.index < k.index + k.length && k.index < m.index + m.length);
+    const overlapping = kept.find(
+      (k) => m.index < k.index + k.length && k.index < m.index + m.length,
+    );
     if (!overlapping) kept.push(m);
     // If it overlaps, the earlier/longer match already covers this region.
   }

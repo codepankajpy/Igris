@@ -15,7 +15,7 @@ way the destination could know that string.
 ## Two phases, one timeline
 
 - **Phase A (pre-connect)**: load the page, settle, record everything. This
-  is the *IP-exposure baseline*: what every visitor leaks to third parties
+  is the _IP-exposure baseline_: what every visitor leaks to third parties
   before touching a wallet (the third party learns IP + "visits this dapp").
 - **Phase B (post-connect)**: click a connect control (heuristics below),
   select our provider, settle, scroll once for lazy loads. Everything is
@@ -90,7 +90,7 @@ the anonymized traffic itself. See [ANON_RPC_NOTES.md](./ANON_RPC_NOTES.md).
   anyone invisibly. We only see the browser's traffic.
 - **Obfuscated or encrypted exfiltration**: a custom encoding, XOR, or E2E
   encryption of the payload defeats substring detection (we detect the
-  catalogued encodings only). Base64 of a *larger* document containing the
+  catalogued encodings only). Base64 of a _larger_ document containing the
   address is alignment-dependent and generally missed.
 - **WalletConnect-relayed flows**: pairing with a remote wallet routes data
   through the relay; we scan the injected-wallet path.
@@ -112,6 +112,6 @@ report field.
 Scan only public pages. One scan = one page load + one connect attempt — no
 crawling, no load generation (be mindful with `--dwell` loops). The mock
 wallet never signs transactions, never holds funds, and the canary is
-worthless by construction. Igris finds what a dapp *sends*, it never probes
+worthless by construction. Igris finds what a dapp _sends_, it never probes
 or exploits the dapp itself. Scan results are attestations tied to our
 scanner address; anyone can reproduce a scan to dispute us.

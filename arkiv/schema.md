@@ -6,18 +6,18 @@ One compact entity per scan, written by the scanner's wallet. Defined in
 
 ## Attributes
 
-| Attribute | Type | Indexed | Why |
-| --- | --- | --- | --- |
-| `hostname` | str | yes | the registry's primary lookup ("is this dapp scanned?") |
-| `score` | i32 | yes | range filters (`--min-score`, viewer slider) |
-| `scannedAt` | u64 (unix s) | yes | "latest N": Arkiv cannot sort on `$createdAt`, so we store our own timestamp and `ORDER BY scannedAt DESC` |
-| `leakCount` | i32 | yes | quick "has leaks" filters |
-| `thirdPartyCount` | i32 | yes | IP-exposure filters |
-| `usesAnonRpc` | bool | yes | the EF-bounty before/after story is queryable |
-| `leakClasses` | str | no | comma-joined class list (≤128 bytes); Arkiv has no substring operator, so class filtering is client-side anyway — unindexed is cheaper |
-| `scannerVersion`, `reportVersion`, `chainId` | str/str/i32 | no | provenance, returned with results |
-| `reportSha256` | str | no | sha256 (hex) of the exact `report.json` bytes — anyone holding the report can prove it matches this entity |
-| `summary` | bytes | n/a (bytes can't be indexed) | compact JSON: findings (class/location/encoding/category/host/phase), third parties, score ledger, reads-via-wallet. **No URLs, no snippets** — raw URLs can embed the canary |
+| Attribute                                    | Type         | Indexed                      | Why                                                                                                                                                                           |
+| -------------------------------------------- | ------------ | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hostname`                                   | str          | yes                          | the registry's primary lookup ("is this dapp scanned?")                                                                                                                       |
+| `score`                                      | i32          | yes                          | range filters (`--min-score`, viewer slider)                                                                                                                                  |
+| `scannedAt`                                  | u64 (unix s) | yes                          | "latest N": Arkiv cannot sort on `$createdAt`, so we store our own timestamp and `ORDER BY scannedAt DESC`                                                                    |
+| `leakCount`                                  | i32          | yes                          | quick "has leaks" filters                                                                                                                                                     |
+| `thirdPartyCount`                            | i32          | yes                          | IP-exposure filters                                                                                                                                                           |
+| `usesAnonRpc`                                | bool         | yes                          | the EF-bounty before/after story is queryable                                                                                                                                 |
+| `leakClasses`                                | str          | no                           | comma-joined class list (≤128 bytes); Arkiv has no substring operator, so class filtering is client-side anyway — unindexed is cheaper                                        |
+| `scannerVersion`, `reportVersion`, `chainId` | str/str/i32  | no                           | provenance, returned with results                                                                                                                                             |
+| `reportSha256`                               | str          | no                           | sha256 (hex) of the exact `report.json` bytes — anyone holding the report can prove it matches this entity                                                                    |
+| `summary`                                    | bytes        | n/a (bytes can't be indexed) | compact JSON: findings (class/location/encoding/category/host/phase), third parties, score ledger, reads-via-wallet. **No URLs, no snippets** — raw URLs can embed the canary |
 
 Schema names are versioned (`igris.scan.v1`); a breaking change ships as
 `igris.scan.v2` instead of corrupting old rows.
@@ -50,7 +50,7 @@ is exactly the behaviour a trust registry wants for unrefreshed claims.
 ## Queried fields in practice
 
 - Viewer list: `select('*').from(ScanSchema).where(and(gte('score', …),
-  eq('usesAnonRpc', …), eq('hostname', …))).orderBy(desc('scannedAt')).limit(…)`
+eq('usesAnonRpc', …), eq('hostname', …))).orderBy(desc('scannedAt')).limit(…)`
   plus `ownedBy(scanner)` when a scanner filter is set.
 - Snapshot (offline viewer + extension): full key-cursor walk
   (`$key > key(last) ORDER BY $key ASC`, pages of 100).

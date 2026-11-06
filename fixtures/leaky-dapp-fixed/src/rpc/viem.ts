@@ -5,7 +5,7 @@
  */
 import { createPublicClient, http } from 'viem';
 import { mainnet } from 'viem/chains';
-import { igrisAnonFetch } from "../igris-anon-rpc";
+import { igrisAnonFetch } from '../igris-anon-rpc';
 
 const RPC_URL = import.meta.env.VITE_RPC_URL ?? 'http://rpc.igris-rpc.test:38545';
 

@@ -22,8 +22,7 @@ function expectSingleMatch(text: string, encoding: string, category = 'exact') {
 describe('exact encodings — one test per form', () => {
   it('lowercase 0x', () => expectSingleMatch(`{"addr":"${CANARY}"}`, 'lowercase'));
   it('checksummed 0x', () => expectSingleMatch(`addr=${CHECKSUMMED}&x=1`, 'checksummed'));
-  it('uppercase 0x', () =>
-    expectSingleMatch(`0x${CORE.toUpperCase()} appears here`, 'uppercase'));
+  it('uppercase 0x', () => expectSingleMatch(`0x${CORE.toUpperCase()} appears here`, 'uppercase'));
   it('no-0x lowercase', () => expectSingleMatch(`id:${CORE};`, 'no-0x-lowercase'));
   it('no-0x uppercase', () => expectSingleMatch(`${CORE.toUpperCase()}`, 'no-0x-uppercase'));
   it('mixed case other than checksum', () => {
@@ -37,7 +36,10 @@ describe('exact encodings — one test per form', () => {
     expectSingleMatch(`0x${mixed}`, 'mixed-case');
   });
   it('ABI 32-byte padded with 0x (calldata)', () =>
-    expectSingleMatch(`"params":[{"data":"0x70a08231000000000000000000000000${CORE}"}]`, 'abi-padded-32'));
+    expectSingleMatch(
+      `"params":[{"data":"0x70a08231000000000000000000000000${CORE}"}]`,
+      'abi-padded-32',
+    ));
   it('ABI 32-byte padded without 0x (event topic fragment)', () =>
     expectSingleMatch(`topic:${abiPadded(CORE)}`, 'abi-padded-32'));
   it('base64 of lowercase 0x form', () =>
@@ -108,7 +110,9 @@ describe('partial display forms — low confidence', () => {
 describe('false positives', () => {
   const otherForms = buildCanaryForms(OTHER);
   it('a different address never matches', () => {
-    expect(findCanary(`${OTHER} ${getAddress(OTHER)} ${abiPadded(OTHER.slice(2))}`, forms)).toHaveLength(0);
+    expect(
+      findCanary(`${OTHER} ${getAddress(OTHER)} ${abiPadded(OTHER.slice(2))}`, forms),
+    ).toHaveLength(0);
   });
   it("the other address's own forms do match its own matcher (sanity)", () => {
     expect(findCanary(OTHER, otherForms)).toHaveLength(1);

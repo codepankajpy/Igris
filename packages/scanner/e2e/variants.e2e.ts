@@ -32,21 +32,16 @@ afterAll(async () => {
 });
 
 describe.each(['ethers', 'wagmi'] as const)('variant %s', (variant) => {
-  it(
-    `leaks the address to the RPC provider via ${variant}`,
-    async () => {
-      const report = await scan({
-        url: `http://leaky-dapp.test:${PAGE_PORT}/?variant=${variant}`,
-        hostResolverRules: HOST_RULES,
-        dwellMs: 1500,
-      });
-      expect(report.status).toBe('completed');
-      const rpcLeaks = report.findings.filter(
-        (f) =>
-          f.class === 'rpc-provider' && f.location === 'request-body' && f.category === 'exact',
-      );
-      expect(rpcLeaks.length).toBeGreaterThanOrEqual(1);
-    },
-    180_000,
-  );
+  it(`leaks the address to the RPC provider via ${variant}`, async () => {
+    const report = await scan({
+      url: `http://leaky-dapp.test:${PAGE_PORT}/?variant=${variant}`,
+      hostResolverRules: HOST_RULES,
+      dwellMs: 1500,
+    });
+    expect(report.status).toBe('completed');
+    const rpcLeaks = report.findings.filter(
+      (f) => f.class === 'rpc-provider' && f.location === 'request-body' && f.category === 'exact',
+    );
+    expect(rpcLeaks.length).toBeGreaterThanOrEqual(1);
+  }, 180_000);
 });

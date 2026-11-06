@@ -1,4 +1,4 @@
-import { anonJsonRpcProvider } from "../igris-anon-rpc";
+import { anonJsonRpcProvider } from '../igris-anon-rpc';
 
 const RPC_URL = import.meta.env.VITE_RPC_URL ?? 'http://rpc.igris-rpc.test:38545';
 

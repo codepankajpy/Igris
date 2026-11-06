@@ -47,25 +47,21 @@ afterAll(async () => {
 });
 
 describe.each(['viem', 'ethers', 'wagmi'] as const)('fixed fixture, %s variant', (variant) => {
-  it(
-    'no address reaches any RPC provider, and Anon-RPC usage is detected',
-    async () => {
-      const report = await scanVariant(variant);
-      expect(report.status).toBe('completed');
+  it('no address reaches any RPC provider, and Anon-RPC usage is detected', async () => {
+    const report = await scanVariant(variant);
+    expect(report.status).toBe('completed');
 
-      const rpcLeaks = report.findings.filter((f) => f.class === 'rpc-provider');
-      expect(rpcLeaks, JSON.stringify(rpcLeaks, null, 2)).toEqual([]);
+    const rpcLeaks = report.findings.filter((f) => f.class === 'rpc-provider');
+    expect(rpcLeaks, JSON.stringify(rpcLeaks, null, 2)).toEqual([]);
 
-      // No traffic to the RPC sink host at all.
-      const rpcContacts = report.thirdParties.filter((t) => t.class === 'rpc-provider');
-      expect(rpcContacts).toEqual([]);
+    // No traffic to the RPC sink host at all.
+    const rpcContacts = report.thirdParties.filter((t) => t.class === 'rpc-provider');
+    expect(rpcContacts).toEqual([]);
 
-      // The harness's one bootstrap eth_call went through our mock wallet.
-      expect(report.usesAnonRpc).toBe(true);
+    // The harness's one bootstrap eth_call went through our mock wallet.
+    expect(report.usesAnonRpc).toBe(true);
 
-      // The non-RPC leaks are untouched (igris fix fixes RPC reads, nothing else).
-      expect(report.findings.some((f) => f.class === 'analytics')).toBe(true);
-    },
-    180_000,
-  );
+    // The non-RPC leaks are untouched (igris fix fixes RPC reads, nothing else).
+    expect(report.findings.some((f) => f.class === 'analytics')).toBe(true);
+  }, 180_000);
 });

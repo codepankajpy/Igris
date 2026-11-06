@@ -112,7 +112,8 @@ export class TrafficRecorder {
           phase: this.phase,
           url,
           direction: 'sent',
-          payload: typeof frame.payload === 'string' ? frame.payload : frame.payload.toString('utf8'),
+          payload:
+            typeof frame.payload === 'string' ? frame.payload : frame.payload.toString('utf8'),
         }),
       );
       ws.on('framereceived', (frame) =>
@@ -120,7 +121,8 @@ export class TrafficRecorder {
           phase: this.phase,
           url,
           direction: 'received',
-          payload: typeof frame.payload === 'string' ? frame.payload : frame.payload.toString('utf8'),
+          payload:
+            typeof frame.payload === 'string' ? frame.payload : frame.payload.toString('utf8'),
         }),
       );
     });

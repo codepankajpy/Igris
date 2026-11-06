@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  loadThirdPartyDb,
-  validateThirdPartyDb,
-  ThirdPartyDbError,
-} from './third-parties.js';
+import { loadThirdPartyDb, validateThirdPartyDb, ThirdPartyDbError } from './third-parties.js';
 
 describe('data/third-parties.json', () => {
   it('validates against its schema', () => {
@@ -14,7 +10,9 @@ describe('data/third-parties.json', () => {
 
   it('every entry has a source note', () => {
     for (const e of loadThirdPartyDb().entries) {
-      expect(e.source, `${e.name} must cite a source`).toMatch(/^(https?:\/\/|observed in fixture)/);
+      expect(e.source, `${e.name} must cite a source`).toMatch(
+        /^(https?:\/\/|observed in fixture)/,
+      );
     }
   });
 

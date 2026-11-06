@@ -7,7 +7,7 @@ how to reproduce.
 
 - **Expected** (from older Golem-Base/Arkiv material and our own brief):
   entities with a "payload", "annotations" and a "BTL" lifetime.
-- **Happened**: the current docs and SDK v1.x use typed attribute *columns*,
+- **Happened**: the current docs and SDK v1.x use typed attribute _columns_,
   a named-schema tag (`arkiv.schema`), and `expiration` built from
   `ExpirationTime` in **blocks**. No "payload"/"annotations"/"BTL" anywhere.
 - **Repro**: compare any pre-2026 Arkiv/GolemDB tutorial with
@@ -69,7 +69,7 @@ how to reproduce.
 ## 7. Reads reveal the reader's IP
 
 Not a bug — inherent to any hosted RPC — but worth logging: a privacy
-registry whose *viewer* leaks every reader's interest to one endpoint would
+registry whose _viewer_ leaks every reader's interest to one endpoint would
 be ironic. Mitigations we shipped: user-configurable endpoint, offline
 snapshot mode (`igris snapshot` → `snapshot.json`), and the extension stub
 matches locally against a snapshot instead of querying per visited site.

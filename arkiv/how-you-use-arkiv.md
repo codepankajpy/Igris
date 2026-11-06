@@ -9,7 +9,7 @@
   it), chain `rabdi({ accessKey })`, transport `http()` (endpoint overridable
   with `ARKIV_RPC_URL` / `--rpc-url`);
 - `walletClient.createEntity(ScanSchema, values, { expiration:
-  ExpirationTime.fromDays(30) })` — one entity per scan, schema
+ExpirationTime.fromDays(30) })` — one entity per scan, schema
   `igris.scan.v1` ([schema.md](./schema.md));
 - the `summary` bytes column holds redacted compact JSON; `reportSha256`
   binds the entity to the exact `report.json`.
@@ -17,9 +17,9 @@
 ## Reads (CLI and the static viewer — reads drive visible features)
 
 - `igris query --hostname h --min-score n --max-score n --class c --since iso
-  --scanner 0x… --uses-anon-rpc true|false` → SDK query builder:
+--scanner 0x… --uses-anon-rpc true|false` → SDK query builder:
   `select('*').from(ScanSchema).where(and(eq/gte/lte/…)).ownedBy(scanner)
-  .orderBy(desc('scannedAt')).limit(n)`.
+.orderBy(desc('scannedAt')).limit(n)`.
 - The viewer (apps/web) runs the same query from the browser against a
   **user-configurable** endpoint, renders the result list (latest entity per
   hostname per scanner, "N scanners agree"), and a per-dapp detail page from

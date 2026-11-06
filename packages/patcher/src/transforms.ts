@@ -51,14 +51,9 @@ function calleeMatches(text: string, names: Set<string>): boolean {
 
 /** Ensure `import { named } from '<rel path to shim>'` exists in sf. */
 function ensureShimImport(sf: SourceFile, shimDir: string, named: string): void {
-  let rel = relative(dirname(sf.getFilePath()), join(shimDir, SHIM_BASENAME)).replaceAll(
-    '\\',
-    '/',
-  );
+  let rel = relative(dirname(sf.getFilePath()), join(shimDir, SHIM_BASENAME)).replaceAll('\\', '/');
   if (!rel.startsWith('.')) rel = './' + rel;
-  const existing = sf
-    .getImportDeclarations()
-    .find((i) => i.getModuleSpecifierValue() === rel);
+  const existing = sf.getImportDeclarations().find((i) => i.getModuleSpecifierValue() === rel);
   if (existing) {
     if (!existing.getNamedImports().some((n) => n.getName() === named)) {
       existing.addNamedImport(named);
@@ -156,13 +151,15 @@ export function transformProject(
             .getDescendantsOfKind(SyntaxKind.Identifier)
             .some(
               (id) =>
-                id.getText() === local &&
-                id !== named.getNameNode() &&
-                id !== named.getAliasNode(),
+                id.getText() === local && id !== named.getNameNode() && id !== named.getAliasNode(),
             );
           if (!stillUsed) named.remove();
         }
-        if (imp.getNamedImports().length === 0 && !imp.getNamespaceImport() && !imp.getDefaultImport()) {
+        if (
+          imp.getNamedImports().length === 0 &&
+          !imp.getNamespaceImport() &&
+          !imp.getDefaultImport()
+        ) {
           imp.remove();
         }
       }

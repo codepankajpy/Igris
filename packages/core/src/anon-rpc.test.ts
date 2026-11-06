@@ -18,7 +18,9 @@ describe('anon-rpc bootstrap detection', () => {
   });
 
   it('ignores other methods and other selectors', () => {
-    expect(isAnonRpcBootstrapCall('eth_getBalance', [{ data: ANON_RPC_SPECIFIER_SELECTORS[0] }])).toBe(false);
+    expect(
+      isAnonRpcBootstrapCall('eth_getBalance', [{ data: ANON_RPC_SPECIFIER_SELECTORS[0] }]),
+    ).toBe(false);
     expect(isAnonRpcBootstrapCall('eth_call', [{ data: '0x70a08231' }])).toBe(false);
     expect(isAnonRpcBootstrapCall('eth_call', [])).toBe(false);
     expect(isAnonRpcBootstrapCall('eth_call', 'nonsense')).toBe(false);

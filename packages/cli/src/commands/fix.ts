@@ -56,7 +56,9 @@ export async function runFix(argv: string[]): Promise<{ exitCode: number }> {
   }
 
   if (!result.diff) {
-    process.stderr.write('igris fix: nothing to change (already patched, or no known RPC patterns found)\n');
+    process.stderr.write(
+      'igris fix: nothing to change (already patched, or no known RPC patterns found)\n',
+    );
   } else {
     process.stdout.write(result.diff);
     process.stderr.write(

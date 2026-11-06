@@ -9,12 +9,7 @@
  */
 import { chromium, type Browser, type LaunchOptions } from 'playwright';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import {
-  loadThirdPartyDb,
-  type Report,
-  type ScanStatus,
-  type ThirdPartyEntry,
-} from '@igris/core';
+import { loadThirdPartyDb, type Report, type ScanStatus, type ThirdPartyEntry } from '@igris/core';
 import { TrafficRecorder } from './capture.js';
 import { connectWallet, isWalletConnected, type Recipe } from './connect.js';
 import { WalletReadHandler } from './stub-rpc.js';

@@ -102,9 +102,7 @@ export async function runScan(argv: string[]): Promise<ScanCliResult> {
     ...(values['live-reads'] ? { liveReadsUrl: values['live-reads'] } : {}),
     ...(values['first-party'] ? { firstParty: values['first-party'].split(',') } : {}),
     ...(recipe ? { recipe } : {}),
-    ...(values['host-resolver-rules']
-      ? { hostResolverRules: values['host-resolver-rules'] }
-      : {}),
+    ...(values['host-resolver-rules'] ? { hostResolverRules: values['host-resolver-rules'] } : {}),
   };
 
   let report: Report;
@@ -137,7 +135,9 @@ export async function runScan(argv: string[]): Promise<ScanCliResult> {
 function printSummary(report: Report, explain: boolean): void {
   const w = process.stdout.write.bind(process.stdout);
   w(`\nIgris scan: ${report.hostname}  —  status: ${report.status}\n`);
-  w(`score: ${report.score}/100   usesAnonRpc: ${report.usesAnonRpc}   canary: ${report.canaryAddress}\n\n`);
+  w(
+    `score: ${report.score}/100   usesAnonRpc: ${report.usesAnonRpc}   canary: ${report.canaryAddress}\n\n`,
+  );
 
   const counted = report.findings.filter((f) => f.countsTowardScore);
   const informational = report.findings.filter((f) => !f.countsTowardScore);
@@ -181,7 +181,13 @@ function printSummary(report: Report, explain: boolean): void {
     w(
       renderTable(
         ['#', 'rule', 'points', 'findings', 'why'],
-        report.ledger.map((l) => [l.id, l.rule, `−${l.points}`, l.findingIds.join(',') || '—', l.label]),
+        report.ledger.map((l) => [
+          l.id,
+          l.rule,
+          `−${l.points}`,
+          l.findingIds.join(',') || '—',
+          l.label,
+        ]),
       ) + '\n',
     );
   }

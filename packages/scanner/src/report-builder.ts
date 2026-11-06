@@ -155,9 +155,7 @@ export function buildReport(input: BuildReportInput): Report {
   const deduped = new Map<string, RawFinding>();
   for (const f of raw) if (!deduped.has(keyOf(f))) deduped.set(keyOf(f), f);
 
-  const sorted = [...deduped.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([, f]) => f);
+  const sorted = [...deduped.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, f]) => f);
   const findings: Finding[] = sorted.map((f, i) => ({ id: `f${i + 1}`, ...f }));
 
   // Third-party contacts per phase (IP exposure), including hosts that never

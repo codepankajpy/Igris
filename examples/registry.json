@@ -4,7 +4,7 @@
     {
       "hostname": "leaky-dapp.test",
       "score": 0,
-      "scannedAt": 1793926754,
+      "scannedAt": 1793957958,
       "scannerVersion": "0.1.0",
       "reportVersion": "1.0.0",
       "chainId": 1,
@@ -12,12 +12,12 @@
       "leakCount": 5,
       "leakClasses": "analytics,cdn,error-monitoring,rpc-provider",
       "usesAnonRpc": false,
-      "reportSha256": "52cad091bf39a72b9f0827942c6976b5c1812c8b5fbf3022e43599e9d6b957b1",
+      "reportSha256": "a0a380d2999c1ea19a08f11e95ff2165a1ca6d4b339aa643ea88d9af205a01e8",
       "summary": {
         "v": 1,
         "status": "completed",
         "spoofMetaMask": true,
-        "canaryAddress": "0xDf10cf0499D765BB0880AEf048CE3Caa84a76855",
+        "canaryAddress": "0x8ea50Ce8808e816615833Ae3C2cB568DB314b214",
         "findings": [
           {
             "class": "analytics",
@@ -143,13 +143,13 @@
         ],
         "readsViaWallet": []
       },
-      "id": "local-leaky-dapp.test-1793926754-1",
+      "id": "local-leaky-dapp.test-1793957958-1",
       "scanner": "local"
     },
     {
       "hostname": "leaky-dapp.test",
       "score": 17,
-      "scannedAt": 1793926761,
+      "scannedAt": 1793957965,
       "scannerVersion": "0.1.0",
       "reportVersion": "1.0.0",
       "chainId": 1,
@@ -157,12 +157,12 @@
       "leakCount": 4,
       "leakClasses": "analytics,cdn,error-monitoring",
       "usesAnonRpc": true,
-      "reportSha256": "57e8cb8e326582505b455208d02b6a543a615c6e634e4ec1109cc57f276c6a9e",
+      "reportSha256": "65029fa06e2cd3766fa462f904df7433a45a69b25f87aaf83a1f9dd48122bd5b",
       "summary": {
         "v": 1,
         "status": "completed",
         "spoofMetaMask": true,
-        "canaryAddress": "0x1B6eBc15e2B51c8E72C79e4c51808c0E56f18cc0",
+        "canaryAddress": "0x0Fd7fA0A0b6804C07df457860AD657931b7Ec27c",
         "findings": [
           {
             "class": "analytics",
@@ -272,7 +272,7 @@
           }
         ]
       },
-      "id": "local-leaky-dapp.test-1793926761-2",
+      "id": "local-leaky-dapp.test-1793957965-2",
       "scanner": "local"
     }
   ]

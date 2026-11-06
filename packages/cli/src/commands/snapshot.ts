@@ -39,10 +39,7 @@ export async function runSnapshot(argv: string[]): Promise<{ exitCode: number }>
   try {
     const backend = makeBackend(parsed.values);
     const records = await backend.snapshot();
-    writeFileSync(
-      parsed.values.out,
-      JSON.stringify({ version: 1, records }, null, 2) + '\n',
-    );
+    writeFileSync(parsed.values.out, JSON.stringify({ version: 1, records }, null, 2) + '\n');
     process.stdout.write(`${records.length} record(s) → ${parsed.values.out}\n`);
     return { exitCode: EXIT.OK };
   } catch (err) {

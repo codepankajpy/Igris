@@ -3,10 +3,10 @@
   "scannerVersion": "0.1.0",
   "target": "http://leaky-dapp.test:38546/",
   "hostname": "leaky-dapp.test",
-  "scannedAt": "2026-11-06T00:59:14.996Z",
+  "scannedAt": "2026-11-06T09:39:18.314Z",
   "chainId": 1,
   "status": "completed",
-  "canaryAddress": "0xDf10cf0499D765BB0880AEf048CE3Caa84a76855",
+  "canaryAddress": "0x8ea50Ce8808e816615833Ae3C2cB568DB314b214",
   "spoofMetaMask": true,
   "findings": [
     {

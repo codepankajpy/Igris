@@ -14,9 +14,9 @@ Usage: `igris scan <url> --recipe recipes/example.json`
   "steps": [
     {
       "click": "<Playwright selector>", // CSS, text=…, role=… all work
-      "waitMs": 500                     // optional pause after the click (default 500)
-    }
-  ]
+      "waitMs": 500, // optional pause after the click (default 500)
+    },
+  ],
 }
 ```
 

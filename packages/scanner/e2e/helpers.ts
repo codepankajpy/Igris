@@ -55,9 +55,7 @@ export function serveDist(distDir: string, port: number): Promise<Server> {
 }
 
 export async function startSinkServer(): Promise<{ server: Server; close: () => Promise<void> }> {
-  const mod = await import(
-    join(REPO_ROOT, 'fixtures/third-party-sink/src/server.js')
-  );
+  const mod = await import(join(REPO_ROOT, 'fixtures/third-party-sink/src/server.js'));
   const { server } = await mod.startSink(SINK_PORT);
   return {
     server,

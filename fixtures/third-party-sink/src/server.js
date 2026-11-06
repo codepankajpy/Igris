@@ -95,7 +95,9 @@ export function startSink(port = 0) {
         if (req.url?.startsWith('/pixel')) {
           res.writeHead(200, { ...cors, 'content-type': 'image/gif' });
           // 1x1 transparent GIF
-          res.end(Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'));
+          res.end(
+            Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'),
+          );
           return;
         }
         res.writeHead(200, { ...cors, 'content-type': 'application/javascript' });

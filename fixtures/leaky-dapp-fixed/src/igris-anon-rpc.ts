@@ -74,10 +74,7 @@ export function anonJsonRpcProvider(
   req.getUrlFunc = async (r, _signal) => {
     const res = await igrisAnonFetch(r.url, {
       method: r.method,
-      headers: Object.fromEntries(
-        [...r]
-          .map(([k, v]) => [k, String(v)] as [string, string]),
-      ),
+      headers: Object.fromEntries([...r].map(([k, v]) => [k, String(v)] as [string, string])),
       body: r.body ? new Uint8Array(r.body) : undefined,
     });
     return {

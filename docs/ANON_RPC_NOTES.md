@@ -22,10 +22,10 @@ Package: `@anon-rpc/browser-harness@0.4.0` (ESM, browser-only; deps `@anon-rpc/h
 `@kpstreams/webrtc-client`, `@noble/hashes`; no peer deps). Exports `AnonRpcWorker`, `RpcError`.
 
 ```ts
-import { AnonRpcWorker } from "@anon-rpc/browser-harness";
+import { AnonRpcWorker } from '@anon-rpc/browser-harness';
 
 const worker = new AnonRpcWorker({
-  address: "0x…", // the network's IWorkerSpecifier contract address
+  address: '0x…', // the network's IWorkerSpecifier contract address
   config: undefined, // network-defined, opaque to the harness
   preExisting: {
     // Used ONCE, to read the specifier contract (workerHash()/workerResolvers()).
@@ -36,10 +36,10 @@ const worker = new AnonRpcWorker({
 
 // worker.fetch is this-bound and standard-fetch-shaped; calls made before
 // readiness are buffered, not dropped.
-const res = await worker.fetch("https://rpc.example/", {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }),
+const res = await worker.fetch('https://rpc.example/', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }),
 });
 ```
 
@@ -64,12 +64,12 @@ Anonymization is **chain-agnostic transport**: `worker.fetch` takes any URL, so 
 chain your RPC URL serves. The chain-specific part is where the **specifier contract** lives —
 the bootstrap `rpcProvider` must answer for that chain. Deployed networks (adopters.json5):
 
-| Network | Specifier address | Specifier chain | Notes |
-| --- | --- | --- | --- |
-| passthrough | `0x4fd77be300f31c5fe6ab266d35d27750a3478d27` | mainnet (1) | reference only — **no anonymization** |
-| tor-js | `0x700dA3193D35fA54Cd3fBf29B66f2a2A0385659e` | mainnet (1) | needs `config.gateways`; published gateway is demo-capacity |
-| nym | `0x3aCD9742C68F6d993066Ae25533e09b9e1f60eD0` | mainnet (1) | ~18 MB bundle, seconds to bootstrap |
-| nox | `0x35133267A8F7EC35046a83DCA0f4Ca8A6e1b7A9A` | Sepolia (11155111) | Sphinx mixnet demo |
+| Network     | Specifier address                            | Specifier chain    | Notes                                                       |
+| ----------- | -------------------------------------------- | ------------------ | ----------------------------------------------------------- |
+| passthrough | `0x4fd77be300f31c5fe6ab266d35d27750a3478d27` | mainnet (1)        | reference only — **no anonymization**                       |
+| tor-js      | `0x700dA3193D35fA54Cd3fBf29B66f2a2A0385659e` | mainnet (1)        | needs `config.gateways`; published gateway is demo-capacity |
+| nym         | `0x3aCD9742C68F6d993066Ae25533e09b9e1f60eD0` | mainnet (1)        | ~18 MB bundle, seconds to bootstrap                         |
+| nox         | `0x35133267A8F7EC35046a83DCA0f4Ca8A6e1b7A9A` | Sepolia (11155111) | Sphinx mixnet demo                                          |
 
 Our patcher defaults to **nym** (real anonymization, no required config) and makes the specifier
 address configurable; this choice and its trade-offs are repeated in the generated shim's
@@ -84,9 +84,9 @@ comments.
   on-chain `workerHash()` — "the hash is the identity"; resolvers/CDNs are untrusted.
 - The one bootstrap read (`workerHash()`/`workerResolvers()`) goes through the dapp's existing
   provider, is NOT anonymized, and "reveals only that you're reading a specifier contract".
-- So the honest claim after `igris fix` is: *RPC reads no longer reveal the user's IP or address
+- So the honest claim after `igris fix` is: _RPC reads no longer reveal the user's IP or address
   to the RPC provider; the chosen anonymizing network's exit sees the requests; the wallet (and
-  anything the dapp sends elsewhere) is unchanged.* Transactions still go through the wallet.
+  anything the dapp sends elsewhere) is unchanged._ Transactions still go through the wallet.
 
 ## How we detect "already uses Anon-RPC" in a scan
 
@@ -101,7 +101,7 @@ not claim to see the anonymized traffic itself; METHODOLOGY.md lists this as a k
 
 - npmjs.com returns 403 to plain fetchers; package metadata had to come from the registry API.
 - The harness is browser-only ("A native harness would be a separate package"), so the scanner
-  cannot exercise an Anon-RPC round-trip offline in Node; our e2e asserts the *absence* of RPC
+  cannot exercise an Anon-RPC round-trip offline in Node; our e2e asserts the _absence_ of RPC
   leaks in the patched fixture plus the bootstrap-selector detection, and we mark live Anon-RPC
   round-trips as requiring a manual browser run.
 - Self-described "prototype-grade reference implementation of a draft spec; interfaces track the

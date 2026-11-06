@@ -36,19 +36,33 @@ function contact(partial: Partial<ThirdPartyContact>): ThirdPartyContact {
 
 describe('countsTowardScore', () => {
   it('excludes partial matches', () => {
-    expect(countsTowardScore({ category: 'partial', location: 'url', class: 'analytics' })).toBe(false);
+    expect(countsTowardScore({ category: 'partial', location: 'url', class: 'analytics' })).toBe(
+      false,
+    );
   });
   it('excludes locally persisted findings', () => {
-    expect(countsTowardScore({ category: 'exact', location: 'local-storage', class: 'analytics' })).toBe(false);
-    expect(countsTowardScore({ category: 'exact', location: 'cookie', class: 'analytics' })).toBe(false);
+    expect(
+      countsTowardScore({ category: 'exact', location: 'local-storage', class: 'analytics' }),
+    ).toBe(false);
+    expect(countsTowardScore({ category: 'exact', location: 'cookie', class: 'analytics' })).toBe(
+      false,
+    );
   });
   it('excludes first-party and anon-rpc', () => {
-    expect(countsTowardScore({ category: 'exact', location: 'url', class: 'first-party' })).toBe(false);
-    expect(countsTowardScore({ category: 'exact', location: 'url', class: 'anon-rpc' })).toBe(false);
+    expect(countsTowardScore({ category: 'exact', location: 'url', class: 'first-party' })).toBe(
+      false,
+    );
+    expect(countsTowardScore({ category: 'exact', location: 'url', class: 'anon-rpc' })).toBe(
+      false,
+    );
   });
   it('counts exact and hashed third-party leaks', () => {
-    expect(countsTowardScore({ category: 'exact', location: 'url', class: 'rpc-provider' })).toBe(true);
-    expect(countsTowardScore({ category: 'hashed', location: 'request-body', class: 'analytics' })).toBe(true);
+    expect(countsTowardScore({ category: 'exact', location: 'url', class: 'rpc-provider' })).toBe(
+      true,
+    );
+    expect(
+      countsTowardScore({ category: 'hashed', location: 'request-body', class: 'analytics' }),
+    ).toBe(true);
   });
 });
 

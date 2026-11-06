@@ -59,7 +59,8 @@ function fail(path: string, msg: string): never {
 
 /** Validate an arbitrary parsed JSON value against the schema above. */
 export function validateThirdPartyDb(data: unknown): ThirdPartyDb {
-  if (typeof data !== 'object' || data === null || Array.isArray(data)) fail('$', 'must be an object');
+  if (typeof data !== 'object' || data === null || Array.isArray(data))
+    fail('$', 'must be an object');
   const obj = data as Record<string, unknown>;
   if (!Number.isInteger(obj.version)) fail('version', 'must be an integer');
   if (!Array.isArray(obj.entries)) fail('entries', 'must be an array');
@@ -68,7 +69,8 @@ export function validateThirdPartyDb(data: unknown): ThirdPartyDb {
     const p = `entries[${i}]`;
     if (typeof e !== 'object' || e === null) fail(p, 'must be an object');
     const entry = e as Record<string, unknown>;
-    if (typeof entry.name !== 'string' || !entry.name) fail(`${p}.name`, 'must be a non-empty string');
+    if (typeof entry.name !== 'string' || !entry.name)
+      fail(`${p}.name`, 'must be a non-empty string');
     if (typeof entry.class !== 'string' || !classes.has(entry.class))
       fail(`${p}.class`, `must be one of ${[...classes].join(', ')}`);
     if (!Array.isArray(entry.domains) || entry.domains.length === 0)

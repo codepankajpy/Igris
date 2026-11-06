@@ -82,7 +82,13 @@ describe('renderHtmlReport', () => {
     usesAnonRpc: false,
     score: 75,
     ledger: [
-      { id: 'p1', label: 'address reached a.test (analytics)', points: 25, rule: 'leak.analytics', findingIds: ['f1'] },
+      {
+        id: 'p1',
+        label: 'address reached a.test (analytics)',
+        points: 25,
+        rule: 'leak.analytics',
+        findingIds: ['f1'],
+      },
     ],
     errors: [],
   };

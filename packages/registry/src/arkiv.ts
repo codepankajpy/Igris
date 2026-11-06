@@ -5,11 +5,7 @@
  * fact. Anyone can write entities with our schema tag, so every consumer
  * (CLI and viewer) filters by $owner against pinned scanner addresses.
  */
-import {
-  createPublicClient,
-  createWalletClient,
-  ExpirationTime,
-} from '@arkiv-network/sdk';
+import { createPublicClient, createWalletClient, ExpirationTime } from '@arkiv-network/sdk';
 import { rabdi } from '@arkiv-network/sdk/chains';
 import { and, asc, desc, eq, gt, gte, lte } from '@arkiv-network/sdk/query';
 import { bool, i32, key, u64 } from '@arkiv-network/sdk/schema';
@@ -102,7 +98,9 @@ export class ArkivRegistry implements RegistryBackend {
     if (q.maxScore !== undefined) conditions.push(lte('score', i32(q.maxScore)));
     if (q.usesAnonRpc !== undefined) conditions.push(eq('usesAnonRpc', bool(q.usesAnonRpc)));
     if (q.since !== undefined)
-      conditions.push(gte('scannedAt', u64(BigInt(Math.floor(new Date(q.since).getTime() / 1000)))));
+      conditions.push(
+        gte('scannedAt', u64(BigInt(Math.floor(new Date(q.since).getTime() / 1000)))),
+      );
 
     let builder: any = this.publicClient()
       .select('*')

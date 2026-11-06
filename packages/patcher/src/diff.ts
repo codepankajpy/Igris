@@ -132,5 +132,7 @@ export function newFileDiff(path: string, content: string): string {
   const { lines, hasEol } = splitLines(content);
   const body = lines.map((l) => '+' + l);
   if (!hasEol) body.push(NO_EOL);
-  return [`--- /dev/null`, `+++ b/${path}`, `@@ -0,0 +1,${lines.length} @@`, ...body].join('\n') + '\n';
+  return (
+    [`--- /dev/null`, `+++ b/${path}`, `@@ -0,0 +1,${lines.length} @@`, ...body].join('\n') + '\n'
+  );
 }

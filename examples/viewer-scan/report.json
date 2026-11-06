@@ -3,17 +3,17 @@
   "scannerVersion": "0.1.0",
   "target": "http://igris-viewer.test:38550/",
   "hostname": "igris-viewer.test",
-  "scannedAt": "2026-11-06T00:59:27.600Z",
+  "scannedAt": "2026-11-06T09:39:31.359Z",
   "chainId": 1,
   "status": "wallet-connect-failed",
-  "canaryAddress": "0xeDE9e5946040002faDE6A0da8B101De34307349f",
+  "canaryAddress": "0xabc425a58a8c3d7FE775f0FaB29D9e0e80254F30",
   "spoofMetaMask": true,
   "findings": [],
   "thirdParties": [
     {
       "host": "rpc.rabdi.db-chain.testnet.arkiv.network",
       "registrableDomain": "arkiv.network",
-      "class": "unknown-third-party",
+      "class": "rpc-provider",
       "phases": [
         "pre-connect"
       ],

@@ -16,6 +16,11 @@
     "build": "pnpm -r build",
     "test": "pnpm -r --no-bail test",
     "test:e2e": "pnpm --filter @igris/scanner test:e2e",
+    "web:dev": "pnpm --filter @igris/web dev",
+    "web:build": "pnpm --filter @igris/web build",
+    "api:dev": "pnpm --filter @igris/api dev",
+    "api:build": "pnpm --filter @igris/api build",
+    "api:start": "pnpm --filter @igris/api start",
     "igris": "tsx packages/cli/src/main.ts",
     "demo": "tsx scripts/demo.ts"
   },

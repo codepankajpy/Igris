@@ -6,7 +6,7 @@ Igris tells dapp developers and users which third parties learn a user's
 wallet address — and which learn their IP even without an address.
 
 - **Provable, not vibes**: the scanner's mock wallet exposes a throwaway
-  *canary* address that never existed before the scan; any captured request
+  _canary_ address that never existed before the scan; any captured request
   containing it (14+ encodings, hashed forms flagged separately) is a leak
   with evidence attached.
 - **Fixable, not just gradable**: `igris fix` rewrites viem/ethers/wagmi RPC
@@ -52,10 +52,10 @@ pnpm igris snapshot --registry local --out snapshot.json
 scan the fixed fixture → publish both to a local registry → query it back →
 snapshot → scan **our own registry viewer** — and prints the before/after:
 
-| dapp | score | RPC leaks | usesAnonRpc |
-| --- | --- | --- | --- |
-| leaky-dapp (before) | 0 | 1 | false |
-| leaky-dapp (after `igris fix`) | 17 | 0 | **true** |
+| dapp                           | score | RPC leaks | usesAnonRpc |
+| ------------------------------ | ----- | --------- | ----------- |
+| leaky-dapp (before)            | 0     | 1         | false       |
+| leaky-dapp (after `igris fix`) | 17    | 0         | **true**    |
 
 (The remaining 17-score leaks are the planted analytics/error-monitor/pixel
 leaks — `igris fix` honestly fixes only RPC reads.)
@@ -78,7 +78,8 @@ flowchart LR
   K --> X[Extension stub<br/>local snapshot match]
 ```
 
-Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+Details: [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) (Complete plain-English guide & deployment),
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [docs/METHODOLOGY.md](docs/METHODOLOGY.md),
 [docs/SCORING.md](docs/SCORING.md),
 [docs/ANON_RPC_NOTES.md](docs/ANON_RPC_NOTES.md),
@@ -98,12 +99,12 @@ How Igris holds up against the EF Mandate's non-negotiables
 - **O — Open Source and Free.** MIT, no black boxes: a user can clone, build,
   test and run everything from this repo alone, offline, with no secrets, in
   under 10 minutes (`pnpm install && pnpm demo`). Forkable by design.
-- **P — Privacy.** What each party learns: a *scanned dapp's* third parties
-  receive only a worthless throwaway canary. The *scanner* sends nothing
+- **P — Privacy.** What each party learns: a _scanned dapp's_ third parties
+  receive only a worthless throwaway canary. The _scanner_ sends nothing
   anywhere by default (wallet reads are stubbed; `--live-reads` is an
-  explicit opt-in). The *Arkiv RPC* learns the publisher's IP on writes and a
+  explicit opt-in). The _Arkiv RPC_ learns the publisher's IP on writes and a
   viewer-user's IP on reads — so the endpoint is user-configurable and a
-  fully offline snapshot mode exists. The *Anon-RPC relay/exit* of a patched
+  fully offline snapshot mode exists. The _Anon-RPC relay/exit_ of a patched
   dapp sees the RPC requests instead of the RPC provider seeing the user —
   trade-offs stated in [docs/ANON_RPC_NOTES.md](docs/ANON_RPC_NOTES.md). The
   extension stub never queries per visited site.

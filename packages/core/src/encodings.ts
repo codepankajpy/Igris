@@ -164,7 +164,11 @@ export function buildCanaryForms(address: string): CanaryForms {
     });
     const b = b64Bytes(hexNo0x);
     for (const v of b64Variants(label, b)) {
-      variants.push({ ...v, encoding: v.encoding.replace('base64', 'base64-digest'), category: 'hashed' });
+      variants.push({
+        ...v,
+        encoding: v.encoding.replace('base64', 'base64-digest'),
+        category: 'hashed',
+      });
     }
   }
 

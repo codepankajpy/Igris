@@ -81,7 +81,10 @@ describe('igris CLI', () => {
   it('leaky fixture: --fail-under 90 exits 1; --json prints only the report; artifacts written', async () => {
     // Both local servers must answer before the scan: the fixture's deferred
     // sink scripts block DOMContentLoaded, so a dead sink reads as a dead page.
-    const sinkAlive = await fetch('http://127.0.0.1:38545/').then((r) => r.ok, () => false);
+    const sinkAlive = await fetch('http://127.0.0.1:38545/').then(
+      (r) => r.ok,
+      () => false,
+    );
     const pageAlive = await fetch(PAGE_URL.replace('leaky-dapp.test', '127.0.0.1')).then(
       (r) => r.ok,
       () => false,

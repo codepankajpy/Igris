@@ -17,7 +17,10 @@ export default tseslint.config(
       // The scanner's injected wallet script and the CLI legitimately use `any`
       // at serialization boundaries; keep it a warning so real sloppiness is visible.
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
     },
   },
   {

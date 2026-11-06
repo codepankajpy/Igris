@@ -143,9 +143,12 @@ async function main(): Promise<void> {
   viewerSrv.close();
 
   // Honest exit: the demo FAILS if the story does not hold.
-  if (rpcLeaks(leaky) === 0) throw new Error('demo invariant broken: leaky fixture shows no RPC leak');
-  if (rpcLeaks(fixed) > 0) throw new Error('demo invariant broken: fixed fixture still leaks to RPC');
-  if (!fixed.usesAnonRpc) throw new Error('demo invariant broken: fixed fixture not detected as Anon-RPC');
+  if (rpcLeaks(leaky) === 0)
+    throw new Error('demo invariant broken: leaky fixture shows no RPC leak');
+  if (rpcLeaks(fixed) > 0)
+    throw new Error('demo invariant broken: fixed fixture still leaks to RPC');
+  if (!fixed.usesAnonRpc)
+    throw new Error('demo invariant broken: fixed fixture not detected as Anon-RPC');
   if (fixed.score <= leaky.score) throw new Error('demo invariant broken: score did not improve');
 }
 
