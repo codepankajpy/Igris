@@ -33,5 +33,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install chromium --with-deps
+      # playwright is a dependency of @igris/scanner, not the workspace root;
+      # the headless shell is a separate download the scans need.
+      - run: pnpm --filter @igris/scanner exec playwright install chromium chromium-headless-shell --with-deps
       - run: pnpm test:e2e

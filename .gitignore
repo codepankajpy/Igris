@@ -14,3 +14,6 @@ reports/
 test-results/
 playwright-report/
 .trash-node_modules/
+igris-registry.json
+igris-snapshot.json
+igris-batch/
