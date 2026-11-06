@@ -8,5 +8,7 @@
     // emitted .d.ts files (TS4023).
     "declaration": false
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests and their fixtures run from source under vitest only.
+  "exclude": ["**/*.test.ts", "src/test-fixtures.ts", "**/dist/**", "**/node_modules/**"]
 }

@@ -2,30 +2,34 @@
 
 ## Users
 
-- **Dapp developers** run `igris scan` in CI (`--fail-under`, exit codes
-  designed for it) and `igris fix` to adopt Anon-RPC. Their incentive:
-  a public, queryable privacy score they control by actually fixing leaks.
-- **Dapp users** check a dapp on the registry viewer before connecting, or
-  install the extension stub which matches the current site against a local
-  registry snapshot (no per-site queries — their browsing history never
-  leaves the machine).
-- **Other scanners/auditors** publish their own attestations with the same
-  schema from their own wallets; viewers pin whom they trust, and agreement
-  between independent scanners ("N scanners agree") is visible.
+- **People about to connect a wallet** search a site on the IGRIS website
+  and read what it sends to whom: recipients with verdicts (expected,
+  avoidable, tracking, unidentified), a timeline, RPC calls, security
+  headers, the evidence. No score: what we observed, stated plainly.
+- **dApp teams** retest after a fix. The new version is linked to the old
+  one on Arkiv, and the report shows what changed (recipients removed,
+  verdicts changed, same behaviour or not), as a public record that the fix
+  happened.
+- **Researchers and journalists** query Arkiv directly: every scanned site
+  that sends data to a tracker is one `igris.flow.v1` query (schema.md
+  has a copy-pasteable curl). They need no account and no API from us.
+- **Other operators** can run IGRIS with their own scanner key. Their
+  entities are attributable to their address, and each instance chooses
+  which scanners it trusts.
 
 ## Why the registry grows
 
-Every scan is cheap (one CLI run), every publish is one small entity, and
-disagreement is productive: a dapp team that disputes a finding re-runs the
-scan themselves — the report embeds everything needed to reproduce it
-(scanner version, methodology docs, deterministic findings) and
-`reportSha256` and `summary.evidenceSha256` tie each claim to an exact report and evidence bundle (docs/CONTRACTS.md).
+Anyone can scan any site from the website: one search, one click. Every
+completed scan publishes automatically, so the registry grows with every
+use, and retests add history instead of overwriting it. The flow entities
+make each new scan more useful: a tracker's reach across sites becomes
+visible as more sites are scanned.
 
 ## Honest limits
 
-- Rabdi is a testnet; entities expire (by design) and the network may reset.
-  The snapshot path keeps any dataset usable offline.
-- Reach beyond the hackathon needs a funded scanner wallet and periodic
-  re-scans — a cron job away, but still an operational commitment.
-- TODO(human): real-world scan campaign numbers (we refuse to invent a
-  "scanned N top dapps" headline without running it).
+- Rabdi is a testnet; entities expire after at most ≈ 182 days, and the
+  network may reset. A site that nobody retests eventually disappears.
+- A browser scan sees what one visit with one throwaway wallet shows. It
+  cannot see what a recipient does with the data afterwards.
+- Publishing needs a funded scanner key. The operator publishes; no
+  campaign numbers are claimed until a real scan run exists.

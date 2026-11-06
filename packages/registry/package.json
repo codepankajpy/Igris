@@ -9,11 +9,6 @@
       "types": "./src/index.ts",
       "igris-dist": "./dist/index.js",
       "default": "./src/index.ts"
-    },
-    "./browser": {
-      "types": "./src/browser.ts",
-      "igris-dist": "./dist/browser.js",
-      "default": "./src/browser.ts"
     }
   },
   "scripts": {

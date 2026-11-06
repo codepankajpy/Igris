@@ -1,51 +1,70 @@
-# How Igris uses Arkiv
+# How IGRIS uses Arkiv
 
-## Writes (CLI, Node)
+One product, one flow: a visitor searches a site on the website, sees its
+latest report and version history, and can retest. Every completed scan is
+published to Arkiv by the backend (`apps/api`); the website never talks to
+Arkiv directly. Entities: [schema.md](./schema.md).
 
-`igris publish <report.json>` →
-[packages/registry/src/arkiv.ts](../packages/registry/src/arkiv.ts):
+## Writes (backend)
 
-- signed by this machine's scanner key (`igris scanner init`; stored mode
-  0600 in `~/.igris`, bound to this node, never read from env); chain
-  `rabdi({ accessKey })`, transport `http()` (endpoint overridable with
-  `ARKIV_RPC_URL` / `--rpc-url`);
-- before signing, the report and its evidence bundle are schema-validated
-  and integrity-checked (`igris verify` semantics);
-- `walletClient.createEntity(ScanSchema, values, { expiration:
-ExpirationTime.fromDays(30) })` — one entity per scan, schema
-  `igris.scan.v1` ([schema.md](./schema.md));
-- the `summary` bytes column holds redacted compact JSON (summary v2);
-  `reportSha256` is the canonical content hash of the Report v2 and
-  `summary.evidenceSha256` the hash of its evidence bundle
-  ([docs/CONTRACTS.md](../docs/CONTRACTS.md)). Publishing the bundle itself
-  so third parties can check it is ROADMAP P2-3.
+[packages/registry/src/arkiv.ts](../packages/registry/src/arkiv.ts) —
+`ArkivSiteRegistry.publish(report, bundle)`:
 
-## Reads (CLI and the static viewer — reads drive visible features)
+1. `buildPublication` refuses anything that must not be published: a report
+   that is not 3.0.0, fails schema validation or integrity against its
+   evidence, has coverage `none` (the page never loaded), contains the canary
+   in its evidence, or whose gzip payload exceeds 128 KiB.
+2. It reads the latest version of the hostname (trusted owners and the
+   publisher) → `version = latest + 1`, `previous = latest.key`.
+3. **One `walletClient.executeBatch({ creates })`**: the `igris.scan.v2`
+   entity (attributes + gzip report), the `igris.evidence.v1` entity (gzip
+   bundle) and one `igris.flow.v1` per recipient, all with
+   `ExpirationTime.fromDays(180)`. The batch is atomic, so a version never
+   exists without its evidence or its flows. The created keys come back in
+   batch order: scan, evidence, flows.
 
-- `igris query --hostname h --min-score n --max-score n --class c --since iso
---scanner 0x… --uses-anon-rpc true|false` → SDK query builder:
-  `select('*').from(ScanSchema).where(and(eq/gte/lte/…)).ownedBy(scanner)
-.orderBy(desc('scannedAt')).limit(n)`.
-- The viewer (apps/web) runs the same query from the browser against a
-  **user-configurable** endpoint, renders the result list (latest entity per
-  hostname per scanner, "N scanners agree"), and a per-dapp detail page from
-  the entity's summary — filters change the Arkiv query itself, not just
-  client-side trimming. One exception: leak-class matching is client-side
-  because the query language has no substring operator
-  ([friction.md](./friction.md) #2).
-- `igris snapshot` walks every `igris.scan.v1` entity with key-cursor
-  pagination (`$key > key(last) ORDER BY $key ASC`, pages of 100) into one
-  JSON file for the offline viewer mode and the extension stub.
+Signing key: the node's scanner profile (`loadScanner()`, mode 0600 under
+`~/.igris`, never from env). Chain `rabdi({ accessKey })` with
+`ARKIV_ACCESS_KEY`; publishes within one process are serialised.
+
+## Reads (backend → website)
+
+Raw `arkiv_query` JSON-RPC calls whose query strings are built with the SDK
+expression builders (`and`, `or`, `eq`, `checkAgainstSchema`):
+
+| feature                     | query                                                                        |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| site page, version history  | scan.v2 `hostname = …` AND owners, `ORDER BY version:i32 DESC`               |
+| one version                 | … AND `version = i32(n)`                                                     |
+| recently scanned sites      | scan.v2 AND owners, `ORDER BY scannedAt:u64 DESC` → latest per hostname      |
+| full report of a version    | scan.v2 `$key = key(…)` (selecting `report`) + evidence.v1 `sha256`,`scanId` |
+| "also receives data from …" | flow.v1 `recipient = …` AND owners, then each site's latest version          |
+
+Listings select every column except the `report` payload. Every row is
+decoded strictly and skipped when invalid
+([packages/registry/src/rows.ts](../packages/registry/src/rows.ts)); the
+SDK's own row decoding is bypassed because one malformed value fails a whole
+page there. `load()` verifies the report and evidence against the entity
+(schema.md → "Trust and verification on read").
+
+When version n is shown, the API loads version n − 1 too and computes
+`diffVersions(prev, next)`: same behaviour (finding-set digest), recipients
+added / removed, verdict or address changes.
 
 ## Offline parity
 
-`LocalRegistry` (a JSON file) implements the same `RegistryBackend`
-interface, so `pnpm demo`, the e2e suite and the viewer all work with the
-testnet down — the demo's fallback path during judging.
+`LocalSiteRegistry` stores the **same entities, attributes and bytes** in
+one JSON file, in Arkiv's JSON-RPC entity shape, so one decoder reads both
+and every behaviour (versions, verification, refusals, trust) is identical.
+Deterministic keys (`local:<sha256>`), atomic writes (temp + rename).
 
 ## Verified vs. unverified
 
-- **Verified live** (2026-11-06, public Rabdi RPC): query and snapshot walk
-  (zero entities before our first publish), CORS from Node and the browser.
-- **UNVERIFIED**: a real funded publish — the faucet is a human browser flow.
-  Exact repro: STATUS.md → "TODO(human): fund and publish".
+- **Verified live** (2026-11-06, public Rabdi RPC, no access key): every
+  query shape above returns without error (owner OR-groups, `ORDER BY
+version:i32` / `scannedAt:u64`, attribute selection), and the
+  organisers' curl in schema.md.
+- **Verified with a mocked node**: the batch contents, version chaining,
+  load verification and owner filtering (`packages/registry/src/arkiv.test.ts`).
+- **UNVERIFIED**: a real funded publish of the new entities. The owner
+  publishes; then replace `0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe` in schema.md.

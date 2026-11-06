@@ -1,33 +1,34 @@
 # Why Arkiv
 
-Igris needs a registry that is **not ours**. A privacy scanner whose results
-live on the scanner authors' server has two fatal problems: you must trust us
-to not edit history, and the registry dies when our hosting does. The bounty
-rule "no backend we operate" is not a constraint we worked around — it is the
-product.
+IGRIS tells people which third parties a dApp sends their wallet address
+and IP to. Those results must not live only on our server: you would have to
+trust us not to edit history, and they would disappear with our hosting.
 
 What the registry needs, and what Arkiv gives:
 
-1. **Attributable writes.** Every entity is signed by and owned by a wallet.
-   "Who says this dapp leaks?" has a cryptographic answer: the scanner
-   address. Our trust model (attestation, not fact; pin scanners you trust;
-   "N scanners agree") falls directly out of `$owner`.
-2. **Queryable without an indexer.** The viewer needs score ranges, hostname
-   lookup, usesAnonRpc filters, newest-first — `arkiv_query` does this
-   directly from a static page (CORS `*` verified). No subgraph, no API
-   server, no database. A plain JSON-RPC POST is the whole backend.
-3. **Mandatory expiry is a feature.** Privacy scans rot. Arkiv forces an
-   expiry on every entity, so unrefreshed claims disappear by construction
-   (we choose 30 days; justification in [schema.md](./schema.md)). A plain
-   blockchain or IPFS would preserve stale accusations forever.
-4. **Open write access matches the mission.** Anyone can run `igris scan` and
-   publish their own attestations next to ours, with the same schema, and
-   viewers can pin whichever scanners they trust. A permissioned registry
-   would make us the gatekeeper — exactly what CROPS says to avoid.
-5. **Cheap, small, structured.** One scan is one entity with 12 typed
-   attributes and a few-KB summary blob — Arkiv's sweet spot, vs. abusing
-   calldata or events on an L1 and rebuilding query infra around it.
+1. **Attributable writes.** Every entity is owned by the wallet that signed
+   it. "Who says this site sends my address to a tracker?" has a
+   cryptographic answer: the scanner address. Readers trust owners they
+   choose (`IGRIS_TRUSTED_SCANNERS`); anyone else's entities are ignored.
+2. **Version history as data.** Each retest is a new `igris.scan.v2` entity
+   whose `previous` points at the last one. The history of a site is on
+   Arkiv, not in our database, and any IGRIS instance can rebuild it.
+3. **Self-verifying content.** The full report and its evidence bundle are
+   published (gzip, canonical JSON). Their hashes are indexed attributes, so
+   a reader re-checks the hashes, the schema and every verdict from Arkiv
+   alone, without trusting the API that served them.
+4. **A cross-site view nobody else has.** One `igris.flow.v1` entity per
+   recipient of each scan makes "which scanned sites send data to
+   segment.io?" a single indexed query, for us and for anyone else.
+5. **Queryable without an indexer.** `arkiv_query` filters, sorts and
+   selects typed attributes directly. No subgraph, no separate database.
+6. **Atomic batches.** `executeBatch` writes the scan, its evidence and
+   its flows in one transaction, so a version is never half-published.
+7. **Expiry matches the data.** A privacy scan describes a site at one
+   moment. Entities live 180 days (close to Arkiv's maximum) and then
+   expire unless the site is retested, which publishes a new version.
 
-What we deliberately do NOT use Arkiv for: raw reports (they can embed
-canary-bearing URLs; we publish a redacted summary plus a sha256 binding to
-the full report), and anything secret (there are no secrets in Igris).
+What we do not put on Arkiv: anything secret (there is none) and anything
+that could identify a real user. The only wallet address in a report is the
+scan's throwaway canary, and the evidence bundle is checked to contain no
+form of it before publishing.

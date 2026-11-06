@@ -73,3 +73,46 @@ registry whose _viewer_ leaks every reader's interest to one endpoint would
 be ironic. Mitigations we shipped: user-configurable endpoint, offline
 snapshot mode (`igris snapshot` → `snapshot.json`), and the extension stub
 matches locally against a snapshot instead of querying per visited site.
+
+## 8. One malformed entity fails a whole query page in the SDK
+
+- **Expected**: `select().from(Schema).fetch()` with `onMismatch: "skip"` to
+  skip hostile rows.
+- **Happened**: `skip` only covers schema mismatches. Before that,
+  `runQuery` decodes every entity of the page (`entityFromRpcResult` →
+  `decodeRpcValue`), and a value it cannot decode throws for the **whole
+  page**. On a permissionless store where anyone can write an entity with
+  our schema tag, that is a denial-of-service lever for one reader.
+- **Workaround**: the registry builds query strings with the SDK expression
+  builders but sends raw `arkiv_query` requests and decodes each entity
+  itself, skipping invalid ones (packages/registry/src/rows.ts).
+- **Repro**: `@arkiv-network/sdk` 1.0.1, `src/query/engine.ts` (`result.data.map(entityFromRpcResult)`).
+
+## 9. `str` attributes are limited to 128 bytes
+
+- **Expected**: a hostname attribute can hold any DNS name (≤ 253 chars).
+- **Happened**: `MAX_STRING_BYTES = 128`. We refuse to publish a site (or a
+  recipient domain) longer than 128 bytes instead of truncating it, which
+  would change the data.
+- **Repro**: `str('a'.repeat(129))` throws `InvalidValueError`.
+
+## 10. The node returns a `cursor` the SDK does not use
+
+- **Observed** (live, 2026-11-06): `arkiv_query` responses carry
+  `"cursor": "b64:…"` next to `data`, while the SDK pages with `offset`
+  (`MAX_LIMIT` 100). We page with `offset` like the SDK; it is not clear
+  from the docs whether offsets stay stable while entities are written.
+
+## 11. Ownership-filtering several owners needs a hand-built OR
+
+- **Expected**: `ownedBy([a, b])`.
+- **Happened**: `ownedBy` takes one address. Several trusted scanners need
+  `or(eq('$owner', addr(a)), eq('$owner', addr(b)))` in `where`. Works
+  (verified live), just undocumented.
+
+## 12. Batch gas for large payloads is unverified
+
+- A version can carry two bytes values of up to 128 KiB each (report and
+  evidence) plus N flow entities in one transaction, and one transaction is
+  capped at 2^24 gas (`MAX_TRANSACTION_GAS`). We have not measured a
+  maximal batch on Rabdi; the first live publishes should log gas used.
