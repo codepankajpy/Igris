@@ -197,3 +197,98 @@ Branch `p05-foundations` (from `p0-integrity`). Specification:
 - Docker re-verified on the P0.5 code: build, non-root user, health,
   internal target refused, real github.com scan producing Report v2 with
   public-only egress.
+
+## 2026-11-06 — P1 Reliability (partial, paused by the MVP direction change)
+
+Committed as `dd47f45` on `p1-reliability`. What exists:
+
+- Kit discovery tooling: page probes (read-only, shadow-DOM aware), kit
+  fingerprinting whose confidence is earned (`high` only when the kit's modal
+  was observed), strict connect-control scoring (no navigating links), and
+  `openConnectUi` with a navigation guard.
+- Load taxonomy: `site-unavailable`, `bot-blocked`, `browser-incompatible`;
+  a page that is not the dApp is never scored.
+- Corpus: 57 candidates, discovery and diagnosis data, 60 research leads
+  (assumptions with citations, verified separately). 14 kits confirmed live
+  (RainbowKit 2, Privy 5, AppKit 5, ConnectKit 1, Dynamic 1).
+- Contract successors, additive: Report 2.1.0 (optional `scan.connection`,
+  `scan.failure`) and `igris.evidence.v2` (+ `contact-classification`). The
+  frozen 2.0.0 / v1 schemas are untouched and hash-pinned. **PENDING the
+  project owner's approval** (ROADMAP MVP-7).
+
+Not done: kit recipes are not wired into `scan()` (scans still connect with
+the legacy heuristic, `legacy-heuristic@0`); terms/consent gates (Morpho,
+zkSync, MetaMask Portfolio) need an owner decision on auto-accepting; the
+discovery report awaits the owner's review before recipe work starts.
+
+## 2026-11-06 — MVP web application (strategic direction change)
+
+The owner asked for a working web application before further P1 work.
+
+### What changed and why
+
+- **Scan jobs** (`apps/api/src/scans.ts`, `c95980e`): `POST /api/scans`,
+  list, detail, report, SSE events, dashboard stats. Progress events are the
+  scanner's own (`scan({ onProgress })`); the service never invents a stage
+  or a percentage. Scans persist under `.igris-data/scans/<id>/` (gitignored,
+  operator's machine only, unpublished and unattributed). Every report is
+  re-verified (schema + integrity) when read; a tampered file is refused
+  with 500. A restart marks in-flight scans `failed: interrupted`.
+- **`assess()`** (`packages/core/src/assessment.ts`, `a5c4c63`): the risk
+  level and executive summary, deterministic and derived only from the
+  report and evidence. Levels: not-assessed / critical (scored canary leak
+  of high severity) / high (any other scored leak) / elevated (<70) /
+  moderate (<90) / low. Partial coverage is always stated.
+- **Web app** (`apps/app`, `43a3ba2`): Preact 10.29.8 (11.x was published
+  the same day — not adopted), hash routing, self-hosted fonts, no
+  third-party requests. Pages: Landing, Dashboard, New Scan, Live Scan,
+  Report, Evidence Explorer, History. The report re-checks evidence integrity
+  in the browser with `@igris/core/contracts` (bundle hash, content ids,
+  finding-set digest, references); this is an independent check, the
+  server's verification stays authoritative.
+- **Dashboard aggregates** (`d53945d`): use the latest completed scan per
+  dApp (re-scans never double-count); kits are reported per confidence
+  level, so a low-confidence guess is never displayed as an identification.
+
+### Bugs found by using the product on real dApps
+
+1. **Redirect target scored as a third party** (`f66884f`, core engine).
+   `app.spark.fi` redirects to `app.spark.finance`; the dApp's own API
+   received the address and was scored as an unknown third party: 5/100,
+   "critical". The engine now treats the captured main document's
+   registrable domain as first party and says so in `scan.notes`. Re-scan:
+   44/100, leaks to alchemy.com (RPC) and walletconnect.org (relay) only.
+   The earlier 5/100 scan is kept in local history as produced; the
+   dashboard uses the latest scan per dApp.
+2. **DNS failures labelled as egress refusals** (`e0f4d93`, scanner).
+   Through the proxy every refusal surfaces as
+   `ERR_TUNNEL_CONNECTION_FAILED`; the proxy's own reason is now used, and
+   failure details are one clean line (no ANSI codes, no call log).
+3. UI: findings with identical titles are grouped into one row (each keeps
+   its id and evidence links); per-row score points are shown only when
+   whole ledger lines belong to that row (no apportioning); a page that
+   never loaded renders a compact report instead of empty sections.
+
+### MVP scan results (local node, scanner 0.2.0, egress public-only, 4 s dwell)
+
+| dApp                | Score | Level    | Coverage         | Connect                       | Kit (confidence) | Address reached                |
+| ------------------- | ----- | -------- | ---------------- | ----------------------------- | ---------------- | ------------------------------ |
+| app.uniswap.org     | 77    | moderate | full             | connected                     | Privy (low)      | first party only               |
+| matcha.xyz          | 61    | high     | full             | connected                     | Privy (high)     | quiknode.pro                   |
+| app.spark.fi        | 44    | high     | full             | connected                     | AppKit (medium)  | alchemy.com, walletconnect.org |
+| www.bungee.exchange | 73    | moderate | pre-connect-only | failed: request-not-issued    | Dynamic (low)    | not tested                     |
+| app.aave.com        | 79    | moderate | pre-connect-only | failed: wallet-option-missing | ConnectKit (low) | not tested                     |
+| app.gearbox.fi      | 85    | moderate | pre-connect-only | failed: wallet-option-missing | none             | not tested                     |
+
+Connect success with the legacy heuristic: 3/6. That is the P1-2 problem
+the kit recipes address; the three partial scores are labelled partial in
+the UI and in `assess()`.
+
+### Known limitations
+
+- Scan history is local to the scanner node; nothing is published. The
+  hosted deployment is still gated by ROADMAP P4-6 (Chromium sandbox).
+- The raw capture is not retained; the evidence explorer shows the
+  content-addressed extracts and says so.
+- Not yet measured: Lighthouse accessibility, an e2e no-third-party-request
+  check, a light theme (P5-2, P5-3).

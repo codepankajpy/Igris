@@ -12,8 +12,27 @@ verification notes are in [docs/ENGINEERING_LOG.md](docs/ENGINEERING_LOG.md).
   ROADMAP.md).
 - **P0.5 Foundations:** PASS on branch `p05-foundations` (all six criteria;
   contracts in docs/CONTRACTS.md).
-- **Next:** P1 Reliability, P2 Arkiv v2, P3 detectors, P5 product (all
-  unblocked by P0.5).
+- **P1 Reliability:** partial on `p1-reliability` (kit discovery, strict
+  connect scoring, load taxonomy; 14 kits confirmed live). Paused by the
+  owner's direction change; recipes not yet wired into scans.
+- **MVP web application:** working on branch `mvp-web-app`. URL → scan job
+  → isolated Chromium → evidence → detectors → score → report, displayed in
+  `apps/app` (Landing, Dashboard, New Scan, Live Scan, Report, Evidence
+  Explorer, History). Six real dApps scanned through it (ENGINEERING_LOG).
+- **Waiting on the owner:** approval of the Report 2.1.0 /
+  `igris.evidence.v2` successors (ROADMAP MVP-7) and review of the P1
+  discovery report before recipe work.
+
+## Run the web app (local)
+
+```bash
+pnpm install && pnpm exec playwright install chromium chromium-headless-shell
+pnpm -s exec tsx apps/api/src/index.ts        # scanner API on :3001
+pnpm --filter @igris/app dev                  # web app on :5180 (proxies /api)
+```
+
+Open http://localhost:5180. Scan history is stored in `.igris-data/`
+(gitignored) on this machine only; nothing is published.
 
 ## How to verify (clean clone, Node ≥ 20, pnpm 9)
 

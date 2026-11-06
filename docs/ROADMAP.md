@@ -85,6 +85,27 @@ P1 corpus harness ────────────────────�
 
 ---
 
+## MVP web application — priority override (2026-11-06)
+
+The project owner changed direction: before continuing P1, build a working
+web application as a vertical slice over a handful of representative dApps.
+Order of work: reconciliation → one real dApp end to end → complete journey
+→ polish → reliability/coverage (P1) → advanced (Arkiv publishing, P2).
+Rules are unchanged: the backend owns scanning, evidence, detection, scoring
+and the risk verdict; the frontend only displays them; nothing is fabricated.
+
+| ID    | Acceptance criterion                                                                                                                                                             | Status                                                                                               |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| MVP-1 | Scan jobs: `POST /api/scans` → queued/running/completed/failed, real scanner progress over SSE, persisted locally, re-verified (schema + integrity) on every read, restart-safe. | PASS (`apps/api/src/scans.ts`, 11 tests)                                                             |
+| MVP-2 | Deterministic risk level + executive summary derived only from report + evidence (`assess()` in core), served with each report.                                                  | PASS (`packages/core/src/assessment.ts`, 5 tests)                                                    |
+| MVP-3 | Web app (`apps/app`, Preact, hash routing): Landing, Dashboard, New Scan, Live Scan, Report, Evidence Explorer, History.                                                         | PASS (all pages exercised live in the browser)                                                       |
+| MVP-4 | One real dApp scanned through the UI and displayed end to end.                                                                                                                   | PASS (app.uniswap.org: live stages → 77/100, 23 evidence items, integrity re-checked in the browser) |
+| MVP-5 | 5–8 representative dApps scanned and displayed (kits: Privy, ConnectKit, RainbowKit, AppKit, Dynamic).                                                                           | PASS (6 dApps; connect succeeded on 3/6 with the legacy heuristic — recorded in ENGINEERING_LOG)     |
+| MVP-6 | Dashboard shows only real aggregates: latest completed scan per dApp, unscored scans separated, kits by identification confidence.                                               | PASS                                                                                                 |
+| MVP-7 | Report v2.1.0 / `igris.evidence.v2` successors (P1 work) approved by the project owner. The app reads them; the frozen 2.0.0 / v1 schemas are untouched.                         | BLOCKED(owner approval)                                                                              |
+
+---
+
 ## P0 — Integrity
 
 **Status (2026-11-06): PASS — all 12 criteria verified (P0-9's Docker half verified once the daemon was available; see ENGINEERING_LOG). P0.5 may start.**
@@ -142,12 +163,12 @@ funded.
 
 **Depends on:** P0.5.
 
-| ID   | Acceptance criterion                                                                                                                                                                                                                                                                                                                           | Status |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| P1-1 | Corpus of 25–50 real dapps (`corpus/targets.json`, with the selection rationale written down) and a harness that records per target: load status, connect status, connect kit detected, duration. Results are committed as data.                                                                                                               | TODO   |
-| P1-2 | Connect recipes and detection for RainbowKit, ConnectKit, Web3Modal/Reown AppKit, Dynamic and Privy. Each has a local fixture test. Connect success rate on the corpus is reported (target ≥70%, real number recorded even if below). Login buttons that are not wallet connects are never clicked (negative tests).                           | TODO   |
-| P1-3 | Infrastructure classification: same-organization and asset-only hosts become `infrastructure` observations with **no privacy penalty**, using evidence (organization mapping, resource types, no cookies, no canary). Zero infrastructure penalties on the corpus after manual review. The DB is split into `data/` (production) and fixtures. | TODO   |
-| P1-4 | Bot walls and challenge pages are detected and reported as `blocked-by-target`, never scored.                                                                                                                                                                                                                                                  | TODO   |
+| ID   | Acceptance criterion                                                                                                                                                                                                                                                                                                                           | Status                                                                                                                                                                       |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-1 | Corpus of 25–50 real dapps (`corpus/targets.json`, with the selection rationale written down) and a harness that records per target: load status, connect status, connect kit detected, duration. Results are committed as data.                                                                                                               | IN PROGRESS (57 candidates + discovery/diagnosis data and harness scripts committed; `corpus/targets.json` and a committed corpus run pending)                               |
+| P1-2 | Connect recipes and detection for RainbowKit, ConnectKit, Web3Modal/Reown AppKit, Dynamic and Privy. Each has a local fixture test. Connect success rate on the corpus is reported (target ≥70%, real number recorded even if below). Login buttons that are not wallet connects are never clicked (negative tests).                           | IN PROGRESS (kit fingerprinting, strict connect scoring and navigation guard built; 14 kits confirmed live; recipes not yet wired into `scan()`; MVP baseline 3/6 connected) |
+| P1-3 | Infrastructure classification: same-organization and asset-only hosts become `infrastructure` observations with **no privacy penalty**, using evidence (organization mapping, resource types, no cookies, no canary). Zero infrastructure penalties on the corpus after manual review. The DB is split into `data/` (production) and fixtures. | TODO (one live infrastructure false positive fixed: redirect target is first party — f66884f; `contact-classification` evidence defined, not yet produced)                   |
+| P1-4 | Bot walls and challenge pages are detected and reported as `blocked-by-target`, never scored.                                                                                                                                                                                                                                                  | IN PROGRESS (load taxonomy implemented as `bot-blocked` / `site-unavailable` / `browser-incompatible`, never scored; corpus verification pending)                            |
 
 ---
 
@@ -199,13 +220,13 @@ at least one real-dapp finding confirmed by hand (or `UNVERIFIED` with the reaso
 
 **Depends on:** P0.5 (data contracts). The design system can start in parallel with P1–P3.
 
-| ID   | Acceptance criterion                                                                                                                                     | Status |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| P5-1 | Viewer rebuilt in **Preact**: component architecture, explicit state store, hash-based routing (works from any static host and IPFS/Swarm, no rewrites). | TODO   |
-| P5-2 | Documented design system: monochrome, self-hosted fonts (no font CDN), one semantic accent per severity, light/dark, tabular numerics.                   | TODO   |
-| P5-3 | Lighthouse accessibility ≥95. Works at 360 px width with no horizontal scroll. Zero third-party requests (e2e-enforced).                                 | TODO   |
-| P5-4 | Evidence-first report screen, timeline/diff, auditor pages, in-browser hash verification.                                                                | TODO   |
-| P5-5 | CLI and docs pass: `igris --help` for every command, a quickstart that runs from a clean clone.                                                          | TODO   |
+| ID   | Acceptance criterion                                                                                                                                     | Status                                                                                                                                    |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| P5-1 | Viewer rebuilt in **Preact**: component architecture, explicit state store, hash-based routing (works from any static host and IPFS/Swarm, no rewrites). | IN PROGRESS (`apps/app`: Preact components + hash routing; state is per-page, no explicit store yet; old `apps/web` viewer still present) |
+| P5-2 | Documented design system: monochrome, self-hosted fonts (no font CDN), one semantic accent per severity, light/dark, tabular numerics.                   | IN PROGRESS (dark monochrome, self-hosted fonts, single red accent for critical; light theme and written design-system doc missing)       |
+| P5-3 | Lighthouse accessibility ≥95. Works at 360 px width with no horizontal scroll. Zero third-party requests (e2e-enforced).                                 | UNVERIFIED (no horizontal scroll checked manually at 472 px; Lighthouse and an e2e no-third-party check not run)                          |
+| P5-4 | Evidence-first report screen, timeline/diff, auditor pages, in-browser hash verification.                                                                | IN PROGRESS (evidence-first report, evidence explorer and in-browser hash verification done; timeline/diff and auditor pages TODO)        |
+| P5-5 | CLI and docs pass: `igris --help` for every command, a quickstart that runs from a clean clone.                                                          | TODO                                                                                                                                      |
 
 ---
 
