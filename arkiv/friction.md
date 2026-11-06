@@ -136,3 +136,13 @@ matches locally against a snapshot instead of querying per visited site.
   `$creator = addr(…)`, select `creator` and re-check it client-side.
   Verified live on Rabdi. Every IGRIS entity is also created `readonly`
   so published history cannot be patched later.
+
+## 14. `||` in a raw query is rejected
+
+- **Expected**: `($creator = addr(A) || $creator = addr(B))` to combine two
+  creators.
+- **Happened**: the node answers `symbol operators (&& || ~) were removed —
+use AND, OR, STARTSWITH`, with the position. The message is clear; per its
+  wording, queries written for an earlier version fail as-is.
+- **Fix**: use the keywords (`OR`); our organiser queries do (verified live
+  2026-11-07). The SDK builder (`or([...])`) was not affected.

@@ -101,6 +101,20 @@ every report on Arkiv with version history. Spec: [design/FLOW.md](./design/FLOW
 | F-6 | Website makes zero third-party requests                                                                | PASS (e2e, 143 requests over every route)         |
 | F-7 | Report 3.0.0 and the Arkiv entity schemas approved and hash-pinned                                     | BLOCKED(owner approval)                           |
 
+## Scanner network and wallet-request audit (2026-11-07, owner: "Options 1 + 2")
+
+Specs: [design/SCAN-NETWORK.md](./design/SCAN-NETWORK.md),
+[design/WALLET-REQUESTS.md](./design/WALLET-REQUESTS.md).
+
+| ID  | Acceptance criterion                                                                                 | Status                                            |
+| --- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| N-1 | "Scan this site" / Retest creates an `igris.request.v1` (readonly + permissionlessExtension, 7 days) | PASS (live, app.ens.domains ×2)                   |
+| N-2 | A second node's worker answers open requests and publishes scans linked by `request`                 | PASS (live, Scanner 2 → v2, v4)                   |
+| N-3 | Site page groups scans of one request into rounds and shows per-third-party agreement                | PASS (live: 7/7, 9/9 agree)                       |
+| N-4 | Site page shows a scan another node publishes later, without a reload                                | PASS (live, v4 appeared on v3's page)             |
+| N-5 | Wallet requests decoded into the report and published as `igris.walletreq.v1`                        | PASS offline (fixture e2e); live write UNVERIFIED |
+| N-6 | Nodes are labelled "Scanner N"; no address in the website or API responses                           | PASS (unit + e2e)                                 |
+
 ## MVP web application — priority override (2026-11-06)
 
 The project owner changed direction: before continuing P1, build a working
@@ -192,15 +206,15 @@ funded.
 
 **Depends on:** P0.5 (evidence bundle, scanner identity).
 
-| ID   | Acceptance criterion                                                                                                                                                                                                                                 | Status                             |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| P2-1 | Real `igris.scan.v2` entities on Rabdi from the **primary** scanner key. Addresses, entity keys and tx hashes are in the README, plus one runnable query.                                                                                            | BLOCKED(human: fund key at faucet) |
-| P2-2 | A **second independent scanner** (second Mac, its own key, its own `igris.scanner.v1` profile) publishes scans of the same targets. The viewer shows agreement and disagreement per finding class.                                                   | BLOCKED(human: second node)        |
-| P2-3 | Scan entities are created `readonly`. The full redacted evidence bundle is stored in the entity (≤128 KiB) or chunked, so `evidenceSha256` resolves to published bytes. The viewer recomputes the hash in the browser before showing "hash matches". | TODO                               |
-| P2-4 | History: a `prevScan` (key) attribute plus a per-host query → timeline and finding-class diff in the viewer.                                                                                                                                         | TODO                               |
-| P2-5 | `extendEntity` when a re-scan reproduces the identical **finding set** (`findingSet.sha256`; the evidence hash legitimately varies when pages embed nonces — see CONTRACTS.md), instead of a duplicate create.                                       | TODO                               |
-| P2-6 | One indexed bool attribute per finding class, so class filters run on the server (fixes friction #2).                                                                                                                                                | TODO                               |
-| P2-7 | Updated `arkiv/*.md` (schema, friction, why, how, reach), each with links, numbers or a runnable query.                                                                                                                                              | TODO                               |
+| ID   | Acceptance criterion                                                                                                                                                                                                                                 | Status                                                 |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| P2-1 | Real `igris.scan.v2` entities on Rabdi from the **primary** scanner key. Addresses, entity keys and tx hashes are in the README, plus one runnable query.                                                                                            | BLOCKED(human: fund key at faucet)                     |
+| P2-2 | A **second independent scanner** (second Mac, its own key, its own `igris.scanner.v1` profile) publishes scans of the same targets. The viewer shows agreement and disagreement per finding class.                                                   | PARTIAL(second node on the same machine; see N-1..N-4) |
+| P2-3 | Scan entities are created `readonly`. The full redacted evidence bundle is stored in the entity (≤128 KiB) or chunked, so `evidenceSha256` resolves to published bytes. The viewer recomputes the hash in the browser before showing "hash matches". | TODO                                                   |
+| P2-4 | History: a `prevScan` (key) attribute plus a per-host query → timeline and finding-class diff in the viewer.                                                                                                                                         | TODO                                                   |
+| P2-5 | `extendEntity` when a re-scan reproduces the identical **finding set** (`findingSet.sha256`; the evidence hash legitimately varies when pages embed nonces — see CONTRACTS.md), instead of a duplicate create.                                       | TODO                                                   |
+| P2-6 | One indexed bool attribute per finding class, so class filters run on the server (fixes friction #2).                                                                                                                                                | TODO                                                   |
+| P2-7 | Updated `arkiv/*.md` (schema, friction, why, how, reach), each with links, numbers or a runnable query.                                                                                                                                              | TODO                                                   |
 
 ---
 

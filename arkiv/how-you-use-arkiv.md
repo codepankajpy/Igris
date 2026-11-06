@@ -89,9 +89,17 @@ version:i32` / `scannedAt:u64`, attribute selection), and the
   query string, hostile rows and `$owner`-transfer forgeries for every
   entity type, and the gas estimate (`packages/registry/src/network.test.ts`,
   against both backends).
-- **UNVERIFIED**: a real funded publish of the new entities, and live
-  `igris.request.v1` / `igris.walletreq.v1` writes, `permissionlessExtension`
-  by a third party, and the `creationFlags` spelling a live node returns
-  (the reader accepts a number, a 0x quantity or the SDK's object). The
-  owner publishes; then replace `0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe`
-  in schema.md.
+- **Verified live** (2026-11-07, Rabdi, two funded scanner nodes on one
+  machine): the website created two `igris.request.v1` entities for
+  app.ens.domains (readonly + permissionlessExtension: the node returns
+  `creationFlags` as `{"readonly":true,"permissionlessExtension":true,"raw":3}`);
+  the second node's worker found each request on Arkiv and both nodes
+  published a scan linked to it (`request` attribute), signed by two
+  different `$creator`s; the API grouped them into rounds and compared
+  them (7/7 and 9/9 third parties agree). The `request = … AND ($creator =
+… OR $creator = …)` query in schema.md returns both scans.
+- **UNVERIFIED**: a live `igris.walletreq.v1` write (no scanned real site
+  has asked for a signature yet; the fixture page that does is not hosted
+  publicly, so it is covered offline by `packages/scanner/e2e/wallet-requests.e2e.ts`
+  and the registry tests), and `permissionlessExtension` used by a third
+  party.

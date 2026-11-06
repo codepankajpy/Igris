@@ -292,9 +292,10 @@ not match its entity is never upgraded.
 
 ### Every site sending data to one recipient
 
-Replace `0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe` with the IGRIS scanner address (filled in after
-the first live publish). No access key needed (the public endpoint is rate
-limited).
+IGRIS's scanners: `0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe` (Scanner 1) and
+`0xc11870c95Ffc869872e4CBB9d9F6FBC71aF7b869` (Scanner 2); both run by the IGRIS author.
+No access key needed (the public endpoint is rate limited; an access key from
+hub.arkiv.network, appended to the URL as a path segment, raises the budget).
 
 ```sh
 curl -s https://rpc.rabdi.db-chain.testnet.arkiv.network \
@@ -325,11 +326,17 @@ curl -s https://rpc.rabdi.db-chain.testnet.arkiv.network \
 EOF
 ```
 
-Which trusted scanners fulfilled one of them (replace `<request key>`):
+Which trusted scanners fulfilled one of them (replace `<request key>`;
+select `creator` to see who signed each scan). Combine creators with the
+keyword `OR` — the symbol forms `||` / `&&` are rejected by the node:
 
 ```
-arkiv.schema = str('igris.scan.v2') AND request = str('<request key>') AND $creator = addr(0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe) ORDER BY version:i32 DESC
+arkiv.schema = str('igris.scan.v2') AND request = str('<request key>') AND ($creator = addr(0x36dff990206fff8e8ba91f38a0b111418c985bbe) OR $creator = addr(0xc11870c95ffc869872e4cbb9d9f6fbc71af7b869)) ORDER BY version:i32 DESC
 ```
+
+Live example: request
+`0x2d8a19473bb961d8135929bbe1115d399ab611ed3d56dd466619aac6124b17d4`
+(app.ens.domains) returns v3 by Scanner 1 and v4 by Scanner 2.
 
 ### Unlimited Permit2 requests across every scanned site
 

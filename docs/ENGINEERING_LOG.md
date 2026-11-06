@@ -439,3 +439,59 @@ followed by an independent verifier; confirmed defects fixed with regression
 tests (duplicate versions on retry, history running backwards, IPv6
 recipients blocking publish, unverified previous version in diffs, flowsTo
 query explosion, cache label, red used for non-leak errors).
+
+## 2026-11-07 — Open scan requests, two scanner nodes, wallet-request audit
+
+Owner direction: "Options 1 + 2" — record and decode what a site asks the
+wallet to sign; let anyone request a scan on Arkiv and any scanner node
+answer it, with per-recipient agreement between nodes.
+
+### What changed
+
+- **core / scanner**: wallet requests captured through a nonce-guarded
+  binding (outcome whitelist; the canary signs only a recorded pending
+  request), decoded offline (SIWE domain/URI, personal message vs blind
+  hash, `eth_sign`, Permit / Permit2 with unlimited and long-deadline
+  flags, approve / setApprovalForAll, chain mismatch, pre-connect),
+  detector `wallet-requests` 1.0.0, evidence v4, Report 3.0.0
+  `walletRequests`.
+- **registry**: `igris.request.v1` and `igris.walletreq.v1`; publish with
+  `{ request }`; flood-resistant `openRequests` (per-creator cap,
+  future-dated requests ignored); trust by `$creator`.
+- **api**: request worker, rounds, agreement per (domain, class), node
+  labels instead of addresses.
+- **app**: wallet-request section, rounds in the version rail, agreement
+  panel; the site page re-checks every 20 s while a scan runs or a request
+  is under 10 minutes old (`shouldRecheck`), keeping the version being read.
+- **scanner 0.4.1**: control names skip icon-font text, aria-hidden
+  decorations and graphics. app.ens.domains renders its button as
+  "Connect" plus a Material Symbols ligature "login"; 0.4.0 read
+  "CONNECT login", matched no rule and reported `no-connect-control`.
+
+### Live verification (Arkiv Rabdi, two nodes on one machine)
+
+- Request `0xc47406dc…` (app.ens.domains, from the website): Scanner 1 v1
+  (tx 0xbe59fd6c…) and Scanner 2 v2 (tx 0xe9ae880b…); 7/7 third parties
+  agree; wallet not connected (the 0.4.0 bug above).
+- Request `0x2d8a1947…` (Retest, scanner 0.4.1): Scanner 1 v3
+  (tx 0x6f99a814…) and Scanner 2 v4 (tx 0xffe128d4…); wallet connected;
+  9/9 agree; both saw the full address reach bigname.sh (unidentified) and
+  drpc.live (RPC provider). v4 appeared on the open v3 page without a
+  reload.
+- Raw `arkiv_query`: both requests readonly + permissionlessExtension
+  (`creationFlags.raw` 3); `request = … AND ($creator = … OR $creator = …)`
+  returns both scans with two different creators. The node rejects `||`
+  ("symbol operators … were removed — use AND, OR"), so docs use `OR`.
+
+### Wording fix
+
+The headline "Address reached trackers" also covered unidentified
+recipients; it now reads "Address reached tracking or unidentified parties"
+(the ENS scans had no tracker among the address recipients).
+
+### Known limitations
+
+- Both nodes run on the author's machine: the protocol is shown, not
+  independence.
+- No live `igris.walletreq.v1` write yet (no scanned real site asked for a
+  signature; the fixture is not hosted publicly).

@@ -39,8 +39,9 @@ independent result for the same site.
   network may reset. A site that nobody retests eventually disappears.
 - A browser scan sees what one visit with one throwaway wallet shows. It
   cannot see what a recipient does with the data afterwards.
-- Publishing needs a funded scanner key. The operator publishes; no
-  campaign numbers are claimed until a real scan run exists.
+- Publishing needs a funded scanner key. Two scanners publish today
+  (`0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe`, `0xc11870c95Ffc869872e4CBB9d9F6FBC71aF7b869`);
+  no campaign numbers are claimed beyond the scans listed in the README.
 - Two nodes run by one person are not independent; live pages also vary
   between runs, so agreement is shown per recipient, not per scan.
 - Real sites rarely ask for signatures during a visit; the wallet-request
