@@ -17,7 +17,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isIP } from 'node:net';
-import type { EvidenceBundleV1, ReportV2, ScanResult } from '@igris/core';
+import { assess, type EvidenceBundleV1, type ReportV2, type ScanResult } from '@igris/core';
 import type { ScanOptions } from '@igris/scanner';
 import type { ScanRecord } from '@igris/registry';
 import type { ApiConfig } from './config.js';
@@ -306,7 +306,13 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
       }
       try {
         const a = scans.artifacts(meta.id)!;
-        res.json({ report: a.report, evidence: a.bundle, verification: a.verification });
+        res.json({
+          report: a.report,
+          evidence: a.bundle,
+          verification: a.verification,
+          // Deterministic, report-derived; the UI displays it, never decides it.
+          assessment: assess(a.report, a.bundle),
+        });
       } catch (err) {
         log(`stored artifacts for ${meta.id} failed verification: ${String(err).slice(0, 200)}`);
         res

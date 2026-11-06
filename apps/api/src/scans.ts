@@ -19,7 +19,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { CanaryMatchEvidence, ReportV2, ScanResult } from '@igris/core';
+import { assess, type CanaryMatchEvidence, type ReportV2, type ScanResult } from '@igris/core';
 import type { ScanOptions, ScanProgressEvent } from '@igris/scanner';
 import { loadScanArtifacts, writeScanArtifacts } from '@igris/cli';
 import { JobQueue, JobTimeoutError } from './limits.js';
@@ -27,6 +27,9 @@ import { JobQueue, JobTimeoutError } from './limits.js';
 export type JobState = 'queued' | 'running' | 'completed' | 'failed';
 
 export interface ScanSummary {
+  /** Deterministic assessment level (core assess()). */
+  level: string;
+  headline: string;
   status: ReportV2['scan']['status'];
   score: number | null;
   coverage: ReportV2['privacy']['coverage'];
@@ -72,7 +75,10 @@ export function summarize({ report, bundle }: ScanResult): ScanSummary {
     (f) => f.detector === 'canary-leak' && f.countsTowardPrivacyScore,
   );
   const conn = report.scan.connection;
+  const assessment = assess(report, bundle);
   return {
+    level: assessment.level,
+    headline: assessment.headline,
     status: report.scan.status,
     score: report.privacy.score,
     coverage: report.privacy.coverage,

@@ -16,3 +16,4 @@ export * from './scoring-v2.js';
 export * from './engine.js';
 export * from './migrate.js';
 export * from './inspect.js';
+export * from './assessment.js';
