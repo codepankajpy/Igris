@@ -114,6 +114,8 @@ export function evidenceTitle(i: EvidenceItem): string {
       return `${i.documentUrl} · HTTP ${i.status}`;
     case 'contact-classification':
       return `${i.host} → ${i.relationship}`;
+    case 'wallet-request':
+      return `${i.method} · ${i.kind} · ${i.outcome}`;
   }
 }
 
@@ -122,6 +124,7 @@ export const EVIDENCE_TYPE_LABEL: Record<EvidenceItem['type'], string> = {
   'third-party-contact': 'Third-party contact',
   'document-headers': 'Document headers',
   'contact-classification': 'Classification',
+  'wallet-request': 'Wallet request',
 };
 
 export const PHASE_LABEL: Record<string, string> = {

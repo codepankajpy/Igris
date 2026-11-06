@@ -56,6 +56,33 @@ describe('red is reserved for "the address reached a tracking/unidentified recip
   });
 });
 
+describe('wallet-request risks and agreement statuses use the neutral emphasis, never the signal red', () => {
+  const neutral = [
+    '.wr-flag',
+    '.wr-flag::before',
+    '.wr-card.risk',
+    '.wr-emph',
+    '.tl-wr path',
+    '.tl-wr.risk path',
+    '.chip.st-agree',
+    '.chip.st-differ',
+    '.chip.st-partial',
+    '.agreement-unverified',
+    '.chip.node-chip',
+  ];
+  for (const sel of neutral)
+    it(`${sel} is drawn without the signal red`, () => {
+      const bs = blocks(sel);
+      expect(bs.length, `${sel} has a rule`).toBeGreaterThan(0);
+      for (const b of bs) expect(b).not.toMatch(RED);
+    });
+  it('a risky wallet request is still told apart: filled triangle, foreground edge', () => {
+    expect(blocks('.tl-wr path').join('')).toMatch(/fill:\s*var\(--bg\)/);
+    expect(blocks('.tl-wr.risk path').join('')).toMatch(/fill:\s*var\(--fg\)/);
+    expect(blocks('.wr-card.risk').join('')).toMatch(/inset 2px 0 0 var\(--fg\)/);
+  });
+});
+
 /** The e2e quiet-window comment states the app does not poll (defect 6): keep that true. */
 describe('the app does not poll', () => {
   const files = (d: string): string[] =>

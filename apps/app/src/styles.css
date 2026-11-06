@@ -2308,3 +2308,260 @@ table.sr-only {
 .rail-explorer {
   margin: 10px 0 0;
 }
+
+/* --- scanner nodes, rounds and agreement ----------------------------------- */
+/* Node labels ("Scanner 1") are API labels, never addresses. */
+.chip.node-chip {
+  color: var(--fg-2);
+  border-color: var(--line-2);
+}
+.rail-list li.rail-group {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  border: 1px dashed var(--line-2);
+  border-radius: calc(var(--r-lg) + 6px);
+}
+.rail-group-head {
+  color: var(--fg-2);
+  letter-spacing: 0.04em;
+}
+.rail-group-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 12px;
+}
+.agreement {
+  margin: 0 0 28px;
+}
+.agreement-why {
+  margin: 0 0 14px;
+  max-width: 760px;
+}
+.agreement-request {
+  margin-bottom: 12px;
+}
+.agreement-request dd .mono {
+  overflow-wrap: anywhere;
+}
+.agreement-scans {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.agreement-scans li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+.agreement-unverified {
+  color: var(--fg);
+  font-weight: 600;
+}
+.agreement-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.agreement-cell {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.agreement-table .table td {
+  vertical-align: top;
+}
+/* Status: neutral shapes, never the signal red. */
+.chip.st-agree {
+  color: var(--fg-2);
+}
+.chip.st-differ {
+  color: var(--fg);
+  border-color: var(--fg-2);
+  font-weight: 600;
+}
+.chip.st-partial {
+  border-style: dashed;
+  border-color: var(--line-3);
+}
+.request-panel p {
+  overflow-wrap: anywhere;
+}
+.request-nodes .chip {
+  margin-right: 4px;
+}
+
+/* --- wallet requests ----------------------------------------------------------
+   Risk flags use the neutral emphasis (foreground colour, weight, a solid
+   mark) — the signal red stays reserved for "the address reached a
+   tracking/unidentified recipient". */
+.wr-empty {
+  margin: 0 0 16px;
+}
+.wr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .wr-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.wr-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+  height: 100%;
+}
+.wr-card.risk {
+  border-color: var(--line-3);
+  box-shadow: inset 2px 0 0 var(--fg);
+}
+.wr-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 0.82rem;
+  color: var(--fg-2);
+}
+.wr-index {
+  color: var(--fg-3);
+}
+.wr-kind {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.45rem;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  margin: 0;
+}
+.wr-allows {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: 0.88rem;
+}
+.wr-kv dd.mono {
+  font-size: 0.78rem;
+}
+.wr-emph {
+  color: var(--fg);
+  font-weight: 600;
+}
+.wr-flags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.wr-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px;
+  border: 1px solid var(--fg-2);
+  border-radius: 14px;
+  color: var(--fg);
+  font-size: 0.76rem;
+  font-weight: 560;
+}
+.wr-flag::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: none;
+  background: var(--fg);
+  transform: rotate(45deg);
+}
+.wr-findings {
+  list-style: none;
+  margin: 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 6px;
+  font-size: 0.86rem;
+}
+.wr-findings li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.chip.wr-outcome.o-signed {
+  color: var(--fg);
+  border-color: var(--line-3);
+}
+
+/* wallet-request markers on the visit timeline: a triangle (distinct from the
+   recipient dot and the address diamond); hollow, or filled when the backend
+   raised a risk finding about it. */
+.tl-row.tl-wr-row {
+  cursor: default;
+}
+.tl-row.tl-wr-row:hover {
+  background: transparent;
+}
+.tl-wr-track {
+  position: relative;
+  min-width: 0;
+}
+.tl-wr-track .tl-track {
+  position: absolute;
+  inset: 0;
+}
+.tl-wr {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.tl-wr:hover,
+.tl-wr.on {
+  background: rgba(255, 255, 255, 0.1);
+}
+.tl-wr svg {
+  display: block;
+  overflow: visible;
+}
+.tl-wr path {
+  fill: var(--bg);
+  stroke: var(--fg);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.tl-wr.risk path {
+  fill: var(--fg);
+}
+.key-wallet,
+.key-wallet-risk {
+  width: 10px;
+  height: 9px;
+  background: no-repeat center / contain
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-7 -7 14 14'><path d='M-6 -5L6 -5L0 6Z' fill='none' stroke='%23f5f5f4' stroke-width='1.6' stroke-linejoin='round'/></svg>");
+}
+.key-wallet-risk {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-7 -7 14 14'><path d='M-6 -5L6 -5L0 6Z' fill='%23f5f5f4' stroke='%23f5f5f4' stroke-width='1.6' stroke-linejoin='round'/></svg>");
+}

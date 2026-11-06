@@ -11,12 +11,23 @@ import {
   type EvidenceType,
   type FindingV3,
   type Recipient,
+  type WalletRequestEvidence,
 } from '@igris/core/contracts';
 import { go, paths, type ReportRef } from '../router.js';
 import { loadReport, type ReportData } from '../report/data.js';
 import { Check, ErrorNote, Loading, VerdictChip, classLabel, stamp } from '../ui.js';
 import { EVIDENCE_TYPE_LABEL, evidenceTitle, locationLabel } from '../report/lookup.js';
 import { Sev } from '../report/Details.js';
+import {
+  KIND_LABEL,
+  OUTCOME_LABEL,
+  PHASE_TEXT,
+  amountText,
+  chainName,
+  deadlineText,
+  flags,
+  recipientRole,
+} from '../report/wallet-requests.js';
 
 export function EvidencePage({
   reportRef,
@@ -385,5 +396,48 @@ function Fields({ item }: { item: EvidenceItem }) {
           </dd>
         </>
       );
+    case 'wallet-request':
+      return <WalletRequestFields item={item} />;
   }
+}
+
+/** A decoded wallet request: the backend's fields as recorded (no raw params exist). */
+function WalletRequestFields({ item }: { item: WalletRequestEvidence }) {
+  const opt = (label: string, value: string | null, mono = true) =>
+    value === null
+      ? []
+      : [
+          <dt key={`${label}-k`}>{label}</dt>,
+          <dd key={`${label}-v`} class={mono ? 'mono' : ''}>
+            {value}
+          </dd>,
+        ];
+  const set = flags(item).map((f) => f.text);
+  return (
+    <>
+      <dt>Request</dt>
+      <dd>
+        {KIND_LABEL[item.kind]} · <span class="mono">{item.method}</span>
+      </dd>
+      <dt>Asked by</dt>
+      <dd class="mono">
+        {item.origin} ({item.frame === 'main' ? 'the page' : 'an embedded frame'})
+      </dd>
+      <dt>Phase</dt>
+      <dd>{PHASE_TEXT[item.phase] ?? item.phase}</dd>
+      <dt>Outcome</dt>
+      <dd>{OUTCOME_LABEL[item.outcome]}</dd>
+      {opt(recipientRole(item.kind), item.spender)}
+      {opt('Token', item.token)}
+      {opt('Amount', item.amount === null && !item.unlimited ? null : amountText(item))}
+      {opt('Deadline', item.deadline === null ? null : deadlineText(item.deadline, stamp), false)}
+      {opt('Chain named', item.chainId === null ? null : chainName(item.chainId), false)}
+      {opt('Verifying contract', item.verifyingContract)}
+      {opt('Sign-in domain', item.siweDomain)}
+      <dt>Flags</dt>
+      <dd>{set.length ? set.join(' · ') : <span class="muted">none set</span>}</dd>
+      <dt>Params digest</dt>
+      <dd class="mono small">{item.paramsDigest}</dd>
+    </>
+  );
 }

@@ -36,27 +36,38 @@ import {
   FAILED_ID,
   HOST as SITE,
   NEW_HOST,
+  NODES,
+  REQUEST,
+  RETEST_REQUEST,
   OTHER_HOST,
   PUBLISH_ERROR,
   RUNNING_ID,
   UNPUBLISHED_ID,
   cachedVersionBody,
   citedEvidenceId,
+  expiredRoundBody,
+  expiredSiteBody,
   failedJob,
   flowsTo,
   registry,
   republishedJob,
+  roundBody,
   runningDoneJob,
   runningJob,
   runningProgress,
+  scanStarted,
   siteBody,
   sites,
   sseBody,
   summaryV2,
+  summaryV3,
   unpublishedJob,
   unpublishedReport,
   versionBodies,
+  walletEvidenceId,
 } from './fixtures.js';
+import { EMPTY_TEXT, KIND_LABEL } from '../src/report/wallet-requests.js';
+import { REQUEST_EXPIRED } from '../src/rounds.js';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(APP_DIR, 'dist');
@@ -138,9 +149,21 @@ function json(route: Route, status: number, body: unknown) {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
 
+/** How the stubbed API answers (the default is the live round). */
+interface StubOptions {
+  /** The v2 + v3 round's request entity has expired: request: null in rounds. */
+  expiredRequest?: boolean;
+}
+
 /** Fresh context (cold cache) with the API stubbed and all requests recorded. */
-async function open(): Promise<Visit> {
-  const context = await browser.newContext({ acceptDownloads: true });
+async function open(
+  viewport?: { width: number; height: number },
+  stub: StubOptions = {},
+): Promise<Visit> {
+  const context = await browser.newContext({
+    acceptDownloads: true,
+    ...(viewport ? { viewport } : {}),
+  });
   const visit: Visit = {
     context,
     page: undefined as unknown as Page,
@@ -193,8 +216,17 @@ async function open(): Promise<Visit> {
       const limit = Number(u.searchParams.get('limit') ?? 20);
       return json(route, 200, { sites: sites.slice(0, limit) });
     }
-    if (m === 'GET' && (mm = /^\/api\/sites\/([^/]+)$/.exec(p)))
-      return json(route, 200, siteBody(decodeURIComponent(mm[1]!)));
+    if (m === 'GET' && (mm = /^\/api\/sites\/([^/]+)$/.exec(p))) {
+      const h = decodeURIComponent(mm[1]!);
+      return json(route, 200, stub.expiredRequest ? expiredSiteBody(h) : siteBody(h));
+    }
+    if (m === 'GET' && p === '/api/nodes') return json(route, 200, { nodes: NODES });
+    if (m === 'GET' && (mm = /^\/api\/sites\/([^/]+)\/rounds\/([^/]+)$/.exec(p))) {
+      const ok = decodeURIComponent(mm[1]!) === SITE && decodeURIComponent(mm[2]!) === REQUEST.key;
+      return ok
+        ? json(route, 200, stub.expiredRequest ? expiredRoundBody : roundBody)
+        : json(route, 404, { error: 'no such round' });
+    }
     if (m === 'GET' && (mm = /^\/api\/sites\/([^/]+)\/versions\/(\d+)$/.exec(p))) {
       const h = decodeURIComponent(mm[1]!);
       const n = Number(mm[2]);
@@ -203,9 +235,9 @@ async function open(): Promise<Visit> {
       return body ? json(route, 200, body) : json(route, 404, { error: 'no such version' });
     }
     if (m === 'POST' && (mm = /^\/api\/sites\/([^/]+)\/scans$/.exec(p))) {
-      // Retest of the scanned site → the running scan; a first scan → the failed one.
-      const host = decodeURIComponent(mm[1]!);
-      return json(route, 202, { id: host === SITE ? RUNNING_ID : FAILED_ID });
+      // Retest of the scanned site → the running scan (with its request entity);
+      // a first scan → the failed one (no request).
+      return json(route, 202, scanStarted(decodeURIComponent(mm[1]!)));
     }
     if (m === 'GET' && (mm = /^\/api\/scans\/([0-9a-f-]{36})$/.exec(p))) {
       const job = jobFor(mm[1]!);
@@ -296,7 +328,13 @@ const perRoute: Array<{
 
 const V2 = `#/site/${SITE}/v/2`;
 
-const ROUTES: Array<{ hash: string; exercise: (page: Page) => Promise<void> }> = [
+const ROUTES: Array<{
+  hash: string;
+  /** Test name when one hash is visited with another API answer. */
+  name?: string;
+  stub?: StubOptions;
+  exercise: (page: Page) => Promise<void>;
+}> = [
   {
     hash: '#/',
     exercise: async (page) => {
@@ -307,24 +345,77 @@ const ROUTES: Array<{ hash: string; exercise: (page: Page) => Promise<void> }> =
         .fill('https://App.Example.org/swap?x=1');
       await page.getByRole('button', { name: 'Search' }).click();
       await page.waitForURL(`**/#/site/${SITE}`);
-      await page.getByText(summaryV2.headline).first().waitFor();
+      await page.getByText(summaryV3.headline).first().waitFor();
     },
   },
   {
     hash: `#/site/${SITE}`,
     exercise: async (page) => {
-      // Latest version (v2) with its history rail; open v1 from the rail.
-      await page.getByText(summaryV2.headline).first().waitFor();
-      await page
-        .getByRole('navigation', { name: 'Version history' })
-        .getByText('v1', { exact: true })
-        .click();
+      // Latest version (v3) with its history rail: v3 + v2 are one request, two scanners.
+      await page.getByText(summaryV3.headline).first().waitFor();
+      const rail = page.getByRole('navigation', { name: 'Version history' });
+      await rail.getByText('Request · 2 scanners').waitFor();
+      await rail.getByText('Scanned by Scanner 2').waitFor();
+      await expect.poll(() => rail.getByText('Scanned by Scanner 1').count()).toBe(2);
+      // The Agreement panel loads its round lazily, then compares per recipient.
+      const panel = page.locator('section.agreement');
+      await panel.scrollIntoViewIfNeeded();
+      await panel.getByRole('table').waitFor();
+      await panel.getByText('pages vary between runs', { exact: false }).waitFor();
+      const row = (d: string) => panel.locator('tbody tr', { hasText: d });
+      await row('segment.io').getByText('Differ').waitFor();
+      await row('sentry.io').getByText('Only Scanner 1').waitFor();
+      await row('infura.io').getByText('Agree').waitFor();
+      expect(await panel.locator('.agreement-summary').textContent()).toMatch(
+        /2 agree.*1 differ.*1 seen by only some/,
+      );
+      // Each scan links to its entity on the explorer; nodes are labels, never addresses.
+      const hrefs = await panel
+        .locator('.agreement-scans a.ext-link')
+        .evaluateAll((as) => as.map((a) => a.getAttribute('href')));
+      expect(hrefs).toEqual([
+        `${registry.explorer}/entity/${roundBody.scans[0]!.scan.key}`,
+        `${registry.explorer}/entity/${roundBody.scans[1]!.scan.key}`,
+      ]);
+      for (const sel of ['nav.rail', 'section.agreement'])
+        expect(await page.locator(sel).textContent()).not.toMatch(
+          /0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/,
+        );
+      // Open v1 from the rail (migrated: not recorded, and not part of any request).
+      await rail.getByText('v1', { exact: true }).click();
       await page.waitForURL(`**/#/site/${SITE}/v/1`);
       await page.getByText('Not recorded').first().waitFor();
-      // Retest → POST → the live scan → back to the new version's report.
+      expect(await page.locator('section.agreement').count()).toBe(0);
+      // Retest → POST (a new request) → the live scan shows the request → the new version.
       await page.getByRole('button', { name: 'Retest' }).click();
+      await page.waitForURL(`**/#/scan/${RUNNING_ID}`);
+      const link = page.getByRole('link', { name: /Request on the Arkiv explorer/ });
+      expect(await link.getAttribute('href')).toBe(
+        `${registry.explorer}/entity/${RETEST_REQUEST.key}`,
+      );
+      await page.getByText('Other scanner nodes may pick this request up').waitFor();
       await page.waitForURL(`**/#/site/${SITE}/v/2`, { timeout: 15_000 });
       await page.getByText(summaryV2.headline).first().waitFor();
+    },
+  },
+  {
+    hash: `#/site/${SITE}`,
+    name: `#/site/${SITE} (request expired)`,
+    stub: { expiredRequest: true },
+    exercise: async (page) => {
+      // The API sends request: null for an expired request; the round, its
+      // scans and the agreement still come back — and the panel says so.
+      await page.getByText(summaryV3.headline).first().waitFor();
+      const rail = page.getByRole('navigation', { name: 'Version history' });
+      await rail.getByText('Request · 2 scanners').waitFor();
+      const panel = page.locator('section.agreement');
+      await panel.scrollIntoViewIfNeeded();
+      await panel.getByText(REQUEST_EXPIRED).waitFor();
+      await panel.getByRole('table').waitFor();
+      await panel.locator('tbody tr', { hasText: 'segment.io' }).getByText('Differ').waitFor();
+      expect(await panel.getByText('request entity').count()).toBe(0);
+      expect(await panel.locator('.agreement-scans a.ext-link').count()).toBe(2);
+      expect(await panel.textContent()).not.toMatch(/0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/);
     },
   },
   {
@@ -341,9 +432,50 @@ const ROUTES: Array<{ hash: string; exercise: (page: Page) => Promise<void> }> =
     exercise: async (page) => {
       await page.getByText(summaryV2.headline).first().waitFor();
       await page.getByText('Published on Arkiv').first().waitFor();
+      await page.locator('.report-hero').getByText('Scanned by Scanner 1').waitFor();
       // Timeline rows are focusable and show their details.
       await page.locator('button.tl-row').first().focus();
       await page.locator('.tl-detail .kv').waitFor();
+      // Wallet-request markers are focusable buttons on the same timeline.
+      await expect.poll(() => page.locator('button.tl-wr').count()).toBe(4);
+      await page.locator('button.tl-wr').nth(1).focus();
+      await page.locator('.tl-detail').getByText(KIND_LABEL.siwe).waitFor();
+      // A marker with a risk finding says so, and the hidden table lists the findings.
+      expect(await page.locator('button.tl-wr').nth(2).getAttribute('aria-label')).toMatch(
+        /Permit2.*; risk finding: Asked for an unlimited token permit to 0x3fC9…7FAD\.$/,
+      );
+      const wrTable = page.locator('table.sr-only', {
+        hasText: 'Wallet requests during the visit',
+      });
+      expect(await wrTable.locator('thead th').allTextContents()).toContain('Findings');
+      expect(await wrTable.locator('tbody tr').nth(2).locator('td').last().textContent()).toMatch(
+        /^risk finding: Asked for an unlimited token permit to 0x3fC9…7FAD$/,
+      );
+      expect(await wrTable.locator('tbody tr').nth(0).locator('td').last().textContent()).toBe(
+        'none',
+      );
+      // What the site asked the wallet: one card per request, backend flags, evidence.
+      const wr = page.locator('#wallet-requests');
+      await wr.scrollIntoViewIfNeeded();
+      await expect.poll(() => wr.locator('.wr-card').count()).toBe(4);
+      await wr.getByText('Sign-in message is for evil.example, not the page that asked').waitFor();
+      await wr
+        .locator('.wr-card', { hasText: KIND_LABEL.permit2 })
+        .getByText('unlimited', { exact: true })
+        .waitFor();
+      await wr.getByText('Names Polygon (137), not the chain the wallet was on').first().waitFor();
+      await wr.getByText('Rejected by the throwaway wallet').waitFor();
+      expect(await wr.locator('a.evidence-link').nth(1).getAttribute('href')).toBe(
+        `#/site/${SITE}/v/2/evidence/${walletEvidenceId}`,
+      );
+      // Wallet-request risks use the neutral emphasis, never the signal red.
+      const reds = await wr.locator('.wr-flag, .wr-card.risk, .wr-emph').evaluateAll((els) =>
+        els
+          .map((e) => getComputedStyle(e))
+          .map((c) => `${c.color} ${c.borderColor} ${c.boxShadow} ${c.backgroundColor}`)
+          .filter((x) => /239, 75, 75|255, 138, 138|255, 179, 179/.test(x)),
+      );
+      expect(reds).toEqual([]);
       // Cross-site flows load lazily as the recipients scroll into view.
       await page.locator('#recipients').scrollIntoViewIfNeeded();
       await page
@@ -366,9 +498,13 @@ const ROUTES: Array<{ hash: string; exercise: (page: Page) => Promise<void> }> =
   {
     hash: `#/site/${SITE}/v/1`,
     exercise: async (page) => {
-      // Migrated report: no timeline, no RPC inventory — said plainly.
+      // Migrated report: no timeline, no RPC inventory, no wallet requests — said plainly.
       await page.getByText('Not recorded').first().waitFor();
-      await expect.poll(() => page.locator('.not-recorded').count()).toBeGreaterThanOrEqual(3);
+      await expect.poll(() => page.locator('.not-recorded').count()).toBeGreaterThanOrEqual(4);
+      await page
+        .locator('#wallet-requests .not-recorded')
+        .getByText('does not record what the site asked the wallet', { exact: false })
+        .waitFor();
       await page.getByText('first published version').first().waitFor();
     },
   },
@@ -387,6 +523,15 @@ const ROUTES: Array<{ hash: string; exercise: (page: Page) => Promise<void> }> =
       await page.getByText(citedEvidenceId).first().waitFor();
       await page.getByText(/matches its id/).waitFor();
       await page.getByLabel('Search evidence').fill('segment');
+    },
+  },
+  {
+    hash: `${V2}/evidence/${walletEvidenceId}`,
+    exercise: async (page) => {
+      await page.getByText(walletEvidenceId).first().waitFor();
+      await page.getByText(/matches its id/).waitFor();
+      await page.locator('.kv').getByText(KIND_LABEL.siwe, { exact: false }).first().waitFor();
+      await page.getByText('evil.example', { exact: true }).waitFor();
     },
   },
   {
@@ -468,6 +613,8 @@ const ROUTES: Array<{ hash: string; exercise: (page: Page) => Promise<void> }> =
         .getByRole('navigation', { name: 'Version history' })
         .getByText('first version')
         .waitFor();
+      // Wallet requests were recorded, and there were none.
+      await page.locator('#wallet-requests').getByText(EMPTY_TEXT).waitFor();
     },
   },
   {
@@ -479,9 +626,9 @@ const ROUTES: Array<{ hash: string; exercise: (page: Page) => Promise<void> }> =
 ];
 
 describe('web app makes no third-party requests', () => {
-  for (const { hash, exercise } of ROUTES) {
-    it(`${hash} — every request is same-origin`, async () => {
-      const v = await open();
+  for (const { hash, name, stub, exercise } of ROUTES) {
+    it(`${name ?? hash} — every request is same-origin`, async () => {
+      const v = await open(undefined, stub);
       try {
         await v.page.goto(`${ORIGIN}/${hash}`);
         await exercise(v.page);
@@ -501,12 +648,17 @@ describe('web app makes no third-party requests', () => {
         const types = new Set(v.requests.map((r) => r.type));
         for (const t of ['document', 'script', 'stylesheet', 'font', 'fetch'])
           expect(types, `${hash} should request a ${t}`).toContain(t);
-        if (hash === `#/scan/${RUNNING_ID}` || hash === `#/site/${SITE}`)
+        if (hash === `#/scan/${RUNNING_ID}` || (hash === `#/site/${SITE}` && !stub))
           expect(types).toContain('eventsource');
 
         const byType: Record<string, number> = {};
         for (const r of v.requests) byType[r.type] = (byType[r.type] ?? 0) + 1;
-        perRoute.push({ route: hash, total: v.requests.length, settledMs: settled.ms, byType });
+        perRoute.push({
+          route: name ?? hash,
+          total: v.requests.length,
+          settledMs: settled.ms,
+          byType,
+        });
       } finally {
         await v.context.close();
       }
@@ -552,7 +704,7 @@ describe('web app makes no third-party requests', () => {
       });
       await v.page.getByLabel('Search a site or paste a URL').fill('app.uniswap.org');
       await v.page.locator(`a[href="#/site/${SITE}"]`).first().click();
-      await v.page.getByText(summaryV2.headline).first().waitFor();
+      await v.page.getByText(summaryV3.headline).first().waitFor();
 
       // The old settle() — networkidle — returns before the delayed beacons start.
       await v.page.waitForLoadState('networkidle');
@@ -571,6 +723,58 @@ describe('web app makes no third-party requests', () => {
       await v.context.close();
     }
   });
+});
+
+// ---------------------------------------------------------------- 360 px
+
+/** At phone width nothing may widen the page (charts and tables scroll in their own frames). */
+describe('360 px layout: no horizontal page scroll', () => {
+  const PAGES: Array<{ hash: string; ready: (page: Page) => Promise<void> }> = [
+    {
+      hash: V2,
+      ready: async (page) => {
+        await page.locator('#wallet-requests .wr-card').first().waitFor();
+        await page.locator('button.tl-wr').first().waitFor();
+      },
+    },
+    {
+      hash: `#/site/${SITE}`,
+      ready: async (page) => {
+        const panel = page.locator('section.agreement');
+        await panel.scrollIntoViewIfNeeded();
+        await panel.getByRole('table').waitFor();
+      },
+    },
+    {
+      hash: `#/site/${OTHER_HOST}`,
+      ready: async (page) => {
+        await page.locator('#wallet-requests').getByText(EMPTY_TEXT).waitFor();
+      },
+    },
+    {
+      hash: `#/site/${SITE}/v/1`,
+      ready: async (page) => {
+        await page.locator('#wallet-requests .not-recorded').waitFor();
+      },
+    },
+  ];
+  for (const { hash, ready } of PAGES)
+    it(`${hash} fits 360 px`, async () => {
+      const v = await open({ width: 360, height: 780 });
+      try {
+        await v.page.goto(`${ORIGIN}/${hash}`);
+        await ready(v.page);
+        const { scroll, inner } = await v.page.evaluate(() => ({
+          scroll: document.documentElement.scrollWidth,
+          inner: window.innerWidth,
+        }));
+        expect(scroll, `${hash} is ${scroll}px wide at ${inner}px`).toBeLessThanOrEqual(inner);
+        expect(v.requests.filter((r) => !isAllowed(r.url))).toEqual([]);
+        expect(v.unstubbed).toEqual([]);
+      } finally {
+        await v.context.close();
+      }
+    });
 });
 
 // ---------------------------------------------------------------- static

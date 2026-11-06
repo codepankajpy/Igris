@@ -4,7 +4,6 @@ import { elapsedMs, ipText, onArkiv, proofStatus, provenance, railChange } from 
 
 const scan = (version: number, findingSetSha256 = 'f'.repeat(64)): PublishedScan => ({
   key: `0x${String(version).padStart(64, '0')}`,
-  owner: `0x${'5'.repeat(40)}`,
   hostname: 'app.example.org',
   version,
   previous: version > 1 ? `0x${String(version - 1).padStart(64, '0')}` : null,
@@ -21,6 +20,7 @@ const scan = (version: number, findingSetSha256 = 'f'.repeat(64)): PublishedScan
   scannerVersion: '0.3.0',
   reportVersion: '3.0.0',
   expiresAtBlock: null,
+  request: null,
 });
 
 describe('proof chip: provenance (defect 1)', () => {

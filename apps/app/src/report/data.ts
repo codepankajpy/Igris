@@ -29,6 +29,8 @@ export interface ReportData {
   summary: Summary;
   changes: Changes | null;
   source: 'arkiv' | 'local';
+  /** Label of the scanner node that published the version ("Scanner 1"); null when unknown. */
+  node: string | null;
 }
 
 export function fromVersion(v: VersionResponse): ReportData {
@@ -43,6 +45,8 @@ export function fromVersion(v: VersionResponse): ReportData {
     summary: v.summary,
     changes: v.changes,
     source: v.source,
+    // Responses from an API older than scanner nodes carry no label.
+    node: typeof v.node === 'string' ? v.node : null,
   };
 }
 
@@ -61,6 +65,7 @@ export function fromScanReport(
     summary: r.summary,
     changes: null,
     source: r.source,
+    node: null,
   };
 }
 

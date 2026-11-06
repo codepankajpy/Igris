@@ -3,10 +3,18 @@
  * milestones as vertical lines; one row per recipient grouped by the
  * backend's verdict, a dot at its first contact and a diamond at the first
  * request that carried the address. Rows are buttons: focus or click one to
- * read its details. All values come from report.timeline / report.recipients.
+ * read its details. What the page asked the wallet (report.walletRequests)
+ * is a row of triangle markers, each a focusable button. All values come
+ * from report.timeline / report.recipients / report.walletRequests.
  */
 import { useState } from 'preact/hooks';
-import type { Recipient, ReportV3, Timeline } from '@igris/core/contracts';
+import type {
+  FindingV3,
+  Recipient,
+  ReportV3,
+  Timeline,
+  WalletRequestSummary,
+} from '@igris/core/contracts';
 import {
   MILESTONE_LABEL,
   VERDICT,
@@ -25,6 +33,17 @@ import {
   ticks,
   useWidth,
 } from './common.js';
+import {
+  KIND_LABEL,
+  OUTCOME_LABEL,
+  PHASE_TEXT,
+  flags,
+  findingsOf,
+  findingsText,
+  hasRisk,
+  markerLabel,
+  markerLanes,
+} from '../report/wallet-requests.js';
 
 interface Row {
   r: Recipient;
@@ -35,8 +54,22 @@ interface Row {
 const key = (x: { registrableDomain: string; class: string }) =>
   `${x.registrableDomain}|${x.class}`;
 
-export function VisitTimeline({ report, timeline }: { report: ReportV3; timeline: Timeline }) {
+/** Vertical distance between lanes of wallet-request markers that would overlap. */
+const LANE_PX = 14;
+
+export function VisitTimeline({
+  report,
+  timeline,
+  findings = new Map(),
+}: {
+  report: ReportV3;
+  timeline: Timeline;
+  /** Findings by id (to show a wallet request's findings and mark risky ones). */
+  findings?: ReadonlyMap<string, FindingV3>;
+}) {
   const [sel, setSel] = useState<string | null>(null);
+  const wallet = (report.walletRequests ?? []).map((r, i) => ({ r, i }));
+  const timedWallet = wallet.filter((x) => x.r.t !== null);
   const times = new Map(timeline.recipients.map((t) => [key(t), t]));
   const rows: Row[] = report.recipients.map((r) => {
     const t = times.get(key(r));
@@ -47,12 +80,17 @@ export function VisitTimeline({ report, timeline }: { report: ReportV3; timeline
     timeline.requestsPerSecond.length * 1000,
     ...timeline.milestones.map((m) => m.t),
     ...rows.flatMap((x) => [x.contact ?? 0, x.address ?? 0]),
+    ...timedWallet.map((x) => x.r.t ?? 0),
   );
   const span = maxT * 1.03;
   const pct = (t: number) => `${((t / span) * 100).toFixed(3)}%`;
   const tks = ticks(maxT);
   const groups = VERDICT_ORDER.map((v) => ({ v, rows: rows.filter((x) => x.r.verdict === v) }));
   const selected = rows.find((x) => key(x.r) === sel) ?? null;
+  const selectedWallet = wallet.find((x) => `wr:${x.i}` === sel) ?? null;
+  const lanes = markerLanes(timedWallet.map((x) => (x.r.t ?? 0) / span));
+  const laneCount = Math.max(1, ...lanes.map((l) => l + 1));
+  const untimedWallet = wallet.length - timedWallet.length;
   const [labelsRef, labelsW] = useWidth<SVGSVGElement>(600);
   const placed = labelRows(
     timeline.milestones.map((m) => ({ x: m.t / span, text: MILESTONE_LABEL[m.event] ?? m.event })),
@@ -76,6 +114,12 @@ export function VisitTimeline({ report, timeline }: { report: ReportV3; timeline
               address sent to a tracking / unidentified party
             </LegendItem>
             <LegendItem kind="milestone">scan milestone</LegendItem>
+            {wallet.length > 0 && (
+              <>
+                <LegendItem kind="wallet">wallet request</LegendItem>
+                <LegendItem kind="wallet-risk">wallet request with a risk finding</LegendItem>
+              </>
+            )}
           </>
         }
         caption="Seconds since navigation started. Times are the scanner's own capture times."
@@ -124,6 +168,53 @@ export function VisitTimeline({ report, timeline }: { report: ReportV3; timeline
                 />
               ))}
             </svg>
+            {wallet.length > 0 && (
+              <div class="tl-group" role="group" aria-label="Wallet requests">
+                <div class="tl-group-label">
+                  <i class="key key-wallet" aria-hidden="true" />
+                  Wallet requests
+                  <span class="muted"> · {wallet.length}</span>
+                </div>
+                <div class="tl-row tl-wr-row">
+                  <span class="tl-label">
+                    <span class="mono">asked the wallet</span>
+                    <small>
+                      {untimedWallet > 0
+                        ? `${untimedWallet} not timed (listed below)`
+                        : 'focus a marker for details'}
+                    </small>
+                  </span>
+                  <div
+                    class="tl-wr-track"
+                    style={{ height: `${30 + (laneCount - 1) * LANE_PX}px` }}
+                  >
+                    <svg class="tl-track" width="100%" height="100%" aria-hidden="true">
+                      <line x1="0" x2="100%" y1="15" y2="15" class="tl-base" />
+                    </svg>
+                    {timedWallet.map((x, j) => {
+                      const k = `wr:${x.i}`;
+                      const risk = hasRisk(x.r, findings);
+                      return (
+                        <button
+                          type="button"
+                          key={k}
+                          class={`tl-wr ${risk ? 'risk' : ''} ${sel === k ? 'on' : ''}`}
+                          style={{ left: pct(x.r.t ?? 0), top: `${15 + lanes[j]! * LANE_PX}px` }}
+                          aria-pressed={sel === k}
+                          aria-label={markerLabel(x.r, x.i, secs, findingsOf(x.r, findings))}
+                          onClick={() => setSel(sel === k ? null : k)}
+                          onFocus={() => setSel(k)}
+                        >
+                          <svg width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
+                            <path d="M-6 -5L6 -5L0 6Z" />
+                          </svg>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
             {groups
               .filter((g) => g.rows.length)
               .map((g) => (
@@ -212,7 +303,14 @@ export function VisitTimeline({ report, timeline }: { report: ReportV3; timeline
         </div>
       </ChartFrame>
       <div class="tl-detail panel" aria-live="polite">
-        {selected ? (
+        {selectedWallet ? (
+          <WalletMarkerDetail
+            r={selectedWallet.r}
+            index={selectedWallet.i}
+            timeline={timeline}
+            findings={findingsOf(selectedWallet.r, findings)}
+          />
+        ) : selected ? (
           <TimelineDetail row={selected} timeline={timeline} />
         ) : (
           <span class="muted small">
@@ -232,20 +330,82 @@ export function VisitTimeline({ report, timeline }: { report: ReportV3; timeline
           x.address === null ? '—' : secs(x.address),
         ])}
       />
+      {wallet.length > 0 && (
+        <SrTable
+          caption="Wallet requests during the visit, in the order the site made them."
+          head={['#', 'Request', 'Method', 'Time', 'When', 'Outcome', 'Findings']}
+          rows={wallet.map((x) => [
+            x.i + 1,
+            KIND_LABEL[x.r.kind],
+            x.r.method,
+            x.r.t === null ? 'not timed' : secs(x.r.t),
+            PHASE_TEXT[x.r.phase] ?? x.r.phase,
+            OUTCOME_LABEL[x.r.outcome],
+            findingsText(findingsOf(x.r, findings)) ?? 'none',
+          ])}
+        />
+      )}
     </>
   );
 }
 
+/** Which recorded milestone a time followed (ordering of given times only). */
+function afterMilestone(t: number, timeline: Timeline): string {
+  const m = [...timeline.milestones].reverse().find((x) => x.t <= t)?.event ?? null;
+  return m
+    ? `${secs(t)} · after “${MILESTONE_LABEL[m] ?? m}”`
+    : `${secs(t)} · before any milestone`;
+}
+
+function WalletMarkerDetail({
+  r,
+  index,
+  timeline,
+  findings,
+}: {
+  r: WalletRequestSummary;
+  index: number;
+  timeline: Timeline;
+  findings: FindingV3[];
+}) {
+  const fl = flags(r);
+  return (
+    <div class="tl-detail-grid">
+      <div>
+        <div class="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+          <span class="mono muted">#{index + 1}</span>
+          <b>{KIND_LABEL[r.kind]}</b>
+          <code class="muted small">{r.method}</code>
+        </div>
+        {fl.length > 0 && (
+          <ul class="wr-flags" style={{ marginTop: 8 }}>
+            {fl.map((f) => (
+              <li class="wr-flag" key={f.key}>
+                {f.text}
+              </li>
+            ))}
+          </ul>
+        )}
+        {findings.length > 0 && (
+          <p class="dim small" style={{ margin: '8px 0 0' }}>
+            {findings.map((f) => f.title).join(' · ')}
+          </p>
+        )}
+      </div>
+      <dl class="kv">
+        <dt>Asked</dt>
+        <dd class="mono">{r.t === null ? 'not timed' : afterMilestone(r.t, timeline)}</dd>
+        <dt>Phase</dt>
+        <dd>{PHASE_TEXT[r.phase] ?? r.phase}</dd>
+        <dt>Outcome</dt>
+        <dd>{OUTCOME_LABEL[r.outcome]}</dd>
+      </dl>
+    </div>
+  );
+}
+
 function TimelineDetail({ row, timeline }: { row: Row; timeline: Timeline }) {
-  // Which recorded milestone the first contact followed (ordering of given times).
-  const before = (t: number) =>
-    [...timeline.milestones].reverse().find((m) => m.t <= t)?.event ?? null;
-  const when = (t: number) => {
-    const m = before(t);
-    return m
-      ? `${secs(t)} · after “${MILESTONE_LABEL[m] ?? m}”`
-      : `${secs(t)} · before any milestone`;
-  };
+  const when = (t: number) => afterMilestone(t, timeline);
   return (
     <div class="tl-detail-grid">
       <div>

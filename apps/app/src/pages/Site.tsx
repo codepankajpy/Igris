@@ -11,11 +11,14 @@ import {
   startScan,
   type PublishedScan,
   type RegistryInfo,
+  type RoundSummary,
   type SiteResponse,
 } from '../api.js';
 import { go, paths } from '../router.js';
 import { Empty, ErrorNote, Loading, StateChip, day, plural } from '../ui.js';
 import { railChange } from '../wording.js';
+import { comparableKey, nodeLabel, railGroups, roundOf, type RailItem } from '../rounds.js';
+import { AgreementPanel } from './Agreement.js';
 import { loadReport, type ReportData } from '../report/data.js';
 import { ReportView } from './Report.js';
 
@@ -44,7 +47,7 @@ function ScanButton({
           setBusy(true);
           setError(null);
           try {
-            go(paths.scan(await startScan(hostname, url)));
+            go(paths.scan((await startScan(hostname, url)).id));
           } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
             setBusy(false);
@@ -112,6 +115,9 @@ export function SitePage({
 
   const latest = site.versions[0]!;
   const n = version ?? latest.version;
+  // An API older than scanner nodes sends no rounds: every version stands alone.
+  const round = roundOf(n, site.versions, site.rounds ?? []);
+  const roundKey = comparableKey(round, site.versions);
   return (
     <div class="page" style={{ paddingTop: 40 }}>
       <SiteHeader hostname={hostname}>
@@ -125,13 +131,26 @@ export function SitePage({
           </span>
         </a>
       )}
-      <VersionRail hostname={hostname} versions={site.versions} current={n} />
+      <VersionRail
+        hostname={hostname}
+        versions={site.versions}
+        rounds={site.rounds ?? []}
+        current={n}
+      />
       {registry?.mode === 'arkiv' && (
         <p class="small rail-explorer">
           <ExplorerLink kind="versions" value={hostname}>
             Every version of {hostname} on the Arkiv explorer
           </ExplorerLink>
         </p>
+      )}
+      {round !== null && roundKey !== null && (
+        <AgreementPanel
+          key={roundKey}
+          hostname={hostname}
+          requestKey={roundKey}
+          scanners={round.scans.length}
+        />
       )}
       <VersionBody key={`${hostname}@${n}`} hostname={hostname} n={n} registry={registry} />
     </div>
@@ -171,41 +190,63 @@ function VersionBody({
   return <ReportView data={data} registry={registry} />;
 }
 
-/** Version history: newest first, each compared with version − 1 when it is listed. */
+/**
+ * Version history: newest first, each compared with version − 1 when it is
+ * listed. Versions made for one request are grouped ("Request · 2 scanners");
+ * each says which scanner node published it, by the API's label.
+ */
 function VersionRail({
   hostname,
   versions,
+  rounds,
   current,
 }: {
   hostname: string;
   versions: PublishedScan[];
+  rounds: RoundSummary[];
   current: number;
 }) {
+  const groups = railGroups(versions, rounds);
+  const item = ({ v, node }: RailItem) => (
+    <a
+      href={`#${paths.version(hostname, v.version)}`}
+      class={`rail-item ${v.version === current ? 'on' : ''}`}
+      aria-current={v.version === current ? 'page' : undefined}
+    >
+      <span class="rail-dot" aria-hidden="true" />
+      <span class="spread">
+        <b class="mono">v{v.version}</b>
+        <span class="muted small">{day(v.scannedAt)}</span>
+      </span>
+      <StateChip state={v.state} />
+      {node !== null && <span class="chip node-chip">Scanned by {nodeLabel(node)}</span>}
+      <span class="rail-counts small">
+        {v.recipients} parties · {v.addressRecipients} got address · {v.trackingRecipients}{' '}
+        tracking/unidentified
+      </span>
+      <span class="rail-change small muted">{railChange(v, versions)}</span>
+    </a>
+  );
   return (
     <nav class="rail rise d1" aria-label="Version history">
       <div class="eyebrow rail-title">Version history · {plural(versions.length, 'version')}</div>
       <ol class="rail-list">
-        {versions.map((v) => (
-          <li key={v.key}>
-            <a
-              href={`#${paths.version(hostname, v.version)}`}
-              class={`rail-item ${v.version === current ? 'on' : ''}`}
-              aria-current={v.version === current ? 'page' : undefined}
-            >
-              <span class="rail-dot" aria-hidden="true" />
-              <span class="spread">
-                <b class="mono">v{v.version}</b>
-                <span class="muted small">{day(v.scannedAt)}</span>
-              </span>
-              <StateChip state={v.state} />
-              <span class="rail-counts small">
-                {v.recipients} parties · {v.addressRecipients} got address · {v.trackingRecipients}{' '}
-                tracking/unidentified
-              </span>
-              <span class="rail-change small muted">{railChange(v, versions)}</span>
-            </a>
-          </li>
-        ))}
+        {groups.map((g) =>
+          g.label === null ? (
+            <li key={g.items[0]!.v.key}>{item(g.items[0]!)}</li>
+          ) : (
+            <li key={g.items[0]!.v.key} class="rail-group">
+              <div class="rail-group-head mono small" id={`round-${g.items[0]!.v.key}`}>
+                {g.label}
+              </div>
+              <ol class="rail-group-list" aria-labelledby={`round-${g.items[0]!.v.key}`}>
+                {g.items.map((x) => (
+                  <li key={x.v.key}>{item(x)}</li>
+                ))}
+              </ol>
+            </li>
+          ),
+        )}
       </ol>
     </nav>
   );

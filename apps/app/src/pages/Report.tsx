@@ -28,6 +28,8 @@ import {
 import { buildLookup } from '../report/lookup.js';
 import { RecipientsSection } from '../report/Recipients.js';
 import { RpcSection } from '../report/Rpc.js';
+import { WalletRequestsSection } from '../report/WalletRequests.js';
+import { nodeLabel } from '../rounds.js';
 import {
   ChangesSection,
   FindingsSection,
@@ -44,6 +46,7 @@ const NAV: Array<[string, string]> = [
   ['address', 'Address'],
   ['rpc', 'RPC'],
   ['recipients', 'Who learned what'],
+  ['wallet-requests', 'Wallet requests'],
   ['changes', 'Changes'],
   ['findings', 'Findings'],
   ['wallet', 'Wallet'],
@@ -94,6 +97,9 @@ export function ReportView({
             <StateChip state={summary.state} />
             <span class="chip">{scan ? `v${scan.version}` : 'not published'}</span>
             <span class="chip">{stamp(scan ? scan.scannedAt : report.scan.scannedAt)}</span>
+            {data.node !== null && (
+              <span class="chip node-chip">Scanned by {nodeLabel(data.node)}</span>
+            )}
             {report.privacy.coverage === 'pre-connect-only' && (
               <span class="chip">before connecting only</span>
             )}
@@ -142,10 +148,10 @@ export function ReportView({
         id="timeline"
         title="Timeline of the visit"
         aside={timeline ? `${plural(timeline.milestones.length, 'milestone')}` : undefined}
-        lede="When each third party was first contacted, and when it first received the wallet address, from the moment the page started loading."
+        lede="When each third party was first contacted, when it first received the wallet address, and when the site asked the wallet for something, from the moment the page started loading."
       >
         {timeline ? (
-          <VisitTimeline report={report} timeline={timeline} />
+          <VisitTimeline report={report} timeline={timeline} findings={lookup.finding} />
         ) : (
           <NotRecorded what="This version’s report has no timing data (it was produced before the timeline was recorded), so the visit cannot be drawn over time." />
         )}
@@ -182,6 +188,13 @@ export function ReportView({
         hostname={data.hostname}
         evidenceHref={evidenceHref}
         lookup={lookup}
+      />
+      <WalletRequestsSection
+        report={report}
+        evidence={data.evidence}
+        hostname={data.hostname}
+        findings={lookup.finding}
+        evidenceHref={evidenceHref}
       />
       <ChangesSection changes={data.changes} version={scan ? scan.version : null} />
       <FindingsSection

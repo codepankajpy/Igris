@@ -4,11 +4,19 @@
  * and verifying what it reads back. This module only moves its data to the
  * screen.
  *
- * The shapes below mirror apps/api and packages/registry (site-registry.ts)
- * exactly; they are restated here, type-only, because the browser bundle must
- * not depend on the backend's module graph.
+ * The shapes below are what apps/api SENDS (apps/api/src/public.ts): the
+ * registry's rows (packages/registry, site-registry.ts) without the signer —
+ * a scan's, flow's or wallet request's `owner` and a request's `creator` are
+ * never part of a response. They are restated here, type-only, because the
+ * browser bundle must not depend on the backend's module graph.
  */
-import type { EvidenceBundle, ReportV3, Verdict } from '@igris/core/contracts';
+import type {
+  EvidenceBundle,
+  RecordedWalletMethod,
+  ReportV3,
+  Verdict,
+  WalletRequestKind,
+} from '@igris/core/contracts';
 
 /** summarise() output (@igris/core assessment.ts), restated: descriptive, never a grade. */
 export type SummaryState =
@@ -66,10 +74,12 @@ export interface Job {
   publish: PublishStatus | null;
 }
 
-/** A published scan version (igris.scan.v2, decoded). Mirrors registry's PublishedScan. */
+/**
+ * A published scan version (igris.scan.v2, decoded): the API's PublicScan —
+ * registry's PublishedScan without `owner`.
+ */
 export interface PublishedScan {
   key: string;
-  owner: string;
   hostname: string;
   version: number;
   previous: string | null;
@@ -87,12 +97,101 @@ export interface PublishedScan {
   scannerVersion: string;
   reportVersion: string;
   expiresAtBlock: number | null;
+  /**
+   * Entity key of the igris.request.v1 this scan fulfilled; null when it was
+   * not made for a request (entities published before requests existed).
+   */
+  request: string | null;
 }
 
-/** One site → recipient data flow of a published version (igris.flow.v1). */
+/**
+ * An open scan request (igris.request.v1): anyone can create one; every
+ * scanner node that sees it may fulfil it (docs/design/SCAN-NETWORK.md).
+ * The API's PublicRequest — registry's ScanRequest without `creator` (public
+ * on Arkiv by design; the API does not send it).
+ */
+export interface ScanRequest {
+  key: string;
+  hostname: string;
+  url: string;
+  /** Unix seconds. */
+  requestedAt: number;
+  expiresAtBlock: number | null;
+}
+
+/**
+ * One round: a request and the trusted scans that fulfilled it (a scan with
+ * no request is a round of one). `node` is the API's label ("Scanner 1"…),
+ * never an address.
+ */
+export interface RoundSummary {
+  request: ScanRequest | null;
+  scans: Array<{ version: number; key: string; node: string }>;
+}
+
+export type AddressExposure = 'exact' | 'hashed' | 'possible' | 'none';
+export type AgreementStatus = 'agree' | 'differ' | 'partial';
+
+/** Recipient-by-recipient comparison of a round's scans, computed by the API. */
+export interface Agreement {
+  /** Node labels, in the API's order (this node first). */
+  nodes: string[];
+  rows: Array<{
+    registrableDomain: string;
+    class: string;
+    /** Keyed by node label; null when that node's scan did not see the recipient. */
+    byNode: Record<string, { verdict: Verdict; address: AddressExposure } | null>;
+    status: AgreementStatus;
+  }>;
+  summary: { agree: number; differ: number; partial: number };
+}
+
+/**
+ * GET /api/sites/:hostname/rounds/:requestKey. `request` is null when the
+ * request entity has expired on Arkiv: its scans (and the agreement) still
+ * come back.
+ */
+export interface RoundResponse {
+  request: ScanRequest | null;
+  scans: Array<{ scan: PublishedScan; node: string; verified: boolean }>;
+  agreement: Agreement | null;
+}
+
+/** GET /api/nodes — labels only, never addresses. */
+export interface NodeInfo {
+  label: string;
+  self: boolean;
+}
+
+/**
+ * One decoded wallet request of a published version (igris.walletreq.v1): the
+ * API's PublicWalletRequest — registry's WalletRequestEntity without `owner`.
+ */
+export interface WalletRequestEntity {
+  key: string;
+  hostname: string;
+  kind: WalletRequestKind;
+  method: RecordedWalletMethod;
+  outcome: 'answered' | 'signed' | 'rejected' | 'error';
+  unlimited: boolean;
+  chainIdMismatch: boolean;
+  domainMismatch: boolean;
+  preConnect: boolean;
+  /** Checksummed address or "" when none. */
+  verifyingContract: string;
+  /** Checksummed address or "" when none. */
+  spender: string;
+  version: number;
+  scanId: string;
+  scannedAt: number;
+}
+
+/**
+ * One site → recipient data flow of a published version (igris.flow.v1): the
+ * API's PublicFlow — registry's FlowEntity without `owner`.
+ */
 export interface FlowEntity {
   key: string;
-  owner: string;
   hostname: string;
   recipient: string;
   class: string;
@@ -108,8 +207,6 @@ export interface RecipientRef {
   registrableDomain: string;
   class: string;
 }
-type AddressExposure = 'exact' | 'hashed' | 'possible' | 'none';
-
 /** Version n vs n − 1, computed by the API. */
 export interface Changes {
   sameBehaviour: boolean;
@@ -138,6 +235,7 @@ export interface SiteResponse {
   hostname: string;
   versions: PublishedScan[];
   scanning: { id: string; state: JobState } | null;
+  rounds: RoundSummary[];
 }
 
 export interface VersionResponse {
@@ -149,6 +247,14 @@ export interface VersionResponse {
   summary: Summary;
   changes: Changes | null;
   source: 'arkiv' | 'local';
+  /** Label of the scanner node that published this version ("Scanner 1"…). */
+  node: string;
+}
+
+/** POST /api/sites/:hostname/scans → 202. `request` is null when no request entity was made. */
+export interface ScanStarted {
+  id: string;
+  request: ScanRequest | null;
 }
 
 /**
@@ -213,9 +319,25 @@ export const api = {
   site: (hostname: string) => call<SiteResponse>(`/api/sites/${enc(hostname)}`),
   version: (hostname: string, n: number) =>
     call<VersionResponse>(`/api/sites/${enc(hostname)}/versions/${n}`),
-  /** Scan or retest. Resolves to the new job id; a 409 carries the running job's id. */
+  /** Scan or retest: the new job id and its request entity; a 409 carries the running job's id. */
   scan: (hostname: string, url?: string) =>
-    call<{ id: string }>(`/api/sites/${enc(hostname)}/scans`, post(url ? { url } : {})),
+    call<ScanStarted>(`/api/sites/${enc(hostname)}/scans`, post(url ? { url } : {})),
+  round: (hostname: string, requestKey: string) =>
+    call<RoundResponse>(`/api/sites/${enc(hostname)}/rounds/${enc(requestKey)}`),
+  nodes: () => call<{ nodes: NodeInfo[] }>('/api/nodes').then((r) => r.nodes),
+  walletRequests: (
+    q: { kind?: WalletRequestKind; unlimited?: boolean; hostname?: string; limit?: number } = {},
+  ) => {
+    const p = new URLSearchParams();
+    if (q.kind) p.set('kind', q.kind);
+    if (q.unlimited !== undefined) p.set('unlimited', String(q.unlimited));
+    if (q.hostname) p.set('hostname', q.hostname);
+    if (q.limit !== undefined) p.set('limit', String(q.limit));
+    const qs = p.toString();
+    return call<{ requests: WalletRequestEntity[] }>(
+      `/api/wallet-requests${qs ? `?${qs}` : ''}`,
+    ).then((r) => r.requests);
+  },
   job: (id: string) => call<{ scan: Job }>(`/api/scans/${enc(id)}`).then((r) => r.scan),
   /** A completed scan's report from the server's cache (published or not). */
   scanReport: (id: string) => call<ScanReportResponse>(`/api/scans/${enc(id)}/report`),
@@ -227,13 +349,52 @@ export const api = {
     call<{ flows: FlowEntity[] }>(`/api/recipients/${enc(domain)}`).then((r) => r.flows),
 };
 
-/** Start a scan of `hostname`; if one is already running, return that one's id. */
-export async function startScan(hostname: string, url?: string): Promise<string> {
+/**
+ * Start a scan of `hostname`; if one is already running, return that one's id
+ * (its request is not known then: null). The request is remembered for the
+ * live scan page (see rememberRequest).
+ */
+export async function startScan(hostname: string, url?: string): Promise<ScanStarted> {
+  let started: ScanStarted;
   try {
-    return (await api.scan(hostname, url)).id;
+    const r = await api.scan(hostname, url);
+    started = { id: r.id, request: r.request ?? null };
   } catch (e) {
-    if (e instanceof ApiError && e.status === 409 && e.id) return e.id;
+    if (e instanceof ApiError && e.status === 409 && e.id) return { id: e.id, request: null };
     throw e;
+  }
+  if (started.request) rememberRequest(started.id, started.request);
+  return started;
+}
+
+/*
+ * The request a job was started for. GET /api/scans/:id does not carry it, so
+ * the POST response's request is kept for this tab: in memory, and in
+ * sessionStorage so a reload of the live scan page still shows it. Storage is
+ * a convenience only — it may be unavailable, and then nothing is shown.
+ */
+const requests = new Map<string, ScanRequest>();
+const STORE_KEY = (id: string) => `igris.request.${id}`;
+
+export function rememberRequest(jobId: string, request: ScanRequest): void {
+  requests.set(jobId, request);
+  try {
+    sessionStorage.setItem(STORE_KEY(jobId), JSON.stringify(request));
+  } catch {
+    /* storage unavailable: memory only */
+  }
+}
+
+export function requestFor(jobId: string): ScanRequest | null {
+  const known = requests.get(jobId);
+  if (known) return known;
+  try {
+    const raw = sessionStorage.getItem(STORE_KEY(jobId));
+    if (!raw) return null;
+    const r = JSON.parse(raw) as ScanRequest;
+    return typeof r?.key === 'string' && typeof r.hostname === 'string' ? r : null;
+  } catch {
+    return null;
   }
 }
 
