@@ -1,31 +1,41 @@
 /**
  * API configuration from the environment. Every limit has a conservative
- * default; nothing here can disable the egress policy (hosted scans are
- * ALWAYS public-only — see app.ts).
+ * default; nothing here can disable the egress policy (scans are ALWAYS
+ * public-only — see jobs.ts).
+ *
+ * Registry configuration (IGRIS_REGISTRY, ARKIV_*, IGRIS_SCANNER,
+ * IGRIS_TRUSTED_SCANNERS) is read by registry.ts.
  */
+import { resolve } from 'node:path';
+
 export interface ApiConfig {
   port: number;
   /** Exact origins allowed by CORS. Never "*". */
   allowedOrigins: string[];
-  /** Concurrent scans/repo jobs (each scan is a Chromium). */
+  /** Concurrent scans (each scan is a Chromium). */
   concurrency: number;
-  /** Jobs allowed to wait; beyond this → 503. */
+  /** Scans allowed to wait; beyond this → 503. */
   maxQueued: number;
-  /** Hard per-job timeout, ms. */
+  /** Hard per-scan timeout, ms. */
   jobTimeoutMs: number;
-  /** Requests per client per window on job endpoints. */
+  /** Requests per client per window on the POST endpoints. */
   rateLimitMax: number;
+  /** Requests per client per window on the expensive reads (verified report loads). */
+  readRateLimitMax: number;
   rateLimitWindowMs: number;
-  /** Use the first X-Forwarded-For hop as client identity (only behind a trusted proxy). */
-  trustProxy: boolean;
+  /**
+   * Number of reverse-proxy hops in front of the API (IGRIS_TRUST_PROXY, 0 =
+   * none). Passed to Express's 'trust proxy', so the client identity is the
+   * address that many hops from the RIGHT of X-Forwarded-For — the one the
+   * nearest trusted proxy saw — never the client-controlled first entry.
+   */
+  trustProxy: number;
   /** Ports a scan target (and its subresources) may use. */
   allowedPorts: number[];
-  repo: {
-    maxBytes: number;
-    maxFiles: number;
-    maxSourceFileBytes: number;
-    cloneTimeoutMs: number;
-  };
+  /** Dwell time per scan phase, ms. */
+  dwellMs: number;
+  /** Job metadata and the local cache of finished scans live here. */
+  dataDir: string;
 }
 
 function int(env: NodeJS.ProcessEnv, key: string, def: number, min: number, max: number): number {
@@ -39,7 +49,7 @@ function int(env: NodeJS.ProcessEnv, key: string, def: number, min: number, max:
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
-  const origins = (env.IGRIS_ALLOWED_ORIGINS ?? 'http://localhost:5173,http://127.0.0.1:5173')
+  const origins = (env.IGRIS_ALLOWED_ORIGINS ?? 'http://localhost:5180,http://127.0.0.1:5180')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
@@ -59,20 +69,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     maxQueued: int(env, 'IGRIS_MAX_QUEUED', 4, 0, 100),
     jobTimeoutMs: int(env, 'IGRIS_JOB_TIMEOUT_MS', 120_000, 5_000, 600_000),
     rateLimitMax: int(env, 'IGRIS_RATE_LIMIT_MAX', 5, 1, 1000),
+    readRateLimitMax: int(env, 'IGRIS_READ_RATE_LIMIT_MAX', 120, 1, 100_000),
     rateLimitWindowMs: int(env, 'IGRIS_RATE_LIMIT_WINDOW_MS', 60_000, 1_000, 3_600_000),
-    trustProxy: env.IGRIS_TRUST_PROXY === '1',
+    trustProxy: int(env, 'IGRIS_TRUST_PROXY', 0, 0, 10),
     allowedPorts: ports,
-    repo: {
-      maxBytes: int(env, 'IGRIS_REPO_MAX_BYTES', 50 * 1024 * 1024, 1024, 1024 ** 3),
-      maxFiles: int(env, 'IGRIS_REPO_MAX_FILES', 20_000, 1, 1_000_000),
-      maxSourceFileBytes: int(
-        env,
-        'IGRIS_REPO_MAX_SOURCE_FILE_BYTES',
-        1024 * 1024,
-        1024,
-        64 * 1024 ** 2,
-      ),
-      cloneTimeoutMs: int(env, 'IGRIS_CLONE_TIMEOUT_MS', 30_000, 1_000, 300_000),
-    },
+    dwellMs: int(env, 'IGRIS_DWELL_MS', 4000, 1000, 20_000),
+    dataDir: resolve(env.IGRIS_DATA_DIR ?? '.igris-data'),
   };
 }

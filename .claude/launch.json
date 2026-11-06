@@ -4,7 +4,13 @@
     {
       "name": "igris-api",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-s", "exec", "tsx", "apps/api/src/index.ts"],
+      "runtimeArgs": [
+        "-s",
+        "exec",
+        "tsx",
+        "--env-file-if-exists=.env.arkiv",
+        "apps/api/src/index.ts"
+      ],
       "env": { "IGRIS_ALLOWED_ORIGINS": "http://localhost:5180,http://127.0.0.1:5180" },
       "port": 3001
     },
