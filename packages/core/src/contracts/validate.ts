@@ -10,11 +10,14 @@ import {
   EVIDENCE_BUNDLE_SCHEMA,
   EVIDENCE_BUNDLE_SCHEMA_V1,
   EVIDENCE_BUNDLE_SCHEMA_V2,
+  EVIDENCE_BUNDLE_SCHEMA_V3,
   EVIDENCE_BUNDLE_VERSION_V1,
   EVIDENCE_BUNDLE_VERSION_V2,
+  EVIDENCE_BUNDLE_VERSION_V3,
   EVIDENCE_ITEM_SCHEMA,
   EVIDENCE_ITEM_SCHEMA_V2,
   EVIDENCE_ITEM_SCHEMA_V1,
+  EVIDENCE_ITEM_SCHEMA_V3,
 } from './evidence.js';
 import type { EvidenceBundleV1, EvidenceItem } from './evidence.js';
 import {
@@ -48,6 +51,7 @@ let compiled:
       item: ValidateFunction;
       bundleV1: ValidateFunction;
       bundleV2: ValidateFunction;
+      bundleV3: ValidateFunction;
       bundle: ValidateFunction;
       report200: ValidateFunction;
       report210: ValidateFunction;
@@ -69,11 +73,13 @@ function validators() {
     });
     ajv.addSchema(EVIDENCE_ITEM_SCHEMA_V1);
     ajv.addSchema(EVIDENCE_ITEM_SCHEMA_V2);
+    ajv.addSchema(EVIDENCE_ITEM_SCHEMA_V3);
     ajv.addSchema(EVIDENCE_ITEM_SCHEMA);
     compiled = {
       item: ajv.getSchema(EVIDENCE_ITEM_SCHEMA.$id)!,
       bundleV1: ajv.compile(EVIDENCE_BUNDLE_SCHEMA_V1),
       bundleV2: ajv.compile(EVIDENCE_BUNDLE_SCHEMA_V2),
+      bundleV3: ajv.compile(EVIDENCE_BUNDLE_SCHEMA_V3),
       bundle: ajv.compile(EVIDENCE_BUNDLE_SCHEMA),
       report200: ajv.compile(REPORT_SCHEMA_2_0_0),
       report210: ajv.compile(REPORT_SCHEMA_2_1_0),
@@ -89,19 +95,24 @@ function check<T>(fn: ValidateFunction, name: string, value: unknown): T {
   return value as T;
 }
 
-/** Validates an evidence item against the CURRENT (v3) item schema. */
+/** Validates an evidence item against the CURRENT (v4) item schema. */
 export function validateEvidenceItem(value: unknown): EvidenceItem {
   return check(validators().item, 'evidence item', value);
 }
 
-/** Validates igris.evidence.v1 / v2 (frozen) and v3 bundles, by version. */
+/**
+ * Validates igris.evidence.v1 / v2 / v3 (frozen) and v4 (current; also the
+ * schema any other version string is checked — and rejected — against).
+ */
 export function validateEvidenceBundle(value: unknown): EvidenceBundleV1 {
   const v = (value as { bundleVersion?: unknown } | null)?.bundleVersion;
   return v === EVIDENCE_BUNDLE_VERSION_V1
     ? check(validators().bundleV1, 'evidence bundle v1', value)
     : v === EVIDENCE_BUNDLE_VERSION_V2
       ? check(validators().bundleV2, 'evidence bundle v2', value)
-      : check(validators().bundle, 'evidence bundle', value);
+      : v === EVIDENCE_BUNDLE_VERSION_V3
+        ? check(validators().bundleV3, 'evidence bundle v3', value)
+        : check(validators().bundle, 'evidence bundle', value);
 }
 
 /**

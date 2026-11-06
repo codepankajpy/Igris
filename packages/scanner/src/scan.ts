@@ -30,7 +30,7 @@ import {
   type EgressProxyOptions,
 } from './egress/proxy.js';
 
-export const SCANNER_VERSION = '0.3.0'; // 0.3.0: connect engine (dialog-scoped wallet choice), RPC by behaviour; 0.2.0: Report v2 + evidence bundle
+export const SCANNER_VERSION = '0.4.0'; // 0.4.0: wallet requests recorded and decoded; 0.3.0: connect engine (dialog-scoped wallet choice), RPC by behaviour; 0.2.0: Report v2 + evidence bundle
 
 /**
  * Network egress policy for the scanned page.
@@ -206,20 +206,28 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     await context.exposeFunction('__igrisWalletRead', (method: string, params: unknown) =>
       readHandler.handle(method, params),
     );
-    await context.exposeFunction('__igrisSign', async (kind: string, params: unknown[]) => {
-      // personal_sign params: [message, address]; typed data: [address, json]
-      if (kind === 'personal_sign') {
-        const message = String(params[0] ?? '');
-        return account.signMessage({
-          message: message.startsWith('0x') ? { raw: message as `0x${string}` } : message,
-        });
-      }
-      if (kind === 'eth_signTypedData_v4') {
-        const json = JSON.parse(String(params[1] ?? '{}'));
-        return account.signTypedData(json);
-      }
-      throw new Error(`unsupported sign kind ${kind}`);
-    });
+    // Signs only for a pending request the canary wallet recorded (same
+    // frame, call id and method, with the scan's nonce): a page calling
+    // __igrisSign itself is refused and nothing is signed.
+    await context.exposeBinding(
+      '__igrisSign',
+      (source, kind: unknown, params: unknown, id: unknown, nonce: unknown) =>
+        recorder.signWalletRequest(source.frame, kind, id, nonce, async () => {
+          const p = Array.isArray(params) ? params : [];
+          // personal_sign params: [message, address]; typed data: [address, json]
+          if (kind === 'personal_sign') {
+            const message = String(p[0] ?? '');
+            return account.signMessage({
+              message: message.startsWith('0x') ? { raw: message as `0x${string}` } : message,
+            });
+          }
+          if (kind === 'eth_signTypedData_v4') {
+            const json = JSON.parse(String(p[1] ?? '{}'));
+            return account.signTypedData(json);
+          }
+          throw new Error(`unsupported sign kind ${String(kind)}`);
+        }),
+    );
 
     // Only the dApp's own main frame counts as "the dApp asked for accounts";
     // a third-party iframe or popup with its own provider does not.
@@ -235,8 +243,40 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       }
     });
 
+    // Every request the page makes to the canary wallet (connect, sign, send):
+    // "main" only for the scan page's own main frame, like accounts above.
+    await context.exposeBinding(
+      '__igrisWalletRequest',
+      (source, method: unknown, params: unknown, outcome: unknown, id: unknown, nonce: unknown) => {
+        let origin = 'null';
+        try {
+          origin = new URL(source.frame.url()).origin;
+        } catch {
+          /* about:blank, data: … keep "null" */
+        }
+        recorder.walletRequest({
+          frameKey: source.frame,
+          frame:
+            source.page === mainPage && source.frame === source.page.mainFrame()
+              ? 'main'
+              : 'iframe',
+          origin,
+          method,
+          params,
+          outcome,
+          id,
+          nonce,
+        });
+      },
+    );
+
     await context.addInitScript(
-      buildWalletInitScript({ address: canaryAddress, chainId, spoofMetaMask }),
+      buildWalletInitScript({
+        address: canaryAddress,
+        chainId,
+        spoofMetaMask,
+        nonce: recorder.walletNonce,
+      }),
     );
 
     const page = await context.newPage();
@@ -378,7 +418,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       errors.push(`egress blocked: ${egressProxy.blocked.length - shown.length} more`);
   }
 
-  emit('detection', 'started', 'canary-leak, ip-exposure, security-headers');
+  emit('detection', 'started', 'canary-leak, ip-exposure, security-headers, wallet-requests');
   let built: ScanResult;
   try {
     built = buildReportFromScan({

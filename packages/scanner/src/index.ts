@@ -7,7 +7,14 @@ export {
   type ScanStage,
   type ScanProgressEvent,
 } from './scan.js';
-export { TrafficRecorder, BODY_CAP_BYTES, type Capture } from './capture.js';
+export {
+  TrafficRecorder,
+  BODY_CAP_BYTES,
+  WALLET_PARAMS_CAP,
+  WALLET_REQUESTS_CAP,
+  type Capture,
+  type WalletRequestReport,
+} from './capture.js';
 export type { ScanResult } from '@igris/core';
 export { WalletReadHandler } from './stub-rpc.js';
 export { buildWalletInitScript, type WalletInitConfig } from './wallet-init.js';

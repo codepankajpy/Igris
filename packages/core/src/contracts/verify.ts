@@ -8,12 +8,14 @@ import {
   EVIDENCE_BUNDLE_VERSION,
   EVIDENCE_BUNDLE_VERSION_V2,
   EVIDENCE_BUNDLE_VERSION_V1,
+  EVIDENCE_BUNDLE_VERSION_V3,
+  WALLET_REQUEST_DECODED_PROPERTIES,
   bundleHash,
   evidenceId,
   type EvidenceBundleV1,
 } from './evidence.js';
 import type { FindingSetDigest } from './report-v2.js';
-import { isReportV3, type FindingV3, type ReportAny } from './report-v3.js';
+import { isReportV3, type FindingV3, type ReportAny, type ReportV3 } from './report-v3.js';
 import { contentHash } from './hash.js';
 import { canonicalize } from './canonical.js';
 import { computeRecipients } from '../verdicts.js';
@@ -22,9 +24,14 @@ import { computeRecipients } from '../verdicts.js';
 const BUNDLE_FOR_REPORT: Record<string, string> = {
   '2.0.0': EVIDENCE_BUNDLE_VERSION_V1,
   '2.1.0': EVIDENCE_BUNDLE_VERSION_V2,
-  '2.2.0': EVIDENCE_BUNDLE_VERSION,
+  '2.2.0': EVIDENCE_BUNDLE_VERSION_V3,
   '3.0.0': EVIDENCE_BUNDLE_VERSION,
 };
+
+/** The decoded fields a walletRequests summary repeats from its evidence item. */
+const WALLET_SHARED_FIELDS = Object.keys(WALLET_REQUEST_DECODED_PROPERTIES) as Array<
+  keyof typeof WALLET_REQUEST_DECODED_PROPERTIES
+>;
 
 export interface IntegrityResult {
   ok: boolean;
@@ -46,7 +53,7 @@ export function verifyReportIntegrity(
   bundle: EvidenceBundleV1,
 ): IntegrityResult {
   const problems: string[] = [];
-  // Version pairing: report 2.0.0 ↔ bundle v1, 2.1.0 ↔ v2, 2.2.0 and 3.0.0 ↔ v3.
+  // Version pairing: report 2.0.0 ↔ bundle v1, 2.1.0 ↔ v2, 2.2.0 ↔ v3, 3.0.0 ↔ v4.
   const expected = BUNDLE_FOR_REPORT[report.reportVersion];
   if (expected !== bundle.bundleVersion) {
     problems.push(
@@ -122,6 +129,7 @@ export function verifyReportIntegrity(
       if (keys(report.timeline.recipients) !== keys(report.recipients))
         problems.push('timeline recipients do not match report recipients');
     }
+    problems.push(...walletRequestProblems(report.walletRequests, bundle, all));
   } else {
     for (const line of report.privacy.ledger) {
       for (const id of line.findingIds) {
@@ -136,3 +144,54 @@ export function verifyReportIntegrity(
   }
   return { ok: problems.length === 0, problems, bundleSha256: recomputed };
 }
+
+/**
+ * walletRequests ↔ bundle: every summary points at a wallet-request item and
+ * repeats its decoded fields exactly; its findingIds are exactly the
+ * findings that reference that item; every wallet-request item in the bundle
+ * is summarised (none when walletRequests is null).
+ */
+function walletRequestProblems(
+  summaries: ReportV3WalletRequests,
+  bundle: EvidenceBundleV1,
+  findings: readonly FindingV3[],
+): string[] {
+  const problems: string[] = [];
+  const walletItems = Object.entries(bundle.items)
+    .filter(([, item]) => item.type === 'wallet-request')
+    .map(([id]) => id);
+  if (summaries === null || summaries === undefined) {
+    if (walletItems.length)
+      problems.push(
+        `walletRequests is null but the bundle holds ${walletItems.length} wallet-request items`,
+      );
+    return problems;
+  }
+  const summarised = new Set<string>();
+  summaries.forEach((s, i) => {
+    const at = `walletRequests[${i}]`;
+    const item = bundle.items[s.evidenceId];
+    summarised.add(s.evidenceId);
+    if (!item || item.type !== 'wallet-request') {
+      problems.push(`${at} references ${s.evidenceId}, which is not a wallet-request item`);
+      return;
+    }
+    for (const k of WALLET_SHARED_FIELDS) {
+      if (s[k] !== item[k]) problems.push(`${at}.${k} does not match evidence ${s.evidenceId}`);
+    }
+    const expected = [
+      ...new Set(
+        findings.filter((f) => f.evidence.some((r) => r.id === s.evidenceId)).map((f) => f.id),
+      ),
+    ].sort();
+    if (canonicalize(expected) !== canonicalize(s.findingIds))
+      problems.push(`${at}.findingIds do not match the findings that reference ${s.evidenceId}`);
+  });
+  for (const id of walletItems) {
+    if (!summarised.has(id))
+      problems.push(`wallet-request item ${id} is in no walletRequests entry`);
+  }
+  return problems;
+}
+
+type ReportV3WalletRequests = ReportV3['walletRequests'] | undefined;

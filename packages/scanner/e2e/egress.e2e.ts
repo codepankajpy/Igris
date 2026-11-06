@@ -11,7 +11,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { createSocket, type Socket as UdpSocket } from 'node:dgram';
-import type { ReportV2 } from '@igris/core';
+import type { ReportV3 } from '@igris/core';
 import { scan } from '../src/index.js';
 import { HOST_RULES, PAGE_PORT } from './helpers.js';
 
@@ -57,7 +57,7 @@ const resolve = async (h: string) => {
   return ips;
 };
 
-async function publicOnlyScan(url: string, allowTarget: boolean): Promise<ReportV2> {
+async function publicOnlyScan(url: string, allowTarget: boolean): Promise<ReportV3> {
   const result = await scan({
     url,
     dwellMs: 1500,

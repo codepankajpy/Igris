@@ -31,6 +31,7 @@ import {
   bundleHash,
   evidenceId,
   type EvidenceBundleV1,
+  type EvidenceBundleVersion,
   type EvidenceItem,
 } from './contracts/evidence.js';
 import {
@@ -43,7 +44,12 @@ import {
   type ReportV2,
   type SecurityObservation,
 } from './contracts/report-v2.js';
-import { REPORT_V3_VERSION, type FindingV3, type ReportV3 } from './contracts/report-v3.js';
+import {
+  MAX_WALLET_REQUESTS,
+  REPORT_V3_VERSION,
+  type FindingV3,
+  type ReportV3,
+} from './contracts/report-v3.js';
 import {
   validateEvidenceItem,
   validateEvidenceBundle,
@@ -53,6 +59,11 @@ import { findingSetDigest } from './contracts/verify.js';
 import { canaryLeakDetector } from './detectors/canary-leak.js';
 import { computeContacts, ipExposureDetector } from './detectors/ip-exposure.js';
 import { securityHeadersDetector } from './detectors/security-headers.js';
+import {
+  decodeCaptureWalletRequests,
+  walletRequestsDetector,
+} from './detectors/wallet-requests.js';
+import { buildWalletRequestSummaries } from './walletreq.js';
 import { hasScoringRule } from './scoring-v2.js';
 import { buildTimeline } from './timeline.js';
 import { buildRpcInventory } from './rpc.js';
@@ -62,6 +73,7 @@ export const DEFAULT_DETECTORS: readonly Detector[] = [
   canaryLeakDetector,
   ipExposureDetector,
   securityHeadersDetector,
+  walletRequestsDetector,
 ];
 
 /** What the engine (and every migration to the current version) produces. */
@@ -171,10 +183,17 @@ export function sortFindings<T extends FindingV3>(findings: T[]): T[] {
   );
 }
 
-/** Build the bundle with keys in sorted order (cosmetic; the hash is canonical anyway). */
-export function buildBundle(items: Map<string, EvidenceItem>): EvidenceBundleV1 {
+/**
+ * Build the bundle with keys in sorted order (cosmetic; the hash is canonical
+ * anyway). Labelled with the current version unless told otherwise (the
+ * v1 → 2.2.0 migration writes a v3 bundle).
+ */
+export function buildBundle(
+  items: Map<string, EvidenceItem>,
+  bundleVersion: EvidenceBundleVersion = EVIDENCE_BUNDLE_VERSION,
+): EvidenceBundleV1 {
   const sorted = [...items.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
-  return { bundleVersion: EVIDENCE_BUNDLE_VERSION, items: Object.fromEntries(sorted) };
+  return { bundleVersion, items: Object.fromEntries(sorted) };
 }
 
 /** Refuse to publish a bundle that contains the canary in any detectable form. */
@@ -392,6 +411,8 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
       const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
       return exclude.has(`${host}:${u.port ? Number(u.port) : defaultPort(u.protocol)}`);
     },
+    chainId: input.chainId,
+    scannedAt: input.scannedAt,
   };
 
   const detectors = input.detectors ?? DEFAULT_DETECTORS;
@@ -411,6 +432,12 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
     findingIds.add(f.id);
   }
 
+  // Every wallet request is evidence (the report's walletRequests point at
+  // it), whether or not a finding references it.
+  const walletDecoded = decodeCaptureWalletRequests(input.capture, ctx);
+  for (const { evidence } of walletDecoded)
+    items.set(evidenceId(validateEvidenceItem(evidence)), evidence);
+
   const bundle = buildBundle(items);
   assertCanaryFree(bundle, canary);
   const partitioned = partitionFindings(all);
@@ -418,6 +445,20 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
   const security = partitioned.security.map(toFindingV3);
   const contacts = computeContacts(input.capture, ctx);
   const recipients = computeRecipients({ contacts, findings: [...privacy, ...security], bundle });
+  const walletRequests =
+    input.capture.walletRequests === undefined
+      ? null
+      : buildWalletRequestSummaries(walletDecoded, [...privacy, ...security]);
+  const walletDropped =
+    coverage === 'none'
+      ? 0
+      : Math.max(0, (input.capture.walletRequests?.length ?? 0) - MAX_WALLET_REQUESTS);
+  const scanNotes = walletDropped
+    ? [
+        ...notes,
+        `wallet requests: only the first ${MAX_WALLET_REQUESTS} are reported (${walletDropped} more not decoded)`,
+      ]
+    : notes;
   const timeline = buildTimeline(input.capture, {
     classify,
     canary,
@@ -459,7 +500,7 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
       connectionLog: input.connectionLog ?? [],
       notes: byBehaviour.size
         ? [
-            ...notes,
+            ...scanNotes,
             `classified as RPC providers by behaviour (not in the third-party DB; every request they received was Ethereum JSON-RPC): ${[
               ...byBehaviour,
             ]
@@ -467,7 +508,7 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
               .map((d) => `${d} (${(rpcDomains.get(d) ?? []).slice(0, 6).join(', ')})`)
               .join('; ')}`,
           ]
-        : notes,
+        : scanNotes,
       ...(input.connection ? { connection: input.connection } : {}),
       ...(input.failure ? { failure: input.failure } : {}),
     },
@@ -496,6 +537,7 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
     recipients,
     timeline,
     rpc: buildRpcInventory(input.capture, { classify, canary, wasBlocked: ctx.wasBlocked }),
+    walletRequests,
   };
   // The engine validates its own output: drift between code and published
   // schema fails the scan instead of producing an invalid artifact.

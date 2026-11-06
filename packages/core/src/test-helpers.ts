@@ -14,6 +14,7 @@ import {
   type ScanResultV2,
 } from './engine.js';
 import { scorePrivacy } from './scoring-v2.js';
+import { bundleHash } from './contracts/evidence.js';
 import { loadThirdPartyDb } from './third-parties.js';
 
 // EIP-55 checksummed, as the scanner's wallet hands them out.
@@ -108,11 +109,16 @@ export function sampleResult(over: Partial<ScanResultInput> = {}): ScanResult {
  * The 2.2.0 report the pre-3.0.0 engine wrote for the same scan (test-only):
  * findings get back `countsTowardPrivacyScore` (for the built-in detectors it
  * is exactly `kind === "issue"` on privacy findings), the score and ledger
- * are recomputed with the 2.x scorer, recipients and timeline are dropped.
+ * are recomputed with the 2.x scorer, recipients, timeline, rpc and
+ * walletRequests are dropped, and the bundle is labelled igris.evidence.v3.
  * Used to exercise 2.x readers and migrateReportV2toV3.
  */
 export function toReportV2(result: ScanResult): ScanResultV2 {
-  const { report, bundle } = result;
+  const { report } = result;
+  // 2.2.0 pairs with igris.evidence.v3, which has no wallet-request items.
+  if (Object.values(result.bundle.items).some((i) => i.type === 'wallet-request'))
+    throw new Error('toReportV2: a 2.2.0 report cannot carry wallet-request evidence');
+  const bundle = { bundleVersion: 'igris.evidence.v3' as const, items: result.bundle.items };
   const privacy: PrivacyFinding[] = report.privacy.findings.map((f) => ({
     ...f,
     countsTowardPrivacyScore: f.kind === 'issue',
@@ -131,7 +137,11 @@ export function toReportV2(result: ScanResult): ScanResultV2 {
     contacts: report.contacts,
     wallet: report.wallet,
     telemetry: report.telemetry,
-    evidence: report.evidence,
+    evidence: {
+      ...report.evidence,
+      bundleVersion: bundle.bundleVersion,
+      sha256: bundleHash(bundle),
+    },
     findingSet: report.findingSet,
   };
   return { report: v2, bundle };

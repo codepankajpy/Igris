@@ -27,11 +27,11 @@ import type {
 import { RECIPIENT_CLASSES, RECIPIENT_CLASSES_V1 } from '../report.js';
 import type { EvidenceRef } from './evidence.js';
 import {
-  EVIDENCE_BUNDLE_VERSION,
   EVIDENCE_BUNDLE_VERSION_V1,
   EVIDENCE_BUNDLE_VERSION_V2,
-  EVIDENCE_TYPES,
+  EVIDENCE_BUNDLE_VERSION_V3,
   EVIDENCE_TYPES_V1,
+  EVIDENCE_TYPES_V2,
   type EvidenceBundleVersion,
 } from './evidence.js';
 import { CANONICALIZATION } from './hash.js';
@@ -590,13 +590,13 @@ export const REPORT_SCHEMA_2_1_0 = {
       ...REPORT_SCHEMA_2_0_0.properties.privacy,
       properties: {
         ...REPORT_SCHEMA_2_0_0.properties.privacy.properties,
-        findings: { type: 'array', items: findingSchema('privacy', EVIDENCE_TYPES) },
+        findings: { type: 'array', items: findingSchema('privacy', EVIDENCE_TYPES_V2) },
       },
     },
     security: {
       ...REPORT_SCHEMA_2_0_0.properties.security,
       properties: {
-        observations: { type: 'array', items: findingSchema('security', EVIDENCE_TYPES) },
+        observations: { type: 'array', items: findingSchema('security', EVIDENCE_TYPES_V2) },
       },
     },
     evidence: {
@@ -640,7 +640,7 @@ export const REPORT_SCHEMA_2_2_0 = {
       ...REPORT_SCHEMA_2_1_0.properties.evidence,
       properties: {
         ...REPORT_SCHEMA_2_1_0.properties.evidence.properties,
-        bundleVersion: { const: EVIDENCE_BUNDLE_VERSION },
+        bundleVersion: { const: EVIDENCE_BUNDLE_VERSION_V3 },
       },
     },
   },

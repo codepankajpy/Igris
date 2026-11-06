@@ -1,0 +1,163 @@
+<!doctype html>
+<!--
+  IGRIS fixture: a deliberately risky dApp for the wallet-request audit
+  (docs/design/WALLET-REQUESTS.md). Static, no build step, no external
+  requests. After the user connects ("Connect wallet" → eth_requestAccounts)
+  it asks the wallet, in order, for:
+    1. a Sign-In with Ethereum message for ANOTHER site (evil.example);
+    2. an UNLIMITED Permit2 PermitSingle naming chain 137 while the wallet is
+       on chain 1;
+    3. an eth_sendTransaction approve(spender, MAX_UINT256) on a token.
+  Nothing here is real, so a publicly hosted copy can never request a real
+  approval: the token (0x…bEEF) and the spender (0x…dEaD) are synthetic
+  addresses with 18 leading zero bytes — no contract is deployed there and
+  nobody holds a key for them. Only Permit2's own address (the EIP-712
+  verifyingContract) is real; a Permit2 signature for a token that does not
+  exist, to a spender nobody controls, grants nothing. No request leaves the
+  page.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Wallet requests fixture</title>
+    <style>
+      body {
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+        max-width: 40rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+      }
+      button {
+        font: inherit;
+        padding: 0.5rem 1rem;
+      }
+      pre {
+        background: #f4f4f4;
+        padding: 1rem;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Wallet requests fixture</h1>
+    <p>
+      A test page for IGRIS. After you connect, it asks your wallet to sign in to another site, to
+      sign an unlimited Permit2 approval for the wrong chain, and to approve unlimited spending of a
+      token. The token and spender addresses are synthetic (nobody controls them). Do not use a real
+      wallet here.
+    </p>
+    <button id="connect" type="button">Connect wallet</button>
+    <pre id="log" aria-live="polite"></pre>
+    <script>
+      (function () {
+        'use strict';
+        var PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+        // Synthetic, never deployed, keyless: never a real token or spender.
+        var TOKEN = '0x000000000000000000000000000000000000bEEF';
+        var SPENDER = '0x000000000000000000000000000000000000dEaD';
+        var MAX_UINT160 = '1461501637330902918203684832716283019655932542975';
+        var MAX_UINT256_HEX = 'f'.repeat(64);
+        var logEl = document.getElementById('log');
+
+        function log(line) {
+          logEl.textContent += line + '\n';
+        }
+        function utf8Hex(text) {
+          var bytes = new TextEncoder().encode(text);
+          var out = '0x';
+          for (var i = 0; i < bytes.length; i++) out += bytes[i].toString(16).padStart(2, '0');
+          return out;
+        }
+        function word(hexNo0x) {
+          return hexNo0x.toLowerCase().padStart(64, '0');
+        }
+        async function ask(eth, label, args) {
+          try {
+            await eth.request(args);
+            log(label + ': signed');
+          } catch (err) {
+            log(label + ': ' + (err && err.message ? err.message : String(err)));
+          }
+        }
+
+        async function connect() {
+          var eth = window.ethereum;
+          if (!eth) {
+            log('no wallet found');
+            return;
+          }
+          var accounts = await eth.request({ method: 'eth_requestAccounts' });
+          var account = accounts[0];
+          log('connected');
+
+          // 1. Sign-In with Ethereum for another site (EIP-4361), hex-encoded.
+          var siwe = [
+            'evil.example wants you to sign in with your Ethereum account:',
+            account,
+            '',
+            'Sign in to Evil Example.',
+            '',
+            'URI: https://evil.example/login',
+            'Version: 1',
+            'Chain ID: 1',
+            'Nonce: 8f3k2j1hq9',
+            'Issued At: ' + new Date().toISOString(),
+          ].join('\n');
+          await ask(eth, 'sign-in', { method: 'personal_sign', params: [utf8Hex(siwe), account] });
+
+          // 2. Unlimited Permit2 PermitSingle for chain 137 (the wallet is on chain 1).
+          var now = Math.floor(Date.now() / 1000);
+          var permit = {
+            types: {
+              EIP712Domain: [
+                { name: 'name', type: 'string' },
+                { name: 'chainId', type: 'uint256' },
+                { name: 'verifyingContract', type: 'address' },
+              ],
+              PermitDetails: [
+                { name: 'token', type: 'address' },
+                { name: 'amount', type: 'uint160' },
+                { name: 'expiration', type: 'uint48' },
+                { name: 'nonce', type: 'uint48' },
+              ],
+              PermitSingle: [
+                { name: 'details', type: 'PermitDetails' },
+                { name: 'spender', type: 'address' },
+                { name: 'sigDeadline', type: 'uint256' },
+              ],
+            },
+            primaryType: 'PermitSingle',
+            domain: { name: 'Permit2', chainId: 137, verifyingContract: PERMIT2 },
+            message: {
+              details: { token: TOKEN, amount: MAX_UINT160, expiration: now + 1800, nonce: 0 },
+              spender: SPENDER,
+              sigDeadline: now + 1800,
+            },
+          };
+          await ask(eth, 'permit2', {
+            method: 'eth_signTypedData_v4',
+            params: [account, JSON.stringify(permit)],
+          });
+
+          // 3. approve(SPENDER, MAX_UINT256) on TOKEN, as a transaction.
+          var data = '0x095ea7b3' + word(SPENDER.slice(2)) + MAX_UINT256_HEX;
+          await ask(eth, 'approve', {
+            method: 'eth_sendTransaction',
+            params: [{ from: account, to: TOKEN, data: data, value: '0x0' }],
+          });
+          log('done');
+        }
+
+        document.getElementById('connect').addEventListener('click', function () {
+          connect().catch(function (err) {
+            log('error: ' + String(err));
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

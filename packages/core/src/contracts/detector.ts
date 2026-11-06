@@ -35,6 +35,10 @@ export interface DetectorContext {
   canary: CanaryForms;
   /** True if this URL's request was refused by the egress proxy (never sent). */
   wasBlocked(url: URL): boolean;
+  /** Chain the canary wallet starts on (wallet-requests: chain-mismatch check). */
+  chainId: number;
+  /** Scan time, ISO 8601 (wallet-requests: long-deadline check). */
+  scannedAt: string;
 }
 
 /** Identity fields of a finding: what makes two findings "the same" across scans. */

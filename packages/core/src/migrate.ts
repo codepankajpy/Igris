@@ -32,6 +32,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import { CANONICALIZATION } from './contracts/hash.js';
 import {
   EVIDENCE_BUNDLE_VERSION,
+  EVIDENCE_BUNDLE_VERSION_V3,
   bundleHash,
   type CanaryMatchEvidence,
   type EvidenceBundle,
@@ -158,7 +159,7 @@ export function migrateReportV1toV2(input: unknown): ScanResultV2 {
     );
   }
 
-  const bundle = buildBundle(items);
+  const bundle = buildBundle(items, EVIDENCE_BUNDLE_VERSION_V3);
   assertCanaryFree(bundle, buildCanaryForms(v1.canaryAddress));
   const { privacy, security } = partitionFindings([...canary, ...ip]);
   const coverage = v1.coverage ?? coverageForStatus(v1.status);
@@ -223,7 +224,7 @@ export function migrateReportV1toV2(input: unknown): ScanResultV2 {
     wallet: { readsViaWallet: v1.readsViaWallet, usesAnonRpc: v1.usesAnonRpc },
     telemetry,
     evidence: {
-      bundleVersion: EVIDENCE_BUNDLE_VERSION,
+      bundleVersion: EVIDENCE_BUNDLE_VERSION_V3,
       canonicalization: CANONICALIZATION,
       sha256: bundleHash(bundle),
       itemCount: items.size,
@@ -239,7 +240,7 @@ export function migrateReportV1toV2(input: unknown): ScanResultV2 {
 const V2_VERSIONS: ReadonlySet<string> = new Set(['2.0.0', '2.1.0', '2.2.0']);
 
 /**
- * Report 2.x (+ its bundle) → Report 3.0.0 + an `igris.evidence.v3` bundle.
+ * Report 2.x (+ its bundle) → Report 3.0.0 + an `igris.evidence.v4` bundle.
  *
  *  - The input must be schema-valid and pass verifyReportIntegrity;
  *    otherwise MigrationError (a broken report is never "upgraded").
@@ -248,9 +249,10 @@ const V2_VERSIONS: ReadonlySet<string> = new Set(['2.0.0', '2.1.0', '2.2.0']);
  *    unchanged, so `findingSet` is identical.
  *  - `privacy.score` and `privacy.ledger` are dropped.
  *  - `recipients` are computed from contacts + findings + evidence with the
- *    engine's rules (verdicts.ts); `timeline` is null (2.x recorded no times).
- *  - The bundle is re-labelled `igris.evidence.v3` with its items unchanged
- *    (v1 / v2 items are valid v3 items; item ids are content hashes of the
+ *    engine's rules (verdicts.ts); `timeline`, `rpc` and `walletRequests` are
+ *    null (2.x recorded none of them).
+ *  - The bundle is re-labelled `igris.evidence.v4` with its items unchanged
+ *    (v1 / v2 / v3 items are valid v4 items; item ids are content hashes of the
  *    items, so they do not change). `evidence.bundleVersion` and
  *    `evidence.sha256` are updated, because the bundle hash covers the label.
  *  - `migratedFrom` keeps the ORIGINAL version: the 2.x report's own
@@ -298,7 +300,7 @@ export function migrateReportV2toV3(
       ...source.scan,
       notes: [
         ...source.scan.notes,
-        `migration: report ${source.reportVersion} → ${REPORT_V3_VERSION}; ${scoreNote} and its ledger removed (3.0.0 has no score); recipients derived from contacts and evidence; no timeline (not recorded)`,
+        `migration: report ${source.reportVersion} → ${REPORT_V3_VERSION}; ${scoreNote} and its ledger removed (3.0.0 has no score); recipients derived from contacts and evidence; no timeline, RPC inventory or wallet requests (not recorded)`,
       ],
     },
     detectors: source.detectors,
@@ -316,6 +318,7 @@ export function migrateReportV2toV3(
     recipients,
     timeline: null,
     rpc: null,
+    walletRequests: null,
     migratedFrom: source.migratedFrom ?? source.reportVersion,
   };
   validateEvidenceBundle(bundle);
@@ -350,6 +353,7 @@ export function migrateToCurrent(
   }
   if (rawBundle === undefined)
     throw new MigrationError('a 2.x / 3.x report needs its evidence bundle');
+  if (isDraftReportV3(rawReport, rawBundle)) return upgradeDraftReportV3(rawReport, rawBundle);
   const report = validateReport(rawReport);
   const bundle = validateEvidenceBundle(rawBundle);
   if (isReportV3(report)) {
@@ -362,4 +366,74 @@ export function migrateToCurrent(
     return { report, bundle };
   }
   return { ...migrateReportV2toV3(report, bundle), migratedFrom: report.reportVersion };
+}
+
+/**
+ * A 3.0.0 report written before `walletRequests` existed (proposed 3.0.0
+ * drafts, e.g. already published on Arkiv): no `walletRequests` key, its
+ * `evidence.bundleVersion` is `igris.evidence.v3` and so is the bundle's
+ * (when the bundle is given). A shape check only: callers that read a
+ * published report (registry, API) first verify the stored bytes against
+ * their published hashes, then call `upgradeDraftReportV3`, which re-checks
+ * the bundle against the report's own sha256 before anything is displayed.
+ */
+export function isDraftReportV3(rawReport: unknown, rawBundle?: unknown): boolean {
+  const r = rawReport as { reportVersion?: unknown; evidence?: unknown } | null;
+  if (typeof r !== 'object' || r === null || Array.isArray(r)) return false;
+  if (r.reportVersion !== REPORT_V3_VERSION || 'walletRequests' in r) return false;
+  const evidence = r.evidence as { bundleVersion?: unknown } | null | undefined;
+  if (evidence?.bundleVersion !== EVIDENCE_BUNDLE_VERSION_V3) return false;
+  if (rawBundle === undefined) return true;
+  const b = rawBundle as { bundleVersion?: unknown } | null;
+  return b?.bundleVersion === EVIDENCE_BUNDLE_VERSION_V3;
+}
+
+/**
+ * Draft 3.0.0 (no walletRequests, v3 bundle) → current 3.0.0. The draft's
+ * bundle must validate and hash to what the report claims; then the bundle
+ * is re-labelled `igris.evidence.v4` (items and ids unchanged; sha256
+ * updated), `walletRequests` is null (not recorded) and a note says so. The
+ * result is schema-validated and integrity-verified like any migration.
+ */
+export function upgradeDraftReportV3(rawReport: unknown, rawBundle: unknown): ScanResult {
+  let source: EvidenceBundle;
+  try {
+    source = validateEvidenceBundle(rawBundle);
+  } catch (err) {
+    throw new MigrationError(`refusing to upgrade a draft 3.0.0 report: ${(err as Error).message}`);
+  }
+  const draft = rawReport as Omit<ReportV3, 'walletRequests'>;
+  if (draft.evidence?.sha256 !== bundleHash(source))
+    throw new MigrationError('refusing to upgrade a draft 3.0.0 report: bundle hash mismatch');
+  const bundle: EvidenceBundle = {
+    bundleVersion: EVIDENCE_BUNDLE_VERSION,
+    items: { ...source.items },
+  };
+  const report: ReportV3 = {
+    ...draft,
+    scan: {
+      ...draft.scan,
+      notes: [
+        ...(draft.scan?.notes ?? []),
+        `migration: draft ${REPORT_V3_VERSION} (before wallet requests) → ${REPORT_V3_VERSION}; evidence re-labelled ${EVIDENCE_BUNDLE_VERSION}; no wallet requests (not recorded)`,
+      ],
+    },
+    evidence: {
+      ...draft.evidence,
+      bundleVersion: EVIDENCE_BUNDLE_VERSION,
+      sha256: bundleHash(bundle),
+    },
+    walletRequests: null,
+  };
+  try {
+    validateReport(report);
+  } catch (err) {
+    throw new MigrationError(`refusing to upgrade a draft 3.0.0 report: ${(err as Error).message}`);
+  }
+  const check = verifyReportIntegrity(report, bundle);
+  if (!check.ok)
+    throw new MigrationError(
+      `upgraded draft 3.0.0 report fails integrity: ${check.problems.join('; ')}`,
+    );
+  return { report, bundle };
 }

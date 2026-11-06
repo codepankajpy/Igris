@@ -12,6 +12,8 @@ export * from './contracts/validate.js';
 export * from './detectors/canary-leak.js';
 export * from './detectors/ip-exposure.js';
 export * from './detectors/security-headers.js';
+export * from './detectors/wallet-requests.js';
+export * from './walletreq.js';
 export * from './scoring-v2.js';
 export * from './engine.js';
 export * from './migrate.js';

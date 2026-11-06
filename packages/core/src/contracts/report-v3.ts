@@ -12,16 +12,24 @@
  *  - added: `timeline` — milestones, per-recipient first contact / first
  *    address, requests per second (volatile, like `telemetry`; null when the
  *    capture recorded no times);
+ *  - added: `walletRequests` — what the page asked the canary wallet to do,
+ *    decoded (docs/design/WALLET-REQUESTS.md); null for migrated reports;
+ *  - finding evidence refs may also point at `wallet-request` items;
  *  - `migratedFrom` also accepts 2.x versions (migrateReportV2toV3).
  *
- * Pairs with evidence bundle `igris.evidence.v3` (unchanged).
+ * Pairs with evidence bundle `igris.evidence.v4` (= v3 + `wallet-request`).
  *
  * Browser-safe.
  */
 import type { Phase, RecipientClass, ScanCoverage, ThirdPartyContact } from '../report.js';
 import { RECIPIENT_CLASSES } from '../report.js';
 import { MILESTONE_EVENTS, type MilestoneEvent } from './capture.js';
-import { EVIDENCE_BUNDLE_VERSION } from './evidence.js';
+import type { WalletRequestSummary } from './wallet-request.js';
+import {
+  EVIDENCE_BUNDLE_VERSION,
+  EVIDENCE_TYPES,
+  WALLET_REQUEST_DECODED_PROPERTIES,
+} from './evidence.js';
 import type { EvidenceRef } from './evidence.js';
 import {
   REPORT_SCHEMA_2_2_0,
@@ -167,6 +175,12 @@ export interface ReportV3 {
   timeline: Timeline | null;
   /** JSON-RPC calls the page made, per endpoint; null when not recorded (migrated reports). */
   rpc: RpcEndpoint[] | null;
+  /**
+   * What the page asked the wallet to do (decoded), one entry per request in
+   * request order; null when not recorded (migrated reports).
+   * docs/design/WALLET-REQUESTS.md.
+   */
+  walletRequests: WalletRequestSummary[] | null;
   /** Present when this report was produced by migrating an older one ("1.x.y" or "2.x.y"). */
   migratedFrom?: string;
 }
@@ -229,9 +243,34 @@ export const REPORT_V3_KEYS = [
   'recipients',
   'timeline',
   'rpc',
+  'walletRequests',
   'migratedFrom',
 ] as const;
 export const REPORT_V3_REQUIRED = REPORT_V3_KEYS.filter((k) => k !== 'migratedFrom');
+export const WALLET_REQUEST_SUMMARY_KEYS = [
+  'evidenceId',
+  't',
+  'kind',
+  'method',
+  'phase',
+  'outcome',
+  'frame',
+  'chainId',
+  'verifyingContract',
+  'spender',
+  'token',
+  'amount',
+  'deadline',
+  'siweDomain',
+  'unlimited',
+  'longDeadline',
+  'chainIdMismatch',
+  'domainMismatch',
+  'preConnect',
+  'findingIds',
+] as const;
+/** The scanner records at most this many wallet requests per scan. */
+export const MAX_WALLET_REQUESTS = 500;
 
 /** requestsPerSecond covers at most this many seconds (10 minutes). */
 export const TIMELINE_MAX_SECONDS = 600;
@@ -253,15 +292,35 @@ const PHASES = {
 const DOMAIN = { type: 'string', minLength: 1, maxLength: 253 } as const;
 const RECIPIENT_CLASS = { enum: [...RECIPIENT_V3_CLASSES] } as const;
 
-/** The 2.2.0 finding schema without countsTowardPrivacyScore. */
+/**
+ * The 2.2.0 finding schema without countsTowardPrivacyScore, whose evidence
+ * refs may also point at the v4 item type (`wallet-request`).
+ */
 function findingV3Schema<
   S extends {
     required: readonly string[];
-    properties: { countsTowardPrivacyScore: unknown };
+    properties: {
+      countsTowardPrivacyScore: unknown;
+      evidence: { items: { properties: { type: unknown } } };
+    };
   },
 >(s: S) {
   const { countsTowardPrivacyScore: _removed, ...properties } = s.properties;
-  return { ...s, required: [...FINDING_V3_KEYS], properties };
+  const ev = properties.evidence;
+  return {
+    ...s,
+    required: [...FINDING_V3_KEYS],
+    properties: {
+      ...properties,
+      evidence: {
+        ...ev,
+        items: {
+          ...ev.items,
+          properties: { ...ev.items.properties, type: { enum: [...EVIDENCE_TYPES] } },
+        },
+      },
+    },
+  };
 }
 
 const P22 = REPORT_SCHEMA_2_2_0.properties;
@@ -414,6 +473,32 @@ export const TIMELINE_SCHEMA = {
   ],
 } as const;
 
+/** `walletRequests`: null (not recorded) or one summary per request, in request order. */
+export const WALLET_REQUESTS_SCHEMA = {
+  anyOf: [
+    { type: 'null' },
+    {
+      type: 'array',
+      maxItems: MAX_WALLET_REQUESTS,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [...WALLET_REQUEST_SUMMARY_KEYS],
+        properties: {
+          evidenceId: { type: 'string', pattern: '^ev_[0-9a-f]{24}$' },
+          t: { anyOf: [{ type: 'null' }, MS] },
+          ...WALLET_REQUEST_DECODED_PROPERTIES,
+          findingIds: {
+            type: 'array',
+            uniqueItems: true,
+            items: { type: 'string', pattern: '^F-[0-9a-f]{16}$' },
+          },
+        },
+      },
+    },
+  ],
+} as const;
+
 /** PROPOSED report schema 3.0.0 (not yet hash-pinned: owner approval pending). */
 export const REPORT_SCHEMA_3_0_0 = {
   ...REPORT_SCHEMA_2_2_0,
@@ -453,6 +538,7 @@ export const REPORT_SCHEMA_3_0_0 = {
     recipients: RECIPIENTS_SCHEMA,
     timeline: TIMELINE_SCHEMA,
     rpc: RPC_SCHEMA,
+    walletRequests: WALLET_REQUESTS_SCHEMA,
     migratedFrom: { type: 'string', pattern: '^[12]\\.\\d+\\.\\d+$' },
   },
 } as const;

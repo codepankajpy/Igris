@@ -6,16 +6,17 @@ disagree. Such a disagreement is a bug: report it. The JSON Schemas are
 exported from `@igris/core` (`REPORT_V3_SCHEMA`, `REPORT_V2_SCHEMA`,
 `EVIDENCE_BUNDLE_SCHEMA`, `EVIDENCE_ITEM_SCHEMA`).
 
-| Contract               | Identifier                                       | Where                                      |
-| ---------------------- | ------------------------------------------------ | ------------------------------------------ |
-| Canonical JSON         | RFC 8785                                         | `packages/core/src/contracts/canonical.ts` |
-| Content hash           | sha256 over canonical bytes, 64 lowercase hex    | `contracts/hash.ts`                        |
-| Capture                | v1 (internal, unredacted — never published)      | `contracts/capture.ts`                     |
-| Evidence bundle        | `igris.evidence.v3` (writes); v1, v2 still read  | `contracts/evidence.ts`                    |
-| Report                 | `"3.0.0"` (writes, proposed); `"2.x"` read       | `contracts/report-v{2,3}.ts`               |
-| Detector API           | v1                                               | `contracts/detector.ts`, `engine.ts`       |
-| Scanner node / profile | `igris.node.v1` / `igris.scanner.v1`             | `packages/registry/src/identity.ts`        |
-| Registry entity        | Arkiv schema `igris.scan.v1`, summary payload v2 | `packages/registry/src/{schema,record}.ts` |
+| Contract               | Identifier                                         | Where                                         |
+| ---------------------- | -------------------------------------------------- | --------------------------------------------- |
+| Canonical JSON         | RFC 8785                                           | `packages/core/src/contracts/canonical.ts`    |
+| Content hash           | sha256 over canonical bytes, 64 lowercase hex      | `contracts/hash.ts`                           |
+| Capture                | v1 (internal, unredacted — never published)        | `contracts/capture.ts`                        |
+| Wallet requests        | shared types (proposed)                            | `contracts/wallet-request.ts`, `walletreq.ts` |
+| Evidence bundle        | `igris.evidence.v4` (writes, proposed); v1–v3 read | `contracts/evidence.ts`                       |
+| Report                 | `"3.0.0"` (writes, proposed); `"2.x"` read         | `contracts/report-v{2,3}.ts`                  |
+| Detector API           | v1                                                 | `contracts/detector.ts`, `engine.ts`          |
+| Scanner node / profile | `igris.node.v1` / `igris.scanner.v1`               | `packages/registry/src/identity.ts`           |
+| Registry entity        | Arkiv schema `igris.scan.v1`, summary payload v2   | `packages/registry/src/{schema,record}.ts`    |
 
 ## Canonicalization and hashing
 
@@ -73,7 +74,7 @@ every object.
 ## Evidence bundle `igris.evidence.v2`
 
 Approved by the project owner on 2026-11-06 and frozen: its schemas are
-pinned by canonical hash in `contracts.test.ts`, like v1's. v2 bundles remain valid input; new bundles are written as v3 (below).
+pinned by canonical hash in `contracts.test.ts`, like v1's. v2 bundles remain valid input; new bundles are written as v4 (below).
 
 v2 is v1 plus exactly one item type. The three v1 item schemas are
 byte-for-byte identical in v2 (tested).
@@ -230,13 +231,82 @@ class existed such vendors could only be `unknown-third-party`.
 - Scoring: a leak to a `wallet-sdk` recipient is severity medium and costs
   20 points (docs/SCORING.md); the `canary-leak` detector is 1.1.0.
 
+## Evidence bundle `igris.evidence.v4` (proposed, pending approval)
+
+Specified in [docs/design/WALLET-REQUESTS.md](design/WALLET-REQUESTS.md).
+**Not yet frozen**: `EVIDENCE_ITEM_SCHEMA` / `EVIDENCE_BUNDLE_SCHEMA` (v4)
+are hash-pinned only after the owner approves that document (a TODO marks
+the pin's place in `contracts.test.ts`). The frozen v3 schemas are exported
+as `EVIDENCE_ITEM_SCHEMA_V3` / `EVIDENCE_BUNDLE_SCHEMA_V3`; their pins are
+unchanged. v1–v3 bundles still validate (`validateEvidenceBundle` dispatches
+on `bundleVersion`).
+
+v4 is v3 plus exactly one item type (a test asserts the v3 item schemas are
+reused unchanged and that the bundle schemas differ only by name, version
+label and item-schema reference):
+
+```jsonc
+{
+  "type": "wallet-request",
+  "phase": "pre-connect" | "post-connect",
+  "method": RecordedWalletMethod,          // eth_requestAccounts … eth_sendRawTransaction (13)
+  "kind": "connect" | "switch-chain" | "add-chain" | "watch-asset" | "siwe"
+        | "personal-message" | "blind-hash" | "eth-sign" | "permit" | "permit2"
+        | "typed-data" | "approve" | "set-approval-for-all" | "transaction",
+  "frame": "main" | "iframe",              // main = the scan page's own main frame
+  "origin": "https://app.example.org",     // calling frame, ≤ 512 chars, canary redacted
+  "outcome": "answered" | "signed" | "rejected" | "error",
+  "chainId": 137 | null,                   // typed-data domain, SIWE Chain ID, tx chainId, switch target
+  "verifyingContract": "0x…" | null,       // EIP-55, ^0x[0-9a-fA-F]{40}$
+  "spender": "0x…" | null,                 // permit spender / approve spender / operator
+  "token": "0x…" | null,
+  "amount": "1461…975" | null,             // decimal, ^[0-9]{1,78}$
+  "deadline": "1767225600" | null,         // decimal unix seconds
+  "siweDomain": "evil.example" | null,     // 1–255 chars, canary redacted
+  "unlimited": true, "longDeadline": false, "chainIdMismatch": true,
+  "domainMismatch": false, "preConnect": false,
+  "paramsDigest": "<64 hex>"               // sha256 of the canonical params, canary → <CANARY>
+}
+```
+
+- **Canary-free.** Raw params are never stored. Owner / holder fields are
+  never read; an address field equal to the canary is `null`; free text
+  (origin, SIWE domain) has every detectable canary form replaced by
+  `<CANARY>`; `paramsDigest` redacts the canary before hashing (also inside
+  hex-encoded message text), so the same request made to two scans'
+  canaries has the same digest and the same item id. The engine's
+  canary-free assertion covers the whole bundle, these items included.
+- **No times.** The item holds no `t`; times are in the report summary.
+- **Every request is evidence**, whether or not a finding references it
+  (the report's `walletRequests` point at it). Identical requests share one
+  content-addressed item.
+- Decoding is pure and offline (`decodeWalletRequest(s)` in `walletreq.ts`);
+  the rules are in the design document. Resolved details: `personal_sign`
+  params are read in either order (the canary / an address is the address);
+  a 0x-hex message is decoded as UTF-8, a bare 32-byte hash (with or without
+  0x), invalid UTF-8, control characters or unparseable params are
+  `blind-hash`; the SIWE domain and an http(s) URI must be the calling
+  frame's host or a sub/parent domain of it within the same registrable
+  domain (siblings and public suffixes do not match; an opaque frame origin
+  falls back to the page origin); Permit2 AllowanceTransfer
+  (PermitSingle / PermitBatch) reports `expiration` as the deadline,
+  SignatureTransfer reports the message `deadline`; DAI-style permits
+  (`allowed: true`) are `permit` + unlimited, expiry 0 is a long deadline;
+  `setApprovalForAll(…, false)` (a revocation) is a plain transaction;
+  `unlimited` = amount ≥ 2^160 − 1; `longDeadline` = deadline > scan time +
+  30 days (permits only); a JSON number beyond 2^53 has `amount: null` but
+  its magnitude still counts for `unlimited`. Wallet state is threaded per
+  calling frame (frame + origin): its chain (changed by an answered
+  `wallet_switchEthereumChain` with a string chain id, as the canary does)
+  and whether it called `eth_requestAccounts` (`preConnect`).
+
 ## Report `3.0.0` (proposed, pending approval)
 
 Specified in [docs/design/REPORT-3.0.0.md](design/REPORT-3.0.0.md), which is
 normative for it. Implemented in `contracts/report-v3.ts`, `verdicts.ts`,
 `timeline.ts`; **not yet frozen**: its schema is not hash-pinned until the
 project owner approves the design document (a TODO marks the pin's place in
-`contracts.test.ts`). The engine writes 3.0.0 with `igris.evidence.v3`
+`contracts.test.ts`). The engine writes 3.0.0 with `igris.evidence.v4`
 bundles; 2.0.0 / 2.1.0 / 2.2.0 reports still validate (`validateReport`,
 which `validateReportV2` now aliases) and verify.
 
@@ -259,22 +329,58 @@ addressPhases, ip }`, a `verdict` (`unidentified` > `tracking` >
   `recipients` (same keys and order as `recipients[]`, `firstContactMs`,
   `firstAddressMs`), `requestsPerSecond` (dense 1 s buckets, ≤ 600, first vs
   third party). All times are integer ms ≥ 0; the bundle never holds times;
+- added `walletRequests` (required): `null` (not recorded — migrated
+  reports) or one `WalletRequestSummary` per recorded request, in request
+  order, at most 500 (proposed, pending pin; see below);
+- finding evidence references may also point at `wallet-request` items, and
+  `evidence.bundleVersion` is `igris.evidence.v4`;
 - `migratedFrom` accepts `1.x.y` and `2.x.y`.
 
-Integrity (`verifyReportIntegrity`): 3.0.0 pairs with `igris.evidence.v3`;
+### `walletRequests` (proposed, pending pin)
+
+```
+{
+  evidenceId: "ev_…",                      // a wallet-request item of the bundle
+  t: integer ms since navigation start | null,
+  kind, method, phase, outcome, frame, chainId, verifyingContract, spender,
+  token, amount, deadline, siweDomain,     // exactly the item's values
+  unlimited, longDeadline, chainIdMismatch, domainMismatch, preConnect,
+  findingIds: string[]                     // findings referencing evidenceId (sorted)
+}
+```
+
+One entry per request (identical requests share an `evidenceId`). Findings
+come from the detector `wallet-requests` 1.0.0 (domain `security`, so they
+never reach recipients, verdicts or any score); its table is in the design
+document. A request that matches several rows gets one finding: the most
+severe row gives severity and title, every matched row adds its impact and
+remediation. Fingerprint identity: `{ method, kind, verifyingContract,
+spender, token, flags }` (`flags` = the request's true flags, comma-joined),
+never the canary. Nothing is reported for a page that did not load
+(`walletRequests: []`).
+
+Integrity (`verifyReportIntegrity`): 3.0.0 pairs with `igris.evidence.v4`;
 ledger checks apply to 2.x only; for 3.0.0 every `recipients[].findingIds`
 entry must exist, every recipient must appear in `contacts` or in a
 canary-match item a finding references, and the timeline's recipient keys
-must equal the report's.
+must equal the report's; every `walletRequests` entry must point at a
+`wallet-request` item, repeat its decoded fields exactly and list exactly the
+findings that reference it; every `wallet-request` item must be summarised
+(none may exist when `walletRequests` is null).
 
 Migration `migrateReportV2toV3(report, bundle)` refuses an invalid or
 unverifiable input, drops score / ledger / the score flag, computes
-`recipients` with the engine's rules, sets `timeline: null`, re-labels the
-bundle `igris.evidence.v3` (items and their ids unchanged; `evidence.sha256`
-updated because the hash covers the label) and sets `migratedFrom` to the
+`recipients` with the engine's rules, sets `timeline`, `rpc` and
+`walletRequests` to null, re-labels the bundle `igris.evidence.v4` (items
+and their ids unchanged; `evidence.sha256` updated because the hash covers
+the label) and sets `migratedFrom` to the
 original version (a 1.x report keeps its 1.x origin). v1 reports reach
 3.0.0 through 2.2.0 (`migrateReportV1toV3`); `migrateToCurrent(report,
-bundle?)` reads any version and returns a verified 3.0.0 result.
+bundle?)` reads any version and returns a verified 3.0.0 result. It also
+upgrades a **draft 3.0.0** written before `walletRequests` existed (no
+`walletRequests` key, an `igris.evidence.v3` bundle that hashes to the
+report's `evidence.sha256`): bundle re-labelled v4, `walletRequests: null`,
+a note in `scan.notes`; the result is validated and integrity-checked.
 
 `summarise(report, bundle)` replaces `assess()`: a descriptive `state`
 (`not-observed`, `address-to-trackers`, `address-to-services`,
@@ -307,8 +413,10 @@ violation throws `DetectorContractError` and fails the scan:
 5. the finished bundle contains no form of the canary;
 6. the engine validates its own output (report and bundle) against the schemas.
 
-Built-in detectors: `canary-leak` 1.0.0 (privacy), `ip-exposure` 1.0.0
-(privacy), `security-headers` 1.0.0 (security).
+Built-in detectors: `canary-leak` 1.1.0 (privacy), `ip-exposure` 1.0.0
+(privacy), `security-headers` 1.0.0 (security), `wallet-requests` 1.0.0
+(security). `DetectorContext` also carries the scan's start `chainId` and
+`scannedAt` (used by `wallet-requests`).
 
 ## Versioning policy
 
@@ -319,7 +427,8 @@ Built-in detectors: `canary-leak` 1.0.0 (privacy), `ip-exposure` 1.0.0
 - **Approval and freezing**: a successor contract takes effect only after
   the project owner approves it. Once approved it is frozen, and its schemas
   are pinned by canonical hash in `contracts.test.ts`. Frozen so far: report
-  2.0.0, 2.1.0 and 2.2.0; `igris.evidence.v1`, `v2` and `v3`.
+  2.0.0, 2.1.0 and 2.2.0; `igris.evidence.v1`, `v2` and `v3`. Proposed and
+  not yet pinned: report 3.0.0 and `igris.evidence.v4`.
 - **Detectors**: bump `version` when logic changes. The `id` never changes,
   because it is part of every fingerprint.
 - **Arkiv entity schema**: a new schema name on breaking change

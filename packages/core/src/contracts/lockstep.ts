@@ -17,7 +17,11 @@ import {
   DOCUMENT_HEADERS_KEYS,
   DOCUMENT_HEADER_NAMES,
   THIRD_PARTY_CONTACT_KEYS,
+  WALLET_REQUEST_EVIDENCE_KEYS,
+  WALLET_REQUEST_FRAMES,
+  WALLET_REQUEST_OUTCOMES,
 } from './evidence.js';
+import type { WalletRequestEvidence, WalletRequestSummary } from './wallet-request.js';
 import type {
   FindingV2,
   PrivacyFinding,
@@ -44,11 +48,19 @@ import {
   REPORT_V3_KEYS,
   TIMELINE_KEYS,
   TIMELINE_RECIPIENT_KEYS,
+  WALLET_REQUEST_SUMMARY_KEYS,
 } from './report-v3.js';
 
 /** true iff the key list is exactly keyof T (no missing, no extra). */
 type ExactKeys<K extends readonly string[], T> = [Exclude<keyof T, K[number]>] extends [never]
   ? [Exclude<K[number], keyof T>] extends [never]
+    ? true
+    : false
+  : false;
+
+/** true iff the tuple's members are exactly the union U. */
+type ExactUnion<K extends readonly string[], U> = [Exclude<U, K[number]>] extends [never]
+  ? [Exclude<K[number], U>] extends [never]
     ? true
     : false
   : false;
@@ -71,6 +83,10 @@ export function _lockstep(): void {
   assertTrue<ExactKeys<typeof TIMELINE_KEYS, Timeline>>(true);
   assertTrue<ExactKeys<typeof TIMELINE_RECIPIENT_KEYS, TimelineRecipient>>(true);
   assertTrue<ExactKeys<typeof REPORT_V3_KEYS, ReportV3>>(true);
+  assertTrue<ExactKeys<typeof WALLET_REQUEST_EVIDENCE_KEYS, WalletRequestEvidence>>(true);
+  assertTrue<ExactKeys<typeof WALLET_REQUEST_SUMMARY_KEYS, WalletRequestSummary>>(true);
+  assertTrue<ExactUnion<typeof WALLET_REQUEST_OUTCOMES, WalletRequestEvidence['outcome']>>(true);
+  assertTrue<ExactUnion<typeof WALLET_REQUEST_FRAMES, WalletRequestEvidence['frame']>>(true);
 
   // Privacy score and security observations are separate types: a security
   // observation is not a privacy finding, and it cannot count toward the score.

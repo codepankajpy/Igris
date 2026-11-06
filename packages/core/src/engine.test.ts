@@ -695,7 +695,7 @@ describe('wallet-sdk recipients', () => {
       'wallet-sdk',
     );
     expect(r.report.reportVersion).toBe('3.0.0');
-    expect(r.bundle.bundleVersion).toBe('igris.evidence.v3');
+    expect(r.bundle.bundleVersion).toBe('igris.evidence.v4');
   });
 
   it('a wallet SDK alone is not the "address to trackers" case', () => {

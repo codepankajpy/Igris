@@ -3,17 +3,39 @@
  *
  * `igrisInitWallet` below is SERIALIZED with .toString() and evaluated in the
  * page before any page script runs (Playwright addInitScript), so it must be
- * fully self-contained: no imports, no outer-scope references. Node-side
- * callbacks are reached through two bindings exposed with
- * context.exposeFunction:
+ * fully self-contained: no imports, no outer-scope references (its config,
+ * including the recorded method list, is passed in as JSON). Node-side
+ * callbacks are reached through bindings exposed on the context:
  *
  *   __igrisWalletRead(method, params) — answer read RPCs (stubbed by default)
- *   __igrisSign(kind, params)         — sign with the throwaway canary key
+ *   __igrisSign(kind, params, id, nonce)
+ *       — sign with the throwaway canary key; Node-side it signs only for a
+ *         pending recorded request `id` of that method (capture.ts
+ *         signWalletRequest), so a page calling it directly gets nothing
+ *   __igrisWalletEvent(event)         — "the dApp requested accounts"
+ *   __igrisWalletRequest(method, paramsJSON, outcome, id, nonce)
+ *       — every call of a RECORDED_WALLET_METHODS method, reported twice:
+ *         outcome "pending" before the wallet acts, then answered | signed |
+ *         rejected | error after. The scanner adds the calling frame (main
+ *         frame of the scan page or not) and its origin from the binding
+ *         source (docs/design/WALLET-REQUESTS.md). Reporting never changes
+ *         what the wallet does.
+ *
+ * `nonce` is a per-scan secret generated Node-side and passed in the config:
+ * it lives only in this closure (never on window), and the recorder ignores
+ * reports and sign calls without it. Both bindings are taken from window when
+ * the wallet is installed (Playwright installs bindings before init scripts),
+ * so a page that later replaces them neither hides its requests nor receives
+ * the nonce. Defence in depth (the binding transport itself runs in the
+ * page's world): the recorder also accepts only outcomes the canary can
+ * produce per method, records `signed` only from the Node-side signer, and
+ * the signer signs only requests already recorded.
  *
  * Signing happens Node-side so the private key never enters the page. The
  * page only ever sees the canary ADDRESS — which is the whole point: anything
  * that ships it to a third party is a provable leak.
  */
+import { RECORDED_WALLET_METHODS } from '@igris/core';
 
 export interface WalletInitConfig {
   /** Canary address (0x…40 hex). */
@@ -21,6 +43,8 @@ export interface WalletInitConfig {
   chainId: number;
   /** Also set isMetaMask=true so MetaMask-only dapps connect (documented trade-off). */
   spoofMetaMask: boolean;
+  /** Per-scan secret carried by every report and sign call (TrafficRecorder.walletNonce). */
+  nonce: string;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -28,10 +52,50 @@ export function igrisInitWallet(cfg: {
   address: string;
   chainId: number;
   spoofMetaMask: boolean;
+  /** Methods reported through __igrisWalletRequest (RECORDED_WALLET_METHODS). */
+  recordedMethods?: string[];
+  /** Per-scan secret passed to the bindings (see the header). */
+  nonce?: string;
 }): void {
   const w = window as any;
   if (w.__igrisWalletInstalled) return;
   w.__igrisWalletInstalled = true;
+
+  // Keep the reporting binding in this closure as soon as it exists, so a
+  // page that later overwrites window.__igrisWalletRequest cannot hide its
+  // own requests from the scan.
+  const recorded = new Set(cfg.recordedMethods ?? []);
+  const nonce = cfg.nonce ?? '';
+  let reportBinding: any =
+    typeof w.__igrisWalletRequest === 'function' ? w.__igrisWalletRequest : null;
+  let signBinding: any = typeof w.__igrisSign === 'function' ? w.__igrisSign : null;
+  let requestSeq = 0;
+  /** Report a call; resolves once the scanner has recorded it (never rejects). */
+  function reportRequest(
+    method: string,
+    paramsJSON: string,
+    outcome: string,
+    id: number,
+  ): Promise<void> {
+    try {
+      if (!reportBinding && typeof w.__igrisWalletRequest === 'function')
+        reportBinding = w.__igrisWalletRequest;
+      const sent = reportBinding?.(method, paramsJSON, outcome, id, nonce);
+      if (sent && typeof sent.then === 'function')
+        return sent.then(
+          () => {},
+          () => {},
+        );
+    } catch {
+      /* binding absent (e.g. discovery tooling) */
+    }
+    return Promise.resolve();
+  }
+  function sign(kind: string, params: any[], id: number | undefined): Promise<any> {
+    if (!signBinding && typeof w.__igrisSign === 'function') signBinding = w.__igrisSign;
+    if (!signBinding) return Promise.reject(rpcError(4200, 'Igris Canary Wallet: cannot sign'));
+    return signBinding(kind, params, id, nonce);
+  }
 
   let chainIdHex = '0x' + cfg.chainId.toString(16);
   let connected = false;
@@ -76,65 +140,92 @@ export function igrisInitWallet(cfg: {
     return err;
   }
 
+  const SIGNS = new Set(['personal_sign', 'eth_signTypedData_v4']);
+
+  async function handle(args: { method: string; params?: any[] }, id?: number): Promise<any> {
+    const method = args?.method;
+    const params = args?.params ?? [];
+    switch (method) {
+      case 'eth_accounts':
+        return connected ? [cfg.address] : [];
+      case 'eth_requestAccounts': {
+        // Tell the scanner (Node side) that the dapp asked for accounts:
+        // this, not DOM guessing, is the connection signal.
+        try {
+          void w.__igrisWalletEvent?.('eth_requestAccounts');
+        } catch {
+          /* binding absent (e.g. discovery tooling) */
+        }
+        if (!connected) {
+          connected = true;
+          provider.selectedAddress = cfg.address;
+          emit('connect', { chainId: chainIdHex });
+          emit('accountsChanged', [cfg.address]);
+        }
+        return [cfg.address];
+      }
+      case 'eth_chainId':
+        return chainIdHex;
+      case 'net_version':
+        return String(parseInt(chainIdHex, 16));
+      case 'wallet_switchEthereumChain': {
+        const target = params[0]?.chainId;
+        if (typeof target === 'string') {
+          chainIdHex = target;
+          emit('chainChanged', chainIdHex);
+        }
+        return null;
+      }
+      case 'wallet_addEthereumChain':
+        return null; // accept silently
+      case 'wallet_requestPermissions':
+      case 'wallet_getPermissions':
+        return [{ parentCapability: 'eth_accounts' }];
+      case 'personal_sign':
+        return await sign('personal_sign', params, id);
+      case 'eth_signTypedData_v4':
+        return await sign('eth_signTypedData_v4', params, id);
+      case 'eth_sendTransaction':
+      case 'eth_sign':
+      case 'eth_signTransaction':
+      case 'eth_sendRawTransaction':
+        // A scanner must never move funds or produce reusable signatures
+        // over raw data. EIP-1193 user-rejected code.
+        throw rpcError(4001, 'Igris Canary Wallet: rejected (scanner never signs transactions)');
+      default:
+        if (FORWARDED.has(method)) {
+          const res = await w.__igrisWalletRead(method, params);
+          if (res && res.error) throw rpcError(res.error.code ?? -32000, res.error.message);
+          return res.result;
+        }
+        throw rpcError(4200, 'Igris Canary Wallet: unsupported method ' + method);
+    }
+  }
+
   const provider: any = {
     isIgrisCanary: true,
     async request(args: { method: string; params?: any[] }): Promise<any> {
       const method = args?.method;
-      const params = args?.params ?? [];
-      switch (method) {
-        case 'eth_accounts':
-          return connected ? [cfg.address] : [];
-        case 'eth_requestAccounts': {
-          // Tell the scanner (Node side) that the dapp asked for accounts:
-          // this, not DOM guessing, is the connection signal.
-          try {
-            void w.__igrisWalletEvent?.('eth_requestAccounts');
-          } catch {
-            /* binding absent (e.g. discovery tooling) */
-          }
-          if (!connected) {
-            connected = true;
-            provider.selectedAddress = cfg.address;
-            emit('connect', { chainId: chainIdHex });
-            emit('accountsChanged', [cfg.address]);
-          }
-          return [cfg.address];
-        }
-        case 'eth_chainId':
-          return chainIdHex;
-        case 'net_version':
-          return String(parseInt(chainIdHex, 16));
-        case 'wallet_switchEthereumChain': {
-          const target = params[0]?.chainId;
-          if (typeof target === 'string') {
-            chainIdHex = target;
-            emit('chainChanged', chainIdHex);
-          }
-          return null;
-        }
-        case 'wallet_addEthereumChain':
-          return null; // accept silently
-        case 'wallet_requestPermissions':
-        case 'wallet_getPermissions':
-          return [{ parentCapability: 'eth_accounts' }];
-        case 'personal_sign':
-          return await w.__igrisSign('personal_sign', params);
-        case 'eth_signTypedData_v4':
-          return await w.__igrisSign('eth_signTypedData_v4', params);
-        case 'eth_sendTransaction':
-        case 'eth_sign':
-        case 'eth_signTransaction':
-        case 'eth_sendRawTransaction':
-          // A scanner must never move funds or produce reusable signatures
-          // over raw data. EIP-1193 user-rejected code.
-          throw rpcError(4001, 'Igris Canary Wallet: rejected (scanner never signs transactions)');
-        default:
-          if (FORWARDED.has(method)) {
-            const res = await w.__igrisWalletRead(method, params);
-            if (res && res.error) throw rpcError(res.error.code ?? -32000, res.error.message);
-            return res.result;
-          }
-          throw rpcError(4200, 'Igris Canary Wallet: unsupported method ' + method);
+      if (typeof method !== 'string' || !recorded.has(method)) return handle(args);
+      const id = ++requestSeq;
+      let paramsJSON = '[]';
+      try {
+        paramsJSON = JSON.stringify(args.params ?? []) ?? '[]';
+      } catch {
+        paramsJSON = '"<unserialisable params>"';
+      }
+      // Before the wallet acts: fixes the order, phase and time of the
+      // request. A signature waits until it is recorded: the signer only
+      // signs recorded requests.
+      const recordedNow = reportRequest(method, paramsJSON, 'pending', id);
+      if (SIGNS.has(method)) await recordedNow;
+      try {
+        const result = await handle(args, id);
+        reportRequest(method, '', SIGNS.has(method) ? 'signed' : 'answered', id);
+        return result;
+      } catch (err: any) {
+        reportRequest(method, '', err?.code === 4001 ? 'rejected' : 'error', id);
+        throw err;
       }
     },
     isConnected() {
@@ -244,11 +335,12 @@ export function igrisInitWallet(cfg: {
 
 /** Build the raw init-script source injected via addInitScript. */
 export function buildWalletInitScript(cfg: WalletInitConfig): string {
+  const full = { ...cfg, recordedMethods: [...RECORDED_WALLET_METHODS] };
   // esbuild-based runtimes (tsx, vitest) transpile this module with
   // keepNames, which rewrites inner functions to `__name(fn, "fn")` calls —
   // a helper that lives OUTSIDE the serialized function. Shim it so the
   // stringified source runs in the page under every toolchain (plain tsc
   // emits no helper; the shim is then unused).
   const nameShim = 'var __name = (fn) => fn;';
-  return `(() => { ${nameShim} (${igrisInitWallet.toString()})(${JSON.stringify(cfg)}); })();`;
+  return `(() => { ${nameShim} (${igrisInitWallet.toString()})(${JSON.stringify(full)}); })();`;
 }

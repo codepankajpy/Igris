@@ -13,3 +13,4 @@ export * from './report-v3.js';
 export * from './detector.js';
 export * from './verify.js';
 export * from './lockstep.js';
+export * from './wallet-request.js';

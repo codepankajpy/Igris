@@ -8,6 +8,7 @@
  * be tested without a browser.
  */
 import type { Phase } from '../report.js';
+import type { CapturedWalletRequest } from './wallet-request.js';
 
 export const CAPTURE_VERSION = 1 as const;
 
@@ -70,6 +71,8 @@ export interface Capture {
   mainDocument?: CapturedMainDocument;
   /** Scan milestones, ms since navigation start (timeline only). */
   milestones?: CapturedMilestone[];
+  /** Requests the page made to the canary wallet (contracts/wallet-request.ts). */
+  walletRequests?: CapturedWalletRequest[];
 }
 
 export const MILESTONE_EVENTS = [

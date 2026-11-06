@@ -2,8 +2,11 @@
  * Evidence bundles. `igris.evidence.v1` (P0.5) is FROZEN — its schema objects
  * below are pinned by hash in contracts.test.ts. `igris.evidence.v2` (P1) is
  * v1 plus exactly one additive item type, `contact-classification`; approved
- * by the project owner 2026-11-06 and frozen (hash-pinned) as well. Both
- * validate; new bundles are written as v2.
+ * by the project owner 2026-11-06 and frozen (hash-pinned) as well, like
+ * `igris.evidence.v3` (+ the wallet-sdk recipient class). All three still
+ * validate. New bundles are written as `igris.evidence.v4` = v3 + the
+ * `wallet-request` item type (PROPOSED, docs/design/WALLET-REQUESTS.md; not
+ * hash-pinned until the owner approves it, like report 3.0.0).
  *
  * The redacted, self-contained artifact holding every piece of evidence a
  * report's findings reference. Properties:
@@ -25,14 +28,22 @@ import type { LeakLocation, Phase, RecipientClass } from '../report.js';
 import { RECIPIENT_CLASSES, RECIPIENT_CLASSES_V1 } from '../report.js';
 import type { MatchCategory } from '../encodings.js';
 import { contentHash } from './hash.js';
+import {
+  RECORDED_WALLET_METHODS,
+  WALLET_REQUEST_KINDS,
+  type WalletRequestEvidence,
+} from './wallet-request.js';
 
 export const EVIDENCE_BUNDLE_VERSION_V1 = 'igris.evidence.v1' as const;
 export const EVIDENCE_BUNDLE_VERSION_V2 = 'igris.evidence.v2' as const;
-/** The version new bundles are written with (v3: + wallet-sdk recipient class). */
-export const EVIDENCE_BUNDLE_VERSION = 'igris.evidence.v3' as const;
+/** FROZEN (approved 2026-11-06): v2 + the wallet-sdk recipient class. Paired with report 2.2.0. */
+export const EVIDENCE_BUNDLE_VERSION_V3 = 'igris.evidence.v3' as const;
+/** The version new bundles are written with (v4: + the wallet-request item type). */
+export const EVIDENCE_BUNDLE_VERSION = 'igris.evidence.v4' as const;
 export type EvidenceBundleVersion =
   | typeof EVIDENCE_BUNDLE_VERSION_V1
   | typeof EVIDENCE_BUNDLE_VERSION_V2
+  | typeof EVIDENCE_BUNDLE_VERSION_V3
   | typeof EVIDENCE_BUNDLE_VERSION;
 
 /** The canary (any form) observed inside captured traffic. */
@@ -143,11 +154,14 @@ export interface ContactClassificationEvidence {
   basis: Array<{ kind: BasisKind; detail: string }>;
 }
 
+export type { WalletRequestEvidence } from './wallet-request.js';
+
 export type EvidenceItem =
   | CanaryMatchEvidence
   | ThirdPartyContactEvidence
   | DocumentHeadersEvidence
-  | ContactClassificationEvidence;
+  | ContactClassificationEvidence
+  | WalletRequestEvidence;
 export type EvidenceType = EvidenceItem['type'];
 /** Item types of the frozen v1 bundle. */
 export const EVIDENCE_TYPES_V1 = [
@@ -155,11 +169,13 @@ export const EVIDENCE_TYPES_V1 = [
   'third-party-contact',
   'document-headers',
 ] as const;
-/** Item types of the current (v2) bundle. */
-export const EVIDENCE_TYPES: readonly EvidenceType[] = [
+/** Item types of the frozen v2 and v3 bundles (report 2.1.0 / 2.2.0 evidence refs). */
+export const EVIDENCE_TYPES_V2: readonly EvidenceType[] = [
   ...EVIDENCE_TYPES_V1,
   'contact-classification',
 ];
+/** Item types of the current (v4) bundle. */
+export const EVIDENCE_TYPES: readonly EvidenceType[] = [...EVIDENCE_TYPES_V2, 'wallet-request'];
 
 /** A finding's pointer into the bundle. */
 export interface EvidenceRef {
@@ -172,7 +188,7 @@ export interface EvidenceBundle {
   /** Keyed by content id. */
   items: Record<string, EvidenceItem>;
 }
-/** @deprecated name kept for P0.5 callers; covers v1 and v2 bundles. */
+/** @deprecated name kept for P0.5 callers; covers every bundle version. */
 export type EvidenceBundleV1 = EvidenceBundle;
 
 /** Header values are truncated to this many characters in evidence. */
@@ -393,19 +409,129 @@ const withCurrentClasses = <T extends { properties: object }>(item: T): T =>
     : item;
 
 /**
- * Current (v3) item schema: identical to v2 except that `recipientClass`
- * (canary-match, third-party-contact) also allows `wallet-sdk`.
+ * FROZEN (approved 2026-11-06): v3 item schema, identical to v2 except that
+ * `recipientClass` (canary-match, third-party-contact) also allows `wallet-sdk`.
  */
-export const EVIDENCE_ITEM_SCHEMA = {
+export const EVIDENCE_ITEM_SCHEMA_V3 = {
   $id: 'https://igris.dev/schemas/evidence-item-3.json',
   oneOf: EVIDENCE_ITEM_SCHEMA_V2.oneOf.map(withCurrentClasses),
 };
 
-/** Current (v3) bundle schema. */
-export const EVIDENCE_BUNDLE_SCHEMA = {
+/** FROZEN (approved 2026-11-06): igris.evidence.v3 bundle schema. */
+export const EVIDENCE_BUNDLE_SCHEMA_V3 = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $id: 'https://igris.dev/schemas/evidence-bundle-3.json',
   title: 'IGRIS evidence bundle (igris.evidence.v3)',
+  type: 'object',
+  additionalProperties: false,
+  required: ['bundleVersion', 'items'],
+  properties: {
+    bundleVersion: { const: EVIDENCE_BUNDLE_VERSION_V3 },
+    items: {
+      type: 'object',
+      propertyNames: { pattern: '^ev_[0-9a-f]{24}$' },
+      additionalProperties: { $ref: 'https://igris.dev/schemas/evidence-item-3.json' },
+    },
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
+// igris.evidence.v4 (PROPOSED, docs/design/WALLET-REQUESTS.md) = v3 + exactly
+// one item type, `wallet-request`. The v3 item schemas are reused unchanged
+// (contracts.test.ts asserts it).
+// ---------------------------------------------------------------------------
+
+export const WALLET_REQUEST_EVIDENCE_KEYS = [
+  'type',
+  'phase',
+  'method',
+  'kind',
+  'frame',
+  'origin',
+  'outcome',
+  'chainId',
+  'verifyingContract',
+  'spender',
+  'token',
+  'amount',
+  'deadline',
+  'siweDomain',
+  'unlimited',
+  'longDeadline',
+  'chainIdMismatch',
+  'domainMismatch',
+  'preConnect',
+  'paramsDigest',
+] as const;
+
+/** What the canary wallet did with a request (WalletRequestEvidence['outcome']). */
+export const WALLET_REQUEST_OUTCOMES = ['answered', 'signed', 'rejected', 'error'] as const;
+export const WALLET_REQUEST_FRAMES = ['main', 'iframe'] as const;
+/** Calling-frame origins are cut to this many characters. */
+export const MAX_WALLET_ORIGIN = 512;
+/** A SIWE `domain` (an RFC 3986 authority) longer than this is not parsed as SIWE. */
+export const MAX_SIWE_DOMAIN = 255;
+
+const nullable = <T extends object>(schema: T) => ({ anyOf: [{ type: 'null' }, schema] }) as const;
+/** A 20-byte address (the decoder writes EIP-55 checksummed addresses). */
+export const ADDRESS_SCHEMA = { type: 'string', pattern: '^0x[0-9a-fA-F]{40}$' } as const;
+/** A uint256 as a decimal string. */
+export const DECIMAL_SCHEMA = { type: 'string', pattern: '^[0-9]{1,78}$' } as const;
+export const CHAIN_ID_SCHEMA = {
+  type: 'integer',
+  minimum: 0,
+  maximum: Number.MAX_SAFE_INTEGER,
+} as const;
+
+/** The decoded fields a wallet-request item shares with its report summary. */
+export const WALLET_REQUEST_DECODED_PROPERTIES = {
+  phase: PHASE,
+  method: { enum: [...RECORDED_WALLET_METHODS] },
+  kind: { enum: [...WALLET_REQUEST_KINDS] },
+  frame: { enum: [...WALLET_REQUEST_FRAMES] },
+  outcome: { enum: [...WALLET_REQUEST_OUTCOMES] },
+  chainId: nullable(CHAIN_ID_SCHEMA),
+  verifyingContract: nullable(ADDRESS_SCHEMA),
+  spender: nullable(ADDRESS_SCHEMA),
+  token: nullable(ADDRESS_SCHEMA),
+  amount: nullable(DECIMAL_SCHEMA),
+  deadline: nullable(DECIMAL_SCHEMA),
+  siweDomain: nullable({ type: 'string', minLength: 1, maxLength: MAX_SIWE_DOMAIN }),
+  unlimited: { type: 'boolean' },
+  longDeadline: { type: 'boolean' },
+  chainIdMismatch: { type: 'boolean' },
+  domainMismatch: { type: 'boolean' },
+  preConnect: { type: 'boolean' },
+} as const;
+
+export const WALLET_REQUEST_ITEM_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: [...WALLET_REQUEST_EVIDENCE_KEYS],
+  properties: {
+    type: { const: 'wallet-request' },
+    ...WALLET_REQUEST_DECODED_PROPERTIES,
+    origin: { type: 'string', minLength: 1, maxLength: MAX_WALLET_ORIGIN },
+    paramsDigest: { type: 'string', pattern: '^[0-9a-f]{64}$' },
+  },
+} as const;
+
+/**
+ * Current (v4) item schema: the v3 item schemas unchanged + wallet-request.
+ * PROPOSED — TODO(evidence-v4 approval): pin contentHash of this and of
+ * EVIDENCE_BUNDLE_SCHEMA in contracts.test.ts once the owner approves
+ * docs/design/WALLET-REQUESTS.md.
+ */
+export const EVIDENCE_ITEM_SCHEMA = {
+  $id: 'https://igris.dev/schemas/evidence-item-4.json',
+  oneOf: [...EVIDENCE_ITEM_SCHEMA_V3.oneOf, WALLET_REQUEST_ITEM_SCHEMA],
+};
+
+/** Current (v4) bundle schema (PROPOSED, not yet hash-pinned). */
+export const EVIDENCE_BUNDLE_SCHEMA = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $id: 'https://igris.dev/schemas/evidence-bundle-4.json',
+  title: 'IGRIS evidence bundle (igris.evidence.v4)',
   type: 'object',
   additionalProperties: false,
   required: ['bundleVersion', 'items'],
@@ -414,7 +540,7 @@ export const EVIDENCE_BUNDLE_SCHEMA = {
     items: {
       type: 'object',
       propertyNames: { pattern: '^ev_[0-9a-f]{24}$' },
-      additionalProperties: { $ref: 'https://igris.dev/schemas/evidence-item-3.json' },
+      additionalProperties: { $ref: 'https://igris.dev/schemas/evidence-item-4.json' },
     },
   },
 } as const;

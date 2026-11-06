@@ -15,9 +15,13 @@ import {
   DOCUMENT_HEADER_NAMES,
   EVIDENCE_BUNDLE_SCHEMA,
   EVIDENCE_BUNDLE_SCHEMA_V2,
+  EVIDENCE_BUNDLE_SCHEMA_V3,
   EVIDENCE_ITEM_SCHEMA,
   EVIDENCE_ITEM_SCHEMA_V2,
+  EVIDENCE_ITEM_SCHEMA_V3,
+  EVIDENCE_TYPES_V2,
   THIRD_PARTY_CONTACT_KEYS,
+  WALLET_REQUEST_EVIDENCE_KEYS,
 } from './evidence.js';
 import {
   FINDING_KEYS,
@@ -40,6 +44,7 @@ import {
   REPORT_V3_REQUIRED,
   TIMELINE_KEYS,
   TIMELINE_RECIPIENT_KEYS,
+  WALLET_REQUEST_SUMMARY_KEYS,
 } from './report-v3.js';
 import {
   SchemaValidationError,
@@ -59,15 +64,27 @@ const sorted = (xs: readonly string[]) => [...xs].sort();
 const props = (s: { properties: object }) => sorted(Object.keys(s.properties));
 
 describe('key lists == JSON Schema properties == required', () => {
-  const [canary, contact, headers, classification] = EVIDENCE_ITEM_SCHEMA.oneOf;
-  const cases: Array<
-    [string, readonly string[], { properties: object; required: readonly string[] }]
-  > = [
+  type Obj = { properties: object; required: readonly string[] };
+  const [canary, contact, headers, classification, walletRequest] =
+    EVIDENCE_ITEM_SCHEMA.oneOf as unknown as [
+      Obj,
+      Obj,
+      Obj & { properties: { headers: Obj } },
+      Obj,
+      Obj,
+    ];
+  const cases: Array<[string, readonly string[], Obj]> = [
     ['canary-match', CANARY_MATCH_KEYS, canary],
     ['third-party-contact', THIRD_PARTY_CONTACT_KEYS, contact],
     ['document-headers', DOCUMENT_HEADERS_KEYS, headers],
     ['document-headers.headers', DOCUMENT_HEADER_NAMES, headers.properties.headers],
     ['contact-classification', CONTACT_CLASSIFICATION_KEYS, classification],
+    ['wallet-request', WALLET_REQUEST_EVIDENCE_KEYS, walletRequest],
+    [
+      'walletRequests[] (3.0.0)',
+      WALLET_REQUEST_SUMMARY_KEYS,
+      REPORT_SCHEMA_3_0_0.properties.walletRequests.anyOf[1].items,
+    ],
     [
       'finding (privacy)',
       FINDING_KEYS,
@@ -139,6 +156,8 @@ describe('key lists == JSON Schema properties == required', () => {
       ...walk(REPORT_SCHEMA_2_0_0, '#'),
       ...walk(EVIDENCE_ITEM_SCHEMA_V1, '#'),
       ...walk(EVIDENCE_BUNDLE_SCHEMA_V1, '#'),
+      ...walk(EVIDENCE_ITEM_SCHEMA_V3, '#'),
+      ...walk(EVIDENCE_BUNDLE_SCHEMA_V3, '#'),
     ]).toEqual([]);
   });
 });
@@ -179,6 +198,30 @@ describe('schema validation of real and hostile documents', () => {
     ['a top-level score', (r) => (r.score = 80)],
     ['missing recipients', (r) => delete r.recipients],
     ['missing timeline', (r) => delete r.timeline],
+    ['missing walletRequests', (r) => delete r.walletRequests],
+    ['walletRequests not an array', (r) => (r.walletRequests = {})],
+    [
+      'wallet request with an unknown kind',
+      (r) => (r.walletRequests = [{ ...SUMMARY, kind: 'x' }]),
+    ],
+    [
+      'wallet request with a lowercase-only bad address',
+      (r) => (r.walletRequests = [{ ...SUMMARY, spender: '0x1234' }]),
+    ],
+    [
+      'wallet request with a hex amount',
+      (r) => (r.walletRequests = [{ ...SUMMARY, amount: '0xff' }]),
+    ],
+    ['wallet request with a negative time', (r) => (r.walletRequests = [{ ...SUMMARY, t: -1 }])],
+    [
+      'wallet request with an extra field',
+      (r) => (r.walletRequests = [{ ...SUMMARY, params: '[]' }]),
+    ],
+    [
+      'wallet request without findingIds',
+      (r) => (r.walletRequests = [{ ...SUMMARY, findingIds: undefined }]),
+    ],
+    ['501 wallet requests', (r) => (r.walletRequests = Array.from({ length: 501 }, () => SUMMARY))],
     ['unknown verdict', (r) => (r.recipients[0].verdict = 'fine')],
     ['first party as a recipient', (r) => (r.recipients[0].class = 'first-party')],
     ['recipient without hosts', (r) => (r.recipients[0].hosts = [])],
@@ -344,11 +387,20 @@ describe('P0.5 contracts are frozen; P1 successors are additive and, once approv
     ).toThrow();
   });
 
-  it('a report/bundle version mismatch is an integrity problem (2.2.0 and 3.0.0 ↔ v3)', () => {
-    for (const { report, bundle } of [sampleResult(), sampleResultV2()]) {
-      expect(bundle.bundleVersion).toBe('igris.evidence.v3');
+  it('a report/bundle version mismatch is an integrity problem (2.2.0 ↔ v3, 3.0.0 ↔ v4)', () => {
+    for (const [{ report, bundle }, version] of [
+      [sampleResult(), 'igris.evidence.v4'],
+      [sampleResultV2(), 'igris.evidence.v3'],
+    ] as const) {
+      expect(bundle.bundleVersion).toBe(version);
       expect(verifyReportIntegrity(report, bundle)).toMatchObject({ ok: true });
-      for (const other of ['igris.evidence.v1', 'igris.evidence.v2'] as const) {
+      for (const other of [
+        'igris.evidence.v1',
+        'igris.evidence.v2',
+        'igris.evidence.v3',
+        'igris.evidence.v4',
+      ] as const) {
+        if (other === version) continue;
         const wrong = { ...bundle, bundleVersion: other };
         expect(verifyReportIntegrity(report, wrong).problems.join(' ')).toMatch(/cannot reference/);
       }
@@ -361,10 +413,10 @@ describe('Report 2.2.0 / igris.evidence.v3: the wallet-sdk class (approved 2026-
     expect(contentHash(REPORT_SCHEMA_2_2_0)).toBe(
       '49a585460635b60d0ff2862057fe532fbbabb08c91022fea03f795d7ba5cced2',
     );
-    expect(contentHash(EVIDENCE_ITEM_SCHEMA)).toBe(
+    expect(contentHash(EVIDENCE_ITEM_SCHEMA_V3)).toBe(
       '578bfe794bb8cdfd0f4ecb3f3603a6b6fb3e8b46bc25fdc5070950b725f6b687',
     );
-    expect(contentHash(EVIDENCE_BUNDLE_SCHEMA)).toBe(
+    expect(contentHash(EVIDENCE_BUNDLE_SCHEMA_V3)).toBe(
       'e80f9563020a29a763646c11ab627a280b43ba68627d50b31708ecbbba62a91c',
     );
   });
@@ -395,10 +447,10 @@ describe('Report 2.2.0 / igris.evidence.v3: the wallet-sdk class (approved 2026-
           return c;
         }),
       );
-    expect(strip(EVIDENCE_ITEM_SCHEMA)).toBe(strip(EVIDENCE_ITEM_SCHEMA_V2));
+    expect(strip(EVIDENCE_ITEM_SCHEMA_V3)).toBe(strip(EVIDENCE_ITEM_SCHEMA_V2));
     const enums = (schema: { oneOf: readonly unknown[] }) =>
       schema.oneOf.map((o) => (o as any).properties.recipientClass?.enum).filter(Boolean);
-    for (const e of enums(EVIDENCE_ITEM_SCHEMA)) expect(e).toContain('wallet-sdk');
+    for (const e of enums(EVIDENCE_ITEM_SCHEMA_V3)) expect(e).toContain('wallet-sdk');
     for (const e of enums(EVIDENCE_ITEM_SCHEMA_V2)) expect(e).not.toContain('wallet-sdk');
   });
 
@@ -442,6 +494,80 @@ describe('Report 2.2.0 / igris.evidence.v3: the wallet-sdk class (approved 2026-
   });
 });
 
+describe('igris.evidence.v4 (PROPOSED — pending owner approval; docs/design/WALLET-REQUESTS.md)', () => {
+  // TODO(evidence-v4 approval): once the project owner approves
+  // docs/design/WALLET-REQUESTS.md, pin contentHash(EVIDENCE_ITEM_SCHEMA) and
+  // contentHash(EVIDENCE_BUNDLE_SCHEMA) here, like the v1–v3 pins above, and
+  // mark them FROZEN in evidence.ts and docs/CONTRACTS.md.
+
+  it('v4 = the v3 item schemas, unchanged, + exactly one item type (wallet-request)', () => {
+    expect(EVIDENCE_ITEM_SCHEMA.oneOf).toHaveLength(EVIDENCE_ITEM_SCHEMA_V3.oneOf.length + 1);
+    expect(canonicalize(EVIDENCE_ITEM_SCHEMA.oneOf.slice(0, -1))).toBe(
+      canonicalize(EVIDENCE_ITEM_SCHEMA_V3.oneOf),
+    );
+    expect((EVIDENCE_ITEM_SCHEMA.oneOf.at(-1) as any).properties.type).toEqual({
+      const: 'wallet-request',
+    });
+    // The bundle schemas differ only by name, version label and item schema ref.
+    const strip = (schema: unknown) => {
+      const c = structuredClone(schema) as any;
+      delete c.$id;
+      delete c.title;
+      delete c.properties.bundleVersion;
+      delete c.properties.items.additionalProperties.$ref;
+      return canonicalize(c);
+    };
+    expect(strip(EVIDENCE_BUNDLE_SCHEMA)).toBe(strip(EVIDENCE_BUNDLE_SCHEMA_V3));
+    expect(EVIDENCE_BUNDLE_SCHEMA.properties.bundleVersion).toEqual({ const: 'igris.evidence.v4' });
+    expect(EVIDENCE_BUNDLE_SCHEMA.properties.items.additionalProperties.$ref).toBe(
+      EVIDENCE_ITEM_SCHEMA.$id,
+    );
+  });
+
+  it('a complete wallet-request item validates in v4 and is rejected by v3', () => {
+    expect(() => validateEvidenceItem(WALLET_ITEM)).not.toThrow();
+    const id = 'ev_' + 'b'.repeat(24);
+    expect(() =>
+      validateEvidenceBundle({ bundleVersion: 'igris.evidence.v4', items: { [id]: WALLET_ITEM } }),
+    ).not.toThrow();
+    expect(() =>
+      validateEvidenceBundle({ bundleVersion: 'igris.evidence.v3', items: { [id]: WALLET_ITEM } }),
+    ).toThrow();
+    // v3 bundles still validate as v3.
+    const { bundle } = sampleResultV2();
+    expect(() => validateEvidenceBundle(bundle)).not.toThrow();
+  });
+
+  const bad: Array<[string, Record<string, unknown>]> = [
+    ['an unknown kind', { kind: 'drain' }],
+    ['an unrecorded method', { method: 'eth_call' }],
+    ['an unknown outcome', { outcome: 'pending' }],
+    ['an unknown frame', { frame: 'worker' }],
+    ['a short address', { spender: '0x1234' }],
+    ['an address without 0x', { token: 'a'.repeat(40) }],
+    ['a hex amount', { amount: '0xff' }],
+    ['a 79-digit amount', { amount: '1'.repeat(79) }],
+    ['a negative chain id', { chainId: -1 }],
+    ['a fractional chain id', { chainId: 1.5 }],
+    ['a string flag', { unlimited: 'yes' }],
+    ['an empty origin', { origin: '' }],
+    ['an empty SIWE domain', { siweDomain: '' }],
+    ['an uppercase digest', { paramsDigest: 'A'.repeat(64) }],
+    ['raw params', { params: '[]' }],
+    ['a time (the bundle never holds times)', { t: 10 }],
+  ];
+  for (const [name, patch] of bad) {
+    it(`wallet-request item rejects ${name}`, () =>
+      expect(() => validateEvidenceItem({ ...WALLET_ITEM, ...patch })).toThrow());
+  }
+  it('every field is required', () => {
+    for (const k of WALLET_REQUEST_EVIDENCE_KEYS) {
+      const { [k]: _drop, ...rest } = WALLET_ITEM as Record<string, unknown>;
+      expect(() => validateEvidenceItem(rest), k).toThrow();
+    }
+  });
+});
+
 describe('Report 3.0.0 (PROPOSED — pending owner approval; docs/design/REPORT-3.0.0.md)', () => {
   // TODO(report-3.0.0 approval): once the project owner approves
   // docs/design/REPORT-3.0.0.md, pin contentHash(REPORT_SCHEMA_3_0_0) here,
@@ -460,10 +586,10 @@ describe('Report 3.0.0 (PROPOSED — pending owner approval; docs/design/REPORT-
     expect(contentHash(REPORT_SCHEMA_2_2_0)).toBe(
       '49a585460635b60d0ff2862057fe532fbbabb08c91022fea03f795d7ba5cced2',
     );
-    expect(contentHash(EVIDENCE_ITEM_SCHEMA)).toBe(
+    expect(contentHash(EVIDENCE_ITEM_SCHEMA_V3)).toBe(
       '578bfe794bb8cdfd0f4ecb3f3603a6b6fb3e8b46bc25fdc5070950b725f6b687',
     );
-    expect(contentHash(EVIDENCE_BUNDLE_SCHEMA)).toBe(
+    expect(contentHash(EVIDENCE_BUNDLE_SCHEMA_V3)).toBe(
       'e80f9563020a29a763646c11ab627a280b43ba68627d50b31708ecbbba62a91c',
     );
   });
@@ -482,9 +608,14 @@ describe('Report 3.0.0 (PROPOSED — pending owner approval; docs/design/REPORT-
       delete c.properties.recipients; // added
       delete c.properties.timeline; // added
       delete c.properties.rpc; // added
+      delete c.properties.walletRequests; // added (WALLET-REQUESTS.md)
       delete c.properties.migratedFrom; // widened to 1.x and 2.x
+      delete c.properties.evidence.properties.bundleVersion; // igris.evidence.v4
       delete c.properties.privacy.required;
-      for (const f of findings(c)) delete f.required;
+      for (const f of findings(c)) {
+        delete f.required;
+        delete f.properties.evidence.items.properties.type; // + wallet-request
+      }
       return canonicalize(c);
     };
     const strip22 = (schema: unknown) => {
@@ -497,9 +628,11 @@ describe('Report 3.0.0 (PROPOSED — pending owner approval; docs/design/REPORT-
       delete c.properties.privacy.required;
       delete c.properties.privacy.properties.score; // removed
       delete c.properties.privacy.properties.ledger; // removed
+      delete c.properties.evidence.properties.bundleVersion;
       for (const f of findings(c)) {
         delete f.required;
         delete f.properties.countsTowardPrivacyScore; // removed
+        delete f.properties.evidence.items.properties.type;
       }
       return canonicalize(c);
     };
@@ -512,7 +645,9 @@ describe('Report 3.0.0 (PROPOSED — pending owner approval; docs/design/REPORT-
       'recipients',
       'timeline',
       'rpc',
+      'walletRequests',
     ]);
+    expect(REPORT_SCHEMA_3_0_0.properties.walletRequests.anyOf[0]).toEqual({ type: 'null' });
     expect(REPORT_SCHEMA_3_0_0.properties.privacy.required).toEqual(['coverage', 'findings']);
     for (const f of findings(REPORT_SCHEMA_3_0_0)) {
       expect(f.required).toEqual(FINDING_KEYS.filter((k) => k !== 'countsTowardPrivacyScore'));
@@ -521,9 +656,29 @@ describe('Report 3.0.0 (PROPOSED — pending owner approval; docs/design/REPORT-
       type: 'string',
       pattern: '^[12]\\.\\d+\\.\\d+$',
     });
-    expect(REPORT_SCHEMA_3_0_0.properties.evidence).toEqual(
-      REPORT_SCHEMA_2_2_0.properties.evidence,
-    );
+    expect(REPORT_SCHEMA_3_0_0.properties.evidence.properties.bundleVersion).toEqual({
+      const: 'igris.evidence.v4',
+    });
+    expect(REPORT_SCHEMA_2_2_0.properties.evidence.properties.bundleVersion).toEqual({
+      const: 'igris.evidence.v3',
+    });
+    for (const f of findings(REPORT_SCHEMA_3_0_0)) {
+      expect(f.properties.evidence.items.properties.type).toEqual({
+        enum: [...EVIDENCE_TYPES_V2, 'wallet-request'],
+      });
+    }
+    for (const f of findings(REPORT_SCHEMA_2_2_0)) {
+      expect(f.properties.evidence.items.properties.type).toEqual({ enum: [...EVIDENCE_TYPES_V2] });
+    }
+  });
+
+  it('requires walletRequests; it may be null (not recorded) or a list', () => {
+    const { report } = sampleResult();
+    expect(report.walletRequests).toBeNull(); // the sample capture records no wallet requests
+    expect(() => validateReport({ ...report, walletRequests: [] })).not.toThrow();
+    expect(() => validateReport({ ...report, walletRequests: [SUMMARY] })).not.toThrow();
+    const { walletRequests: _w, ...without } = report;
+    expect(() => validateReport(without)).toThrow(/walletRequests/);
   });
 
   it('requires recipients and timeline; timeline may be null', () => {
@@ -556,6 +711,38 @@ describe('Report 3.0.0 (PROPOSED — pending owner approval; docs/design/REPORT-
     expect(() => validateReport({ ...v3, reportVersion: '2.2.0' })).toThrow(SchemaValidationError);
   });
 });
+
+const WALLET_ITEM = {
+  type: 'wallet-request',
+  phase: 'post-connect',
+  method: 'eth_signTypedData_v4',
+  kind: 'permit2',
+  frame: 'main',
+  origin: 'https://app.example.org',
+  outcome: 'signed',
+  chainId: 137,
+  verifyingContract: '0x000000000022D473030F116dDEE9F6B43aC78BA3',
+  spender: '0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD',
+  token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+  amount: '1461501637330902918203684832716283019655932542975',
+  deadline: '1767225600',
+  siweDomain: null,
+  unlimited: true,
+  longDeadline: false,
+  chainIdMismatch: true,
+  domainMismatch: false,
+  preConnect: false,
+  paramsDigest: 'c'.repeat(64),
+};
+
+const SUMMARY = {
+  evidenceId: 'ev_' + 'b'.repeat(24),
+  t: 1234,
+  ...Object.fromEntries(
+    Object.entries(WALLET_ITEM).filter(([k]) => !['type', 'origin', 'paramsDigest'].includes(k)),
+  ),
+  findingIds: ['F-0123456789abcdef'],
+};
 
 const TIMELINE = {
   origin: 'navigation-start',

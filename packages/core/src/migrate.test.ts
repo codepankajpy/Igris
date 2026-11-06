@@ -170,7 +170,8 @@ describe('migrate 2.x → 3.0.0', () => {
     expect(report.reportVersion).toBe('2.0.0');
     const out = migrateReportV2toV3(report, bundle);
     expect(out.report.reportVersion).toBe('3.0.0');
-    expect(out.bundle.bundleVersion).toBe('igris.evidence.v3');
+    expect(out.bundle.bundleVersion).toBe('igris.evidence.v4');
+    expect(out.report.walletRequests).toBeNull();
     expect(() => validateReport(out.report)).not.toThrow();
     expect(() => validateEvidenceBundle(out.bundle)).not.toThrow();
     expect(verifyReportIntegrity(out.report, out.bundle)).toMatchObject({ ok: true, problems: [] });
@@ -185,7 +186,7 @@ describe('migrate 2.x → 3.0.0', () => {
     expect(out.report.privacy.findings).toEqual(
       report.privacy.findings.map(({ countsTowardPrivacyScore: _c, ...f }) => f),
     );
-    expect(out.report.scan.notes.at(-1)).toMatch(/2\.0\.0 → 3\.0\.0.*score/);
+    expect(out.report.scan.notes.at(-1)).toMatch(/2\.0\.0 → 3\.0\.0.*score.*wallet requests/);
     expect(out.report.recipients.length).toBeGreaterThan(0);
     for (const r of out.report.recipients) expect(r.class).not.toBe('first-party');
   });
@@ -205,11 +206,16 @@ describe('migrate 2.x → 3.0.0', () => {
 
   it('round trip: the engine 3.0.0 report → 2.2.0 → 3.0.0 has the same recipients', () => {
     const v3 = sampleResult();
-    const migrated = migrateReportV2toV3(sampleResultV2().report, v3.bundle);
+    const v2 = sampleResultV2();
+    expect(v2.bundle.bundleVersion).toBe('igris.evidence.v3');
+    const migrated = migrateReportV2toV3(v2.report, v2.bundle);
     expect(migrated.report.recipients).toEqual(v3.report.recipients);
     expect(migrated.report.findingSet).toEqual(v3.report.findingSet);
     expect(migrated.report.privacy).toEqual(v3.report.privacy);
-    expect(migrated.report.evidence).toEqual(v3.report.evidence); // v3 bundle: unchanged hash
+    // Re-labelled v4 with the same items: the engine's own bundle and hash.
+    expect(migrated.bundle).toEqual(v3.bundle);
+    expect(migrated.report.evidence).toEqual(v3.report.evidence);
+    expect(migrated.report.walletRequests).toBeNull();
     expect(migrated.report.migratedFrom).toBe('2.2.0');
   });
 
