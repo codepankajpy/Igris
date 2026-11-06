@@ -5,7 +5,7 @@
     "dockerfilePath": "apps/api/Dockerfile"
   },
   "deploy": {
-    "startCommand": "node apps/api/dist/index.js",
+    "startCommand": "node --conditions=igris-dist apps/api/dist/index.js",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE"

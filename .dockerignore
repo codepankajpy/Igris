@@ -1,0 +1,13 @@
+# Keep secrets and host build state out of the Docker build context.
+.env
+.env.*
+!.env.example
+.git
+**/node_modules
+**/dist
+igris-out
+igris-registry.json
+igris-snapshot.json
+igris-batch
+.trash-node_modules
+**/.DS_Store

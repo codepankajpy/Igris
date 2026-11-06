@@ -14,8 +14,26 @@ import { TrafficRecorder } from './capture.js';
 import { connectWallet, isWalletConnected, type Recipe } from './connect.js';
 import { WalletReadHandler } from './stub-rpc.js';
 import { buildWalletInitScript } from './wallet-init.js';
+import {
+  egressChromiumArgs,
+  startEgressProxy,
+  type EgressProxy,
+  type EgressProxyOptions,
+} from './egress/proxy.js';
 
 export const SCANNER_VERSION = '0.1.0';
+
+/**
+ * Network egress policy for the scanned page.
+ *  - unrestricted (default for the local CLI): the browser reaches anything
+ *    the scanning machine can — needed for localhost / dev / LAN dapps the
+ *    user scans on their own machine.
+ *  - public-only (mandatory for any hosted scanner): all browser traffic is
+ *    forced through an egress-filtering proxy that refuses non-public
+ *    addresses and non-allowlisted ports (see egress/proxy.ts).
+ */
+export type EgressPolicy =
+  { mode: 'unrestricted' } | ({ mode: 'public-only' } & EgressProxyOptions);
 
 export interface ScanOptions {
   url: string;
@@ -35,6 +53,13 @@ export interface ScanOptions {
   headless?: boolean;
   /** Injected for tests; defaults to real wall clock. */
   now?: () => Date;
+  /** Default { mode: 'unrestricted' }. Hosted scanners MUST pass public-only. */
+  egress?: EgressPolicy;
+  /**
+   * Abort the scan (e.g. a hard timeout). The browser is closed immediately;
+   * the returned report has status page-load-failed and no score.
+   */
+  signal?: AbortSignal;
 }
 
 async function settle(page: import('playwright').Page, dwellMs: number): Promise<void> {
@@ -63,13 +88,29 @@ export async function scan(options: ScanOptions): Promise<Report> {
   const recorder = new TrafficRecorder();
 
   const launchOptions: LaunchOptions = { headless: options.headless ?? true };
-  if (options.hostResolverRules) {
-    launchOptions.args = [`--host-resolver-rules=${options.hostResolverRules}`];
-  }
+  const args: string[] = [];
+  if (options.hostResolverRules) args.push(`--host-resolver-rules=${options.hostResolverRules}`);
   let browser: Browser | null = null;
+  let egressProxy: EgressProxy | null = null;
+
+  let aborted = false;
+  const onAbort = () => {
+    aborted = true;
+    void browser?.close().catch(() => {});
+  };
+  if (options.signal?.aborted) onAbort();
+  options.signal?.addEventListener('abort', onAbort, { once: true });
 
   try {
+    if (aborted) throw new Error('scan aborted before start');
+    if (options.egress?.mode === 'public-only') {
+      const { mode: _mode, ...proxyOptions } = options.egress;
+      egressProxy = await startEgressProxy(proxyOptions);
+      args.push(...egressChromiumArgs(egressProxy.url));
+    }
+    if (args.length) launchOptions.args = args;
     browser = await chromium.launch(launchOptions);
+    if (aborted) throw new Error('scan aborted');
     const context = await browser.newContext({
       viewport: { width: 1280, height: 960 },
       serviceWorkers: 'block', // so SW-mediated requests can't dodge capture
@@ -161,7 +202,22 @@ export async function scan(options: ScanOptions): Promise<Report> {
     status = status === 'completed' ? 'page-load-failed' : status;
     errors.push(`scan error: ${String(err).slice(0, 300)}`);
   } finally {
+    options.signal?.removeEventListener('abort', onAbort);
     await browser?.close().catch(() => {});
+    await egressProxy?.close().catch(() => {});
+  }
+
+  // An aborted scan measured an unknown fraction of the page: never score it.
+  if (aborted) {
+    status = 'page-load-failed';
+    errors.push('scan aborted (timeout or cancellation); partial capture discarded from scoring');
+  }
+
+  if (egressProxy && egressProxy.blocked.length) {
+    const shown = egressProxy.blocked.slice(0, 20);
+    for (const b of shown) errors.push(`egress blocked: ${b.host}:${b.port} (${b.reason})`);
+    if (egressProxy.blocked.length > shown.length)
+      errors.push(`egress blocked: ${egressProxy.blocked.length - shown.length} more`);
   }
 
   return buildReportFromScan({
@@ -173,6 +229,7 @@ export async function scan(options: ScanOptions): Promise<Report> {
     errors,
     recorder,
     readHandler,
+    ...(egressProxy ? { egressBlockedHosts: egressProxy.blockedHosts } : {}),
   });
 }
 
@@ -185,6 +242,7 @@ interface InternalBuildArgs {
   errors: string[];
   recorder: TrafficRecorder;
   readHandler: WalletReadHandler;
+  egressBlockedHosts?: Set<string>;
 }
 
 async function buildReportFromScan(args: InternalBuildArgs): Promise<Report> {
@@ -203,5 +261,6 @@ async function buildReportFromScan(args: InternalBuildArgs): Promise<Report> {
     thirdPartyDb: db,
     ...(args.options.firstParty ? { firstParty: args.options.firstParty } : {}),
     errors: args.errors,
+    ...(args.egressBlockedHosts ? { excludeHosts: args.egressBlockedHosts } : {}),
   });
 }

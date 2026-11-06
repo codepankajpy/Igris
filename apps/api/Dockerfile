@@ -1,5 +1,11 @@
-# Production Dockerfile for Igris Scanner API
-# Compatible with Railway, Render, Fly.io, and Docker Compose
+# IGRIS optional hosted scanner node.
+#
+# Status: LOCAL / DOCKER USE ONLY until every P0 acceptance criterion in
+# docs/ROADMAP.md passes. Do not expose publicly before then.
+#
+# Security posture: runs as an unprivileged user; scans are always
+# egress-filtered (public addresses, ports 80/443 only) by the scanner's
+# in-process proxy; no scanner key is held (results are unpublished).
 
 FROM node:22-bookworm-slim AS base
 
@@ -50,14 +56,14 @@ COPY fixtures/third-party-sink/package.json ./fixtures/third-party-sink/
 # Install node dependencies
 RUN pnpm install --frozen-lockfile
 
-# Install Playwright browser binaries
-RUN pnpm --filter @igris/scanner exec playwright install chromium chromium-headless-shell
+# Install Playwright browser binaries into a shared, read-only location.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN pnpm --filter @igris/scanner exec playwright install chromium chromium-headless-shell \
+    && chmod -R a+rX /ms-playwright
 
 # Copy source files
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
-COPY apps/web/public/ ./apps/web/public/
-COPY examples/ ./examples/
 COPY data/ ./data/
 
 # Build packages
@@ -70,7 +76,14 @@ RUN pnpm --filter @igris/core build && \
 ENV PORT=3001
 ENV NODE_ENV=production
 
+# Unprivileged runtime user. NOTE: Playwright launches Chromium without its
+# own sandbox by default (chromiumSandbox: false); see docs/ENGINEERING_LOG.md
+# for the resulting trust boundary and the hardening still to do.
+RUN useradd --create-home --uid 10001 igris
+USER igris
+
 EXPOSE 3001
 
-CMD ["node", "apps/api/dist/index.js"]
+# Workspace packages resolve to their compiled dist/ under this condition.
+CMD ["node", "--conditions=igris-dist", "apps/api/dist/index.js"]
 

@@ -43,6 +43,23 @@ export interface BuildReportInput {
   thirdPartyDb: ThirdPartyEntry[];
   firstParty?: string[];
   errors: string[];
+  /**
+   * "host:port" pairs the egress proxy refused. Those requests never left
+   * the scanner, so they are neither leaks nor third-party contacts.
+   */
+  excludeHosts?: Set<string>;
+}
+
+function defaultPort(protocol: string): number {
+  return protocol === 'https:' || protocol === 'wss:' ? 443 : 80;
+}
+
+/** Was this URL refused by the egress proxy (so nothing was sent)? */
+function wasBlocked(u: URL, exclude: Set<string> | undefined): boolean {
+  if (!exclude || exclude.size === 0) return false;
+  const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const port = u.port ? Number(u.port) : defaultPort(u.protocol);
+  return exclude.has(`${host}:${port}`);
 }
 
 type RawFinding = Omit<Finding, 'id'>;
@@ -103,6 +120,7 @@ export function buildReport(input: BuildReportInput): Report {
       if (!['http:', 'https:', 'ws:', 'wss:'].includes(u.protocol)) continue;
       host = u.hostname;
       if (!host) continue;
+      if (wasBlocked(u, input.excludeHosts)) continue;
     } catch {
       continue; // data:, blob:, about: etc. never leave the machine
     }
@@ -125,6 +143,7 @@ export function buildReport(input: BuildReportInput): Report {
       const u = new URL(frame.url);
       host = u.hostname;
       if (!host) continue;
+      if (wasBlocked(u, input.excludeHosts)) continue;
     } catch {
       continue;
     }
@@ -182,6 +201,7 @@ export function buildReport(input: BuildReportInput): Report {
       if (!['http:', 'https:', 'ws:', 'wss:'].includes(u.protocol)) continue;
       host = u.hostname;
       if (!host) continue;
+      if (wasBlocked(u, input.excludeHosts)) continue;
     } catch {
       continue;
     }
