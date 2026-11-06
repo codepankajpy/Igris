@@ -6,12 +6,14 @@
  * half at runtime: key lists == schema properties.
  */
 import type {
+  ContactClassificationEvidence,
   CanaryMatchEvidence,
   DocumentHeadersEvidence,
   ThirdPartyContactEvidence,
 } from './evidence.js';
 import {
   CANARY_MATCH_KEYS,
+  CONTACT_CLASSIFICATION_KEYS,
   DOCUMENT_HEADERS_KEYS,
   DOCUMENT_HEADER_NAMES,
   THIRD_PARTY_CONTACT_KEYS,
@@ -43,6 +45,7 @@ export function _lockstep(): void {
   assertTrue<ExactKeys<typeof CANARY_MATCH_KEYS, CanaryMatchEvidence>>(true);
   assertTrue<ExactKeys<typeof THIRD_PARTY_CONTACT_KEYS, ThirdPartyContactEvidence>>(true);
   assertTrue<ExactKeys<typeof DOCUMENT_HEADERS_KEYS, DocumentHeadersEvidence>>(true);
+  assertTrue<ExactKeys<typeof CONTACT_CLASSIFICATION_KEYS, ContactClassificationEvidence>>(true);
   assertTrue<ExactKeys<typeof DOCUMENT_HEADER_NAMES, DocumentHeadersEvidence['headers']>>(true);
 
   // Privacy score and security observations are separate types: a security

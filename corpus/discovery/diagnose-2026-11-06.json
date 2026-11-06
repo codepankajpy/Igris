@@ -1,0 +1,4523 @@
+{
+  "version": 1,
+  "generatedBy": "scripts/corpus-discover.ts",
+  "results": [
+    {
+      "url": "https://app.morpho.org/",
+      "observedAt": "2026-11-06T14:43:20.680Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://app.morpho.org/vaults",
+        "title": "Morpho Vaults"
+      },
+      "staticFingerprint": {
+        "id": "appkit",
+        "confidence": "medium",
+        "signals": [
+          "appkit:static:customElements:appkit-modal,w3m-modal,appkit-button,w3m-button"
+        ]
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Morpho menu",
+            "Vaults",
+            "Variable Rate Markets",
+            "Fixed Rate Markets",
+            "Portfolio",
+            "Connect",
+            "How it works",
+            "Network",
+            "Asset",
+            "Curator",
+            "Advanced",
+            "Table properties",
+            "Browse in full screen",
+            "Sort by Vault",
+            "Sort by Deposits",
+            "Sort by Liquidity",
+            "Sort by APY",
+            "Grove x Steakhouse USDC",
+            "546.81M USDC $546.76M",
+            "189.32M USDC $189.30M"
+          ],
+          "dialogs": [
+            "Before you continue"
+          ],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Morpho menu",
+            "Vaults",
+            "Variable Rate Markets",
+            "Fixed Rate Markets",
+            "Portfolio",
+            "Connect",
+            "How it works",
+            "Network",
+            "Asset",
+            "Curator",
+            "Advanced",
+            "Table properties",
+            "Browse in full screen",
+            "Sort by Vault",
+            "Sort by Deposits",
+            "Sort by Liquidity",
+            "Sort by APY",
+            "Grove x Steakhouse USDC",
+            "546.81M USDC $546.76M",
+            "189.32M USDC $189.30M"
+          ],
+          "dialogs": [
+            "Before you continue"
+          ],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "click-failed",
+        "clicked": "Connect",
+        "topCandidates": [
+          "Connect (95)"
+        ],
+        "fingerprint": {
+          "id": "appkit",
+          "confidence": "medium",
+          "signals": [
+            "appkit:static:customElements:appkit-modal,w3m-modal,appkit-button,w3m-button"
+          ]
+        },
+        "urlChanges": [],
+        "detail": "click failed: TimeoutError: elementHandle.click: Timeout 5000ms exceeded.\nCall log:\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n"
+      }
+    },
+    {
+      "url": "https://app.compound.finance/",
+      "observedAt": "2026-11-06T14:43:32.512Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://app.compound.xyz/redirect",
+        "title": "Compound Finance"
+      },
+      "staticFingerprint": {
+        "id": "appkit",
+        "confidence": "medium",
+        "signals": [
+          "appkit:static:customElements:appkit-modal,w3m-modal"
+        ]
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Continue to Compound.xyz"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Continue to Compound.xyz"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "no-connect-control",
+        "clicked": null,
+        "topCandidates": [],
+        "fingerprint": {
+          "id": "appkit",
+          "confidence": "medium",
+          "signals": [
+            "appkit:static:customElements:appkit-modal,w3m-modal"
+          ]
+        },
+        "urlChanges": [],
+        "detail": "no eligible connect control (strict scoring)"
+      }
+    },
+    {
+      "url": "https://app.sky.money/",
+      "observedAt": "2026-11-06T14:43:38.877Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://app.sky.money/earn",
+        "title": "Sky | Savings, rewards, staking and borrowing, without giving up control"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Portfolio",
+            "Earn",
+            "Stake SKY",
+            "Convert",
+            "Connect Wallet",
+            "More",
+            "Operating for 8 years",
+            "Show additional information",
+            "Risk profile",
+            "Supply",
+            "Core",
+            "Medium",
+            "Advanced",
+            "All networks",
+            "All stablecoins",
+            "All products",
+            "Token",
+            "Network",
+            "Rate",
+            "30D Rate"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Portfolio",
+            "Earn",
+            "Stake SKY",
+            "Convert",
+            "Connect Wallet",
+            "More",
+            "Operating for 8 years",
+            "Show additional information",
+            "Risk profile",
+            "Supply",
+            "Core",
+            "Medium",
+            "Advanced",
+            "All networks",
+            "All stablecoins",
+            "All products",
+            "Token",
+            "Network",
+            "Rate",
+            "30D Rate"
+          ],
+          "dialogs": [
+            "Connect a wallet"
+          ],
+          "walletLabels": [
+            "MetaMask",
+            "Igris Canary Wallet",
+            "WalletConnect"
+          ],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "span",
+          "attrs": [],
+          "classes": [
+            "font-circle",
+            "text-fgPrimary",
+            "truncate"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "span",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "min-w-0",
+            "items-center"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "w-full",
+            "items-center"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "gap-2"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "gap-8"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "radix-_r_2b_",
+          "attrs": [
+            "role",
+            "data-state"
+          ],
+          "classes": [
+            "data-[state=open]:animate-in",
+            "data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out-0"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [
+            "data-scroll-locked"
+          ],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "html",
+          "attrs": [
+            "data-theme",
+            "data-page-scrollbar"
+          ],
+          "classes": [],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect Wallet",
+        "topCandidates": [
+          "Connect Wallet (100)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect Wallet\""
+      }
+    },
+    {
+      "url": "https://stake.lido.fi/",
+      "observedAt": "2026-11-06T14:44:02.739Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://stake.lido.fi/",
+        "title": "Stake with Lido | Lido"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "STAKE",
+            "EARN",
+            "SWAP",
+            "Connect wallet",
+            "MAX",
+            "View on Etherscan",
+            "What is Lido?",
+            "How does Lido work?",
+            "What security measures does the Lido protocol have",
+            "What are the risks of engaging with the Lido proto",
+            "What is Lido staking APR for Ethereum?",
+            "What fee is applied by Lido? What is this used for",
+            "What are stETH and wstETH?",
+            "How can I get stETH?",
+            "How can I use stETH?",
+            "Where can I cover my stETH?",
+            "How can I unstake stETH?",
+            "Privacy Notice",
+            "Terms of Use",
+            "IPFS"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "STAKE",
+            "EARN",
+            "SWAP",
+            "Connect wallet",
+            "MAX",
+            "View on Etherscan",
+            "What is Lido?",
+            "How does Lido work?",
+            "What security measures does the Lido protocol have",
+            "What are the risks of engaging with the Lido proto",
+            "What is Lido staking APR for Ethereum?",
+            "What fee is applied by Lido? What is this used for",
+            "What are stETH and wstETH?",
+            "How can I get stETH?",
+            "How can I use stETH?",
+            "Where can I cover my stETH?",
+            "How can I unstake stETH?",
+            "Privacy Notice",
+            "Terms of Use",
+            "IPFS"
+          ],
+          "dialogs": [
+            "Connect walletI certify that I have read and accept the upda"
+          ],
+          "walletLabels": [
+            "MetaMask",
+            "WalletConnect"
+          ],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect wallet",
+        "topCandidates": [
+          "Connect wallet (100)",
+          "Connect wallet (100)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect wallet\""
+      }
+    },
+    {
+      "url": "https://app.ether.fi/",
+      "observedAt": "2026-11-06T14:44:19.961Z",
+      "load": {
+        "ok": false,
+        "category": "site-unavailable",
+        "detail": "main document returned HTTP 500"
+      }
+    },
+    {
+      "url": "https://app.renzoprotocol.com/",
+      "observedAt": "2026-11-06T14:44:29.592Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://app.renzoprotocol.com/explore",
+        "title": "Explore | Renzo"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Connect Wallet",
+            "ezETH $151.67KTVL",
+            "ezETH $4.71KTVL",
+            "ezETH $163.06KTVL"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Connect Wallet",
+            "ezETH $151.67KTVL",
+            "ezETH $4.71KTVL",
+            "ezETH $163.06KTVL",
+            "EVM Wallet",
+            "Solana Wallet"
+          ],
+          "dialogs": [
+            "EVM WalletSolana Wallet"
+          ],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect Wallet",
+        "topCandidates": [
+          "Connect Wallet (100)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect Wallet\""
+      }
+    },
+    {
+      "url": "https://summer.fi/",
+      "observedAt": "2026-11-06T14:44:47.679Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://summer.fi/",
+        "title": "Summer.fi"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "blog post",
+            "Connect wallet",
+            "Privacy Policy",
+            "Terms of Service"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "blog post",
+            "0x8ba1...DBA72",
+            "Privacy Policy",
+            "Terms of Service"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect wallet",
+        "topCandidates": [
+          "Connect wallet (100)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect wallet\""
+      }
+    },
+    {
+      "url": "https://app.defisaver.com/",
+      "observedAt": "2026-11-06T14:45:12.356Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://app.defisaver.com/",
+        "title": "Portfolio | DeFi Saver"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "learn more here",
+            "Privacy Policy",
+            "Decline",
+            "Accept",
+            "Home",
+            "Discover",
+            "PROTOCOLS",
+            "Aave V3",
+            "Aave V4 NEW",
+            "Hyperliquid NEW",
+            "Compound NEW MARKET",
+            "MakerDAO",
+            "Spark",
+            "Fluid",
+            "Morpho Blue",
+            "View 6 more protocols",
+            "TOOLS",
+            "Smart Savings",
+            "Exchange Limit order, DCA",
+            "Loan Shifter NEW: EOA Support"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "learn more here",
+            "Privacy Policy",
+            "Decline",
+            "Accept",
+            "Home",
+            "Discover",
+            "PROTOCOLS",
+            "Aave V3",
+            "Aave V4 NEW",
+            "Hyperliquid NEW",
+            "Compound NEW MARKET",
+            "MakerDAO",
+            "Spark",
+            "Fluid",
+            "Morpho Blue",
+            "View 6 more protocols",
+            "TOOLS",
+            "Smart Savings",
+            "Exchange Limit order, DCA",
+            "Loan Shifter NEW: EOA Support"
+          ],
+          "dialogs": [],
+          "walletLabels": [
+            "MetaMask",
+            "WalletConnect",
+            "Coinbase"
+          ],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect",
+        "topCandidates": [
+          "Connect (95)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect\""
+      }
+    },
+    {
+      "url": "https://yearn.fi/",
+      "observedAt": "2026-11-06T14:45:37.914Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://yearn.fi/",
+        "title": "Yearn Vaults"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Yearn home",
+            "Ecosystem",
+            "Resources",
+            "Explore Vaults",
+            "View All →",
+            "Earn on ETH",
+            "Earn on USDS",
+            "Earn on USDC",
+            "Earn on crvUSD",
+            "Go to slide 1",
+            "Go to slide 2",
+            "Audits Yearn Contracts are audited thoroughly by a",
+            "Bug Bounties Security is our top priority. Report ",
+            "Curve ↗ The platform for building deep, sustainabl",
+            "Alchemix ↗ Self-Repaying DeFi Loans",
+            "Origin ↗ Building foundational infrastructure for ",
+            "Katana ↗ A layer-2 blockchain built to generate re",
+            "Trueo ↗ A fully onchain, yield-bearing prediction ",
+            "Term ↗ Fixed-rate lending via onchain auctions",
+            "Cap ↗ A covered credit application consisting of a"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Yearn home",
+            "Ecosystem",
+            "Resources",
+            "Explore Vaults",
+            "View All →",
+            "Earn on ETH",
+            "Earn on USDS",
+            "Earn on USDC",
+            "Earn on crvUSD",
+            "Go to slide 1",
+            "Go to slide 2",
+            "Audits Yearn Contracts are audited thoroughly by a",
+            "Bug Bounties Security is our top priority. Report ",
+            "Curve ↗ The platform for building deep, sustainabl",
+            "Alchemix ↗ Self-Repaying DeFi Loans",
+            "Origin ↗ Building foundational infrastructure for ",
+            "Katana ↗ A layer-2 blockchain built to generate re",
+            "Trueo ↗ A fully onchain, yield-bearing prediction ",
+            "Term ↗ Fixed-rate lending via onchain auctions",
+            "Cap ↗ A covered credit application consisting of a"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "no-connect-control",
+        "clicked": null,
+        "topCandidates": [],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no eligible connect control (strict scoring)"
+      }
+    },
+    {
+      "url": "https://app.uniswap.org/",
+      "observedAt": "2026-11-06T14:45:41.941Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://app.uniswap.org/",
+        "title": "Uniswap | Trade Crypto on DeFi’s Leading Exchange"
+      },
+      "staticFingerprint": {
+        "id": "privy",
+        "confidence": "low",
+        "signals": [
+          "privy:network:host:*.privy.io"
+        ]
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Trade",
+            "Explore",
+            "Launches Beta",
+            "Pool",
+            "Portfolio",
+            "Search Uniswap",
+            "Get the app",
+            "Navigation button",
+            "Connect",
+            "Sell 0 ETH $0",
+            "ETH",
+            "$0",
+            "Buy 0 Select token $0",
+            "0",
+            "Select token",
+            "Get started",
+            "Trade on the world’s largest DEX",
+            "Uniswap Wallet Simple. Safe. Secure. The trusted s",
+            "UniswapX Smarter swaps. Aggregated liquidity. Enjo",
+            "Trading API DeFi, direct to your users. Use the sa"
+          ],
+          "dialogs": [],
+          "walletLabels": [
+            "MetaMask",
+            "Igris Canary Wallet",
+            "WalletConnect",
+            "Coinbase Wallet"
+          ],
+          "customTags": [],
+          "iframes": [
+            "privy.app.uniswap.org"
+          ]
+        },
+        "afterClick": {
+          "controls": [
+            "Trade",
+            "Explore",
+            "Launches Beta",
+            "Pool",
+            "Portfolio",
+            "Search Uniswap",
+            "Get the app",
+            "Navigation button",
+            "Connect",
+            "Sell 0 ETH $0",
+            "ETH",
+            "$0",
+            "Buy 0 Select token $0",
+            "0",
+            "Select token",
+            "Get started",
+            "Trade on the world’s largest DEX",
+            "Uniswap Wallet Simple. Safe. Secure. The trusted s",
+            "UniswapX Smarter swaps. Aggregated liquidity. Enjo",
+            "Trading API DeFi, direct to your users. Use the sa"
+          ],
+          "dialogs": [],
+          "walletLabels": [
+            "MetaMask",
+            "Igris Canary Wallet",
+            "WalletConnect",
+            "Coinbase Wallet"
+          ],
+          "customTags": [],
+          "iframes": [
+            "privy.app.uniswap.org"
+          ]
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "span",
+          "attrs": [],
+          "classes": [
+            "[display:inline]",
+            "box-border",
+            "m-0"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "basis-auto",
+            "box-border"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "basis-auto",
+            "box-border"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-testid=option-grid"
+          ],
+          "classes": [
+            "flex",
+            "flex-col",
+            "items-stretch"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "basis-auto",
+            "box-border"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "items-stretch"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-testid=wallet-modal"
+          ],
+          "classes": [
+            "flex",
+            "flex-col",
+            "items-stretch"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-presence-skip-enter"
+          ],
+          "classes": [
+            "flex",
+            "w-full",
+            "grow"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "items-stretch"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "items-stretch",
+            "basis-auto",
+            "box-border"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-testid-ignore"
+          ],
+          "classes": [
+            "flex",
+            "flex-col",
+            "items-stretch"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "items-stretch"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-testid=account-drawer-container"
+          ],
+          "classes": [
+            "flex",
+            "flex-col",
+            "items-stretch"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect",
+        "topCandidates": [
+          "Connect (95)",
+          "Connect (95)"
+        ],
+        "fingerprint": {
+          "id": "privy",
+          "confidence": "low",
+          "signals": [
+            "privy:network:host:*.privy.io"
+          ]
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect\""
+      }
+    },
+    {
+      "url": "https://curve.fi/",
+      "observedAt": "2026-11-06T14:45:59.207Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://www.curve.finance/dex/ethereum/swap",
+        "title": "Swap - Curve"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "pool page",
+            "lock CRV",
+            "DEX",
+            "LLAMALEND",
+            "GOVERNANCE",
+            "BRIDGE",
+            "ANALYTICS",
+            "CONNECT WALLET",
+            "SWAP",
+            "POOLS",
+            "POOL CREATION",
+            "25%",
+            "50%",
+            "75%",
+            "100%",
+            "Switch tokens",
+            "Connect Wallet",
+            "Curve",
+            "Twitter",
+            "Discord"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "pool page",
+            "lock CRV",
+            "DEX",
+            "LLAMALEND",
+            "GOVERNANCE",
+            "BRIDGE",
+            "ANALYTICS",
+            "CONNECT WALLET",
+            "SWAP",
+            "POOLS",
+            "POOL CREATION",
+            "25%",
+            "50%",
+            "75%",
+            "100%",
+            "Switch tokens",
+            "Connect Wallet",
+            "Curve",
+            "Twitter",
+            "Discord"
+          ],
+          "dialogs": [
+            "Connect WalletBrowser WalletIgris Canary WalletWalletConnect"
+          ],
+          "walletLabels": [
+            "Browser Wallet",
+            "Igris Canary Wallet",
+            "WalletConnect",
+            "MetaMask",
+            "Coinbase Wallet"
+          ],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "p",
+          "attrs": [],
+          "classes": [
+            "MuiTypography-root",
+            "MuiTypography-bodyMBold",
+            "css-quiclr"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "li",
+          "attrs": [
+            "role"
+          ],
+          "classes": [
+            "MuiButtonBase-root",
+            "MuiMenuItem-root",
+            "MuiMenuItem-gutters"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "ul",
+          "attrs": [
+            "role"
+          ],
+          "classes": [
+            "MuiList-root",
+            "MuiList-padding",
+            "css-1wduhak"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "MuiCardContent-root",
+            "css-1x3tur"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "MuiPaper-root",
+            "MuiPaper-elevation",
+            "MuiPaper-rounded"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "role",
+            "aria-modal",
+            "data-mui-focusable"
+          ],
+          "classes": [
+            "MuiPaper-root",
+            "MuiPaper-elevation",
+            "MuiPaper-rounded"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "role"
+          ],
+          "classes": [
+            "MuiDialog-container",
+            "MuiDialog-scrollPaper",
+            "css-fh1hs4"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "role"
+          ],
+          "classes": [
+            "MuiDialog-root",
+            "MuiModal-root",
+            "css-s7g5vg"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [
+            "data-theme"
+          ],
+          "classes": [
+            "theme-light",
+            "page-medium"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "html",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "CONNECT WALLET",
+        "topCandidates": [
+          "CONNECT WALLET (100)",
+          "Connect Wallet (100)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"CONNECT WALLET\""
+      }
+    },
+    {
+      "url": "https://velodrome.finance/",
+      "observedAt": "2026-11-06T14:46:24.746Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://velodrome.finance/",
+        "title": "Velodrome Finance"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Velodrome Finance",
+            "Dashboard",
+            "Swap",
+            "Liquidity",
+            "Vote",
+            "Lock",
+            "Incentivize",
+            "Upgrade",
+            "Connect",
+            "OP Mainnet",
+            "Balance 0.0 ETH",
+            "ETH",
+            "Balance 0.0 VELO",
+            "VELO",
+            "Connect wallet",
+            "Tokenomics",
+            "Documentation",
+            "Security",
+            "Brand Kit",
+            "Superswaps"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Velodrome Finance",
+            "Dashboard",
+            "Swap",
+            "Liquidity",
+            "Vote",
+            "Lock",
+            "Incentivize",
+            "Upgrade",
+            "Connect",
+            "OP Mainnet",
+            "Balance 0.0 ETH",
+            "ETH",
+            "Balance 0.0 VELO",
+            "VELO",
+            "Connect wallet",
+            "Tokenomics",
+            "Documentation",
+            "Security",
+            "Brand Kit",
+            "Superswaps"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect",
+        "topCandidates": [
+          "Connect (95)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect\""
+      }
+    },
+    {
+      "url": "https://aerodrome.finance/",
+      "observedAt": "2026-11-06T14:46:40.556Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://aerodrome.finance/",
+        "title": "Aerodrome Finance"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Aerodrome Finance",
+            "Dashboard",
+            "Swap",
+            "Liquidity",
+            "Vote",
+            "Lock",
+            "Incentivize",
+            "Upgrade",
+            "Connect",
+            "Balance 0.0 ETH",
+            "ETH",
+            "Balance 0.0 AERO",
+            "AERO",
+            "Connect wallet",
+            "Tokenomics",
+            "Documentation",
+            "Security",
+            "Brand Kit",
+            "Upgrade to Aero",
+            "Analytics"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Aerodrome Finance",
+            "Dashboard",
+            "Swap",
+            "Liquidity",
+            "Vote",
+            "Lock",
+            "Incentivize",
+            "Upgrade",
+            "Connect",
+            "Balance 0.0 ETH",
+            "ETH",
+            "Balance 0.0 AERO",
+            "AERO",
+            "Connect wallet",
+            "Tokenomics",
+            "Documentation",
+            "Security",
+            "Brand Kit",
+            "Upgrade to Aero",
+            "Analytics"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect",
+        "topCandidates": [
+          "Connect (95)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect\""
+      }
+    },
+    {
+      "url": "https://app.1inch.io/",
+      "observedAt": "2026-11-06T14:46:58.880Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://1inch.com/",
+        "title": "1inch | Swap Crypto Tokens at the Best Rates in DeFi"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Skip to main content",
+            "1inch home",
+            "Personal",
+            "Swap",
+            "Trade",
+            "Terminal",
+            "Aqua",
+            "Portfolio",
+            "Connect wallet",
+            "Notifications, 1 unread",
+            "Open menu",
+            "Swap crypto",
+            "Open",
+            "01, Slide 1",
+            "02, Slide 2",
+            "03, Slide 3",
+            "Get started",
+            "SOL → ETH 1 SOL — ETH",
+            "WBTC → ETH 1 WBTC — ETH",
+            "BNB → USDT 1 BNB — USDT"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [
+            "app-root",
+            "app-shell",
+            "app-header",
+            "oi-header-dropdown",
+            "oi-svg-icon",
+            "oi-account-box-button-slot",
+            "oi-notification-bell",
+            "oi-overlay-menu",
+            "oi-content-panel",
+            "oi-page-swap",
+            "oi-hero-section",
+            "oi-hero-heading"
+          ],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Skip to main content",
+            "1inch home",
+            "Personal",
+            "Swap",
+            "Trade",
+            "Terminal",
+            "Aqua",
+            "Portfolio",
+            "Connect wallet",
+            "Notifications, 1 unread",
+            "Open menu",
+            "Swap crypto",
+            "Open",
+            "01, Slide 1",
+            "02, Slide 2",
+            "03, Slide 3",
+            "Get started",
+            "SOL → ETH 1 SOL — ETH",
+            "WBTC → ETH 1 WBTC — ETH",
+            "BNB → USDT 1 BNB — USDT"
+          ],
+          "dialogs": [],
+          "walletLabels": [
+            "Igris Canary Wallet",
+            "MetaMask"
+          ],
+          "customTags": [
+            "app-root",
+            "app-shell",
+            "app-header",
+            "oi-header-dropdown",
+            "oi-svg-icon",
+            "oi-account-box-button-slot",
+            "oi-notification-bell",
+            "oi-overlay-menu",
+            "oi-content-panel",
+            "oi-page-swap",
+            "oi-hero-section",
+            "oi-hero-heading"
+          ],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "span",
+          "attrs": [],
+          "classes": [
+            "title"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "description"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [],
+          "classes": [
+            "select-button"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "oi-wallet-cell",
+          "attrs": [
+            "data-ishighlighted",
+            "data-id",
+            "data-pending"
+          ],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "list"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "oi-wallet-list",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "app-wallet-connect",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "oi-account-box-widget",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "sidebar-content"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "oi-sidebar",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "cdk-overlay-0",
+          "attrs": [],
+          "classes": [
+            "cdk-overlay-pane",
+            "oi-sidebar-pane"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "cdk-global-overlay-wrapper"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "cdk-overlay-container"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [],
+          "classes": [
+            "light-theme"
+          ],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect wallet",
+        "topCandidates": [
+          "Connect wallet (100)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect wallet\""
+      }
+    },
+    {
+      "url": "https://app.hyperliquid.xyz/",
+      "observedAt": "2026-11-06T14:47:16.673Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://app.hyperliquid.xyz/trade",
+        "title": "79.204 | HYPE | Hyperliquid"
+      },
+      "staticFingerprint": {
+        "id": "privy",
+        "confidence": "low",
+        "signals": [
+          "privy:network:host:*.privy.io",
+          "privy:static:iframe[src*=\"auth.privy.io\"]"
+        ]
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Trade",
+            "Portfolio",
+            "Earn",
+            "Vaults",
+            "Staking",
+            "Referrals",
+            "Leaderboard",
+            "Connect",
+            "Chart",
+            "Cross",
+            "10x",
+            "Unified",
+            "Deposit",
+            "Withdraw",
+            "Online",
+            "Docs",
+            "Support",
+            "Terms",
+            "Privacy Policy"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": [
+            "auth.privy.io",
+            "h20qtjygwppc.statuspage.io"
+          ]
+        },
+        "afterClick": {
+          "controls": [
+            "Trade",
+            "Portfolio",
+            "Earn",
+            "Vaults",
+            "Staking",
+            "Referrals",
+            "Leaderboard",
+            "Connect",
+            "Chart",
+            "Cross",
+            "10x",
+            "Unified",
+            "Deposit",
+            "Withdraw",
+            "Online",
+            "Docs",
+            "Support",
+            "Terms",
+            "Privacy Policy",
+            "Log in with Email"
+          ],
+          "dialogs": [],
+          "walletLabels": [
+            "Igris Canary Wallet",
+            "MetaMask",
+            "WalletConnect",
+            "Coinbase Wallet"
+          ],
+          "customTags": [],
+          "iframes": [
+            "auth.privy.io",
+            "h20qtjygwppc.statuspage.io"
+          ]
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "sc-idXgbr",
+            "dapfOY",
+            "body14Regular"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [],
+          "classes": [
+            "sc-ftTHYK",
+            "ihUCJn"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "sc-bjfHbI",
+            "jFothj"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "sc-iveFHk",
+            "bBTlDf",
+            "modal"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "sc-cwSeag",
+            "jBMzAI"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "root",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "html",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect",
+        "topCandidates": [
+          "Connect (95)",
+          "Connect (95)"
+        ],
+        "fingerprint": {
+          "id": "privy",
+          "confidence": "low",
+          "signals": [
+            "privy:network:host:*.privy.io",
+            "privy:static:iframe[src*=\"auth.privy.io\"]"
+          ]
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect\""
+      }
+    },
+    {
+      "url": "https://jumper.exchange/",
+      "observedAt": "2026-11-06T14:47:41.647Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://jumper.xyz/",
+        "title": "Jumper | Smart App for the Universal Market"
+      },
+      "staticFingerprint": {
+        "id": "privy",
+        "confidence": "low",
+        "signals": [
+          "privy:network:host:*.privy.io"
+        ]
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Jumper",
+            "Expand sidebar",
+            "Trade",
+            "Advanced",
+            "RWA",
+            "Perps",
+            "Earn",
+            "Portfolio",
+            "Missions",
+            "Perks",
+            "More",
+            "Support",
+            "Connect",
+            "4x audited",
+            "Get started",
+            "Swap & Bridge",
+            "Private",
+            "Gas",
+            "Settings",
+            "Select"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Jumper",
+            "Expand sidebar",
+            "Trade",
+            "Advanced",
+            "RWA",
+            "Perps",
+            "Earn",
+            "Portfolio",
+            "Missions",
+            "Perks",
+            "More",
+            "Support",
+            "Connect",
+            "4x audited",
+            "Get started",
+            "Swap & Bridge",
+            "Private",
+            "Gas",
+            "Settings",
+            "Select"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "click-failed",
+        "clicked": "Connect wallet",
+        "topCandidates": [
+          "Connect wallet (100)",
+          "Connect (95)"
+        ],
+        "fingerprint": {
+          "id": "privy",
+          "confidence": "low",
+          "signals": [
+            "privy:network:host:*.privy.io"
+          ]
+        },
+        "urlChanges": [],
+        "detail": "click failed: TimeoutError: elementHandle.click: Timeout 5000ms exceeded.\nCall log:\n  - attempting click action\n    - waiting for element to be visible, enabled and stable\n  "
+      }
+    },
+    {
+      "url": "https://app.across.to/",
+      "observedAt": "2026-11-06T14:47:53.562Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://across.to/",
+        "title": "Across Protocol - Transfer Assets Between Layer 2s and Mainnet"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "0 0",
+            "Across home",
+            "TRANSFER",
+            "HISTORY",
+            "SUPPORT",
+            "DOCS",
+            "CONNECT",
+            "Toggle menu",
+            "$0.00",
+            "USDC Base",
+            "Swap origin and destination tokens",
+            "Set Recipient",
+            "USDC Arbitrum",
+            "Across V5",
+            "CONNECT WALLET",
+            "SCROLL TO LEARN MORE",
+            "Uniswap",
+            "MetaMask",
+            "Coinbase",
+            "PancakeSwap"
+          ],
+          "dialogs": [],
+          "walletLabels": [
+            "MetaMask",
+            "Coinbase"
+          ],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "0 0",
+            "Across home",
+            "TRANSFER",
+            "HISTORY",
+            "SUPPORT",
+            "DOCS",
+            "CONNECT",
+            "Toggle menu",
+            "CONNECT WALLET",
+            "BLOG",
+            "REWARDS",
+            "POOL",
+            "Light",
+            "Dark",
+            "System",
+            "X",
+            "Telegram",
+            "LinkedIn",
+            "Terms of Service",
+            "Back"
+          ],
+          "dialogs": [],
+          "walletLabels": [
+            "Igris Canary Wallet",
+            "MetaMask",
+            "Coinbase Wallet",
+            "WalletConnect",
+            "Phantom",
+            "Coinbase"
+          ],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "span",
+          "attrs": [],
+          "classes": [
+            "flex-1"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [
+            "data-cy"
+          ],
+          "classes": [
+            "flex",
+            "w-full",
+            "items-center"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "gap-1"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-page-id"
+          ],
+          "classes": [
+            "nav-dropdown__page"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-page"
+          ],
+          "classes": [
+            "nav-dropdown__stage"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "role",
+            "data-origin"
+          ],
+          "classes": [
+            "nav-dropdown",
+            "absolute",
+            "top-[calc(100%+8px)]"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "relative",
+            "flex",
+            "items-center"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "h-[var(--header-height)]",
+            "items-center"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "nav",
+          "attrs": [],
+          "classes": [
+            "sticky",
+            "top-0",
+            "z-[1000]"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "min-h-full",
+            "flex-1"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "root",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "CONNECT WALLET",
+        "topCandidates": [
+          "CONNECT WALLET (100)",
+          "CONNECT (95)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"CONNECT WALLET\""
+      }
+    },
+    {
+      "url": "https://superbridge.app/",
+      "observedAt": "2026-11-06T14:48:17.484Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://superbridge.app/",
+        "title": "Superbridge"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Connect",
+            "Open navigation menu",
+            "Activity",
+            "ETH Ethereum",
+            "ETH Base",
+            "Connect wallet",
+            "Reject",
+            "Accept"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [
+            "number-flow-react"
+          ],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Connect",
+            "Open navigation menu",
+            "Activity",
+            "ETH Ethereum",
+            "ETH Base",
+            "Connect wallet",
+            "Reject",
+            "Accept",
+            "WalletConnect",
+            "Base Account",
+            "MetaMask Installed",
+            "Igris Canary Wallet Installed",
+            "Terms and Privacy Policy"
+          ],
+          "dialogs": [
+            "Connect a wallet"
+          ],
+          "walletLabels": [
+            "WalletConnect",
+            "MetaMask",
+            "Igris Canary Wallet"
+          ],
+          "customTags": [
+            "number-flow-react"
+          ],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "h3",
+          "attrs": [],
+          "classes": [
+            "text-sm",
+            "font-heading",
+            "text-foreground"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex-1",
+            "min-w-0"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [],
+          "classes": [
+            "sb-pullout",
+            "flex",
+            "shrink-0"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "gap-2"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "relative"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "relative"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "max-h-[inherit]",
+            "overflow-x-hidden",
+            "overflow-y-auto"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "_r_20_",
+          "attrs": [
+            "data-open",
+            "role",
+            "data-base-ui-focusable"
+          ],
+          "classes": [
+            "pointer-events-auto",
+            "flex",
+            "flex-col"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "z-61",
+            "fixed",
+            "inset-0"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "_r_2t_",
+          "attrs": [
+            "data-base-ui-portal"
+          ],
+          "classes": [
+            "sb-widget"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "widget-portal",
+          "attrs": [],
+          "classes": [
+            "sb-widget",
+            "absolute",
+            "inset-0"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-sb-color-mode"
+          ],
+          "classes": [
+            "rollie-theme",
+            "notranslate",
+            "bg-background"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect wallet",
+        "topCandidates": [
+          "Connect wallet (100)",
+          "Connect (95)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect wallet\""
+      }
+    },
+    {
+      "url": "https://portal.zksync.io/",
+      "observedAt": "2026-11-06T14:48:33.756Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://portal.zksync.io/bridge",
+        "title": "ZKsync Bridge | Transfer funds between ZKsync and Ethereum"
+      },
+      "staticFingerprint": {
+        "id": "appkit",
+        "confidence": "medium",
+        "signals": [
+          "appkit:static:customElements:w3m-modal,w3m-button"
+        ]
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Bridge",
+            "Assets",
+            "Transfers",
+            "ZKsync Era",
+            "Connect wallet",
+            "See withdrawals",
+            "Ethereum",
+            "Learn more",
+            "321753a",
+            "Terms of Service",
+            "Privacy Policy",
+            "Proceed"
+          ],
+          "dialogs": [
+            "ZKsync Bridge is live on beta Nothing on this website should"
+          ],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": [
+            "verify.walletconnect.com"
+          ]
+        },
+        "afterClick": {
+          "controls": [
+            "Bridge",
+            "Assets",
+            "Transfers",
+            "ZKsync Era",
+            "Connect wallet",
+            "See withdrawals",
+            "Ethereum",
+            "Learn more",
+            "321753a",
+            "Terms of Service",
+            "Privacy Policy",
+            "Proceed"
+          ],
+          "dialogs": [
+            "ZKsync Bridge is live on beta Nothing on this website should"
+          ],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": [
+            "verify.walletconnect.com"
+          ]
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "click-failed",
+        "clicked": "Connect wallet",
+        "topCandidates": [
+          "Connect wallet (100)",
+          "Connect wallet (100)"
+        ],
+        "fingerprint": {
+          "id": "appkit",
+          "confidence": "medium",
+          "signals": [
+            "appkit:static:customElements:w3m-modal,w3m-button"
+          ]
+        },
+        "urlChanges": [],
+        "detail": "click failed: TimeoutError: elementHandle.click: Timeout 5000ms exceeded.\nCall log:\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n"
+      }
+    },
+    {
+      "url": "https://stargate.finance/",
+      "observedAt": "2026-11-06T14:48:53.441Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://stargate.finance/",
+        "title": "Bridge USDC, USDT, ETH, BTC & OFTs Across Chains"
+      },
+      "staticFingerprint": {
+        "id": "privy",
+        "confidence": "low",
+        "signals": [
+          "privy:network:host:*.privy.io"
+        ]
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Convert STG",
+            "Overview",
+            "Value Transfer API",
+            "Resources",
+            "Connect Wallet",
+            "Advanced Settings",
+            "Transfer",
+            "Swap",
+            "From Not Selected",
+            "Max",
+            "Swap source and destination",
+            "To Not Selected",
+            "Select network",
+            "Advanced Mode"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Convert STG",
+            "Overview",
+            "Value Transfer API",
+            "Resources",
+            "Connect Wallet",
+            "Advanced Settings",
+            "Transfer",
+            "Swap",
+            "From Not Selected",
+            "Max",
+            "Swap source and destination",
+            "To Not Selected",
+            "Select network",
+            "Advanced Mode",
+            "EVM",
+            "Coinbase Smart Wallet Connect",
+            "MetaMask Connect",
+            "Igris Canary Wallet Connect",
+            "WalletConnect Connect",
+            "Taho Get"
+          ],
+          "dialogs": [
+            "Account"
+          ],
+          "walletLabels": [
+            "Coinbase Smart Wallet",
+            "MetaMask",
+            "Igris Canary Wallet",
+            "WalletConnect",
+            "Phantom"
+          ],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "css-1u0w4zt"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "css-10jo70k"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [],
+          "classes": [
+            "css-18evjcp"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "css-15mywae"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "css-t0m0p4"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "css-1ushn3n"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "css-1srbglp"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "css-j9ab8z"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "css-dt5yvm"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "radix-_R_6ddb_",
+          "attrs": [
+            "role",
+            "data-state"
+          ],
+          "classes": [
+            "css-1g7kh26"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [],
+          "classes": [
+            "tc-using-mouse"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "html",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect Wallet",
+        "topCandidates": [
+          "Connect Wallet (100)"
+        ],
+        "fingerprint": {
+          "id": "privy",
+          "confidence": "low",
+          "signals": [
+            "privy:network:host:*.privy.io"
+          ]
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect Wallet\""
+      }
+    },
+    {
+      "url": "https://opensea.io/",
+      "observedAt": "2026-11-06T14:49:10.787Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://opensea.io/",
+        "title": "OpenSea, exchange everything — token trading and NFT marketplace"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Get the app",
+            "Scan to download",
+            "Close",
+            "OpenSea home",
+            "Home",
+            "Explore",
+            "Feed",
+            "Activity",
+            "More",
+            "Search",
+            "Sign in",
+            "Profile",
+            "All",
+            "Memes",
+            "Trading Cards",
+            "Art",
+            "PFPs",
+            "Photography",
+            "Gaming",
+            "All chains"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [
+            "number-flow-react"
+          ],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Get the app",
+            "Scan to download",
+            "Close",
+            "OpenSea home",
+            "Home",
+            "Explore",
+            "Feed",
+            "Activity",
+            "More",
+            "Search",
+            "Sign in",
+            "Profile",
+            "All",
+            "Memes",
+            "Trading Cards",
+            "Art",
+            "PFPs",
+            "Photography",
+            "Gaming",
+            "All chains"
+          ],
+          "dialogs": [
+            "Connect with OpenSeaMetaMaskInstalledIgris Canary WalletInst"
+          ],
+          "walletLabels": [
+            "MetaMask",
+            "Igris Canary Wallet"
+          ],
+          "customTags": [
+            "number-flow-react"
+          ],
+          "iframes": [
+            "wallet.opensea.io"
+          ]
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "span",
+          "attrs": [
+            "data-id"
+          ],
+          "classes": [
+            "leading-normal",
+            "text-sm",
+            "font-medium"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-id"
+          ],
+          "classes": [
+            "flex",
+            "flex-col",
+            "justify-center"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [
+            "data-id"
+          ],
+          "classes": [
+            "disabled:pointer-events-none",
+            "disabled:opacity-40",
+            "flex"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "ul",
+          "attrs": [],
+          "classes": [
+            "*:first:rounded-t-xl",
+            "*:last:rounded-b-xl",
+            "[&_[data-id=Item]]:border-0"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "text-center"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "gap-2"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "overflow-y-auto"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "fresnel-container",
+            "fresnel-greaterThanOrEqual-md",
+            "fresnel-_r_ds_"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "max-h-[calc(100vh-64px)]"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "radix-_R_1hhcqlknpfivb_",
+          "attrs": [
+            "role",
+            "data-state",
+            "data-id"
+          ],
+          "classes": [
+            "relative",
+            "z-modal",
+            "rounded-xl"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-state",
+            "data-testid=Overlay"
+          ],
+          "classes": [
+            "fixed",
+            "inset-0",
+            "bg-overlay"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [
+            "data-scroll-locked"
+          ],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "html",
+          "attrs": [],
+          "classes": [
+            "x9T2SG_variable",
+            "K3wO1q_variable",
+            "dark"
+          ],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Sign in",
+        "topCandidates": [
+          "Sign in (80)"
+        ],
+        "fingerprint": {
+          "id": "privy",
+          "confidence": "low",
+          "signals": [
+            "privy:network:host:*.privy.io"
+          ]
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Sign in\""
+      }
+    },
+    {
+      "url": "https://manifold.xyz/",
+      "observedAt": "2026-11-06T14:49:33.246Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://manifold.xyz/",
+        "title": "Manifold"
+      },
+      "staticFingerprint": {
+        "id": "appkit",
+        "confidence": "medium",
+        "signals": [
+          "appkit:static:customElements:appkit-modal,w3m-modal,appkit-button,w3m-button"
+        ]
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "0x0d13…2b6a minted Silent symphony · 11m ago",
+            "LORDLOOPIIIN bid on clowns and corporate clown · 0",
+            "akc listed clowns and corporate clown · 0.001 ETH ",
+            "Loop published End of the Tunnel · 43m ago",
+            "0x9e2d…c70a minted keep a star · 46m ago",
+            "akc published clowns and corporate clown · 48m ago",
+            "HeartlessLuigi published Schizophrenia · 58m ago",
+            "0x8c1f minted uptober 2026 · 1h ago",
+            "Kim Feast published Slate · 2h ago",
+            "Gary Cartlidge published Bait The Baiter · 2h ago",
+            "Maeng Archive listed Maeng-Practice 2025.10.16 (EI",
+            "Maeng Archive listed Maeng-Practice 2025.10.15 (EI",
+            "Maeng Archive published Maeng-Practice 2025.10.16 ",
+            "Maeng Archive published Maeng-Practice 2025.10.15 ",
+            "Kim Feast published The Breakfast Club · 3h ago",
+            "Edub listed Beneath the Veil · 0.02 ETH · 3h ago",
+            "Edub published Beneath the Veil · 3h ago",
+            "goth published Beyond the Black Gates · 3h ago",
+            "0x05fe…7422 bought 2 × ⦾ · 4h ago",
+            "Pixel Cats published Pixel Cats · 4h ago"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "0x0d13…2b6a minted Silent symphony · 11m ago",
+            "LORDLOOPIIIN bid on clowns and corporate clown · 0",
+            "akc listed clowns and corporate clown · 0.001 ETH ",
+            "Loop published End of the Tunnel · 43m ago",
+            "0x9e2d…c70a minted keep a star · 46m ago",
+            "akc published clowns and corporate clown · 48m ago",
+            "HeartlessLuigi published Schizophrenia · 58m ago",
+            "0x8c1f minted uptober 2026 · 1h ago",
+            "Kim Feast published Slate · 2h ago",
+            "Gary Cartlidge published Bait The Baiter · 2h ago",
+            "Maeng Archive listed Maeng-Practice 2025.10.16 (EI",
+            "Maeng Archive listed Maeng-Practice 2025.10.15 (EI",
+            "Maeng Archive published Maeng-Practice 2025.10.16 ",
+            "Maeng Archive published Maeng-Practice 2025.10.15 ",
+            "Kim Feast published The Breakfast Club · 3h ago",
+            "Edub listed Beneath the Veil · 0.02 ETH · 3h ago",
+            "Edub published Beneath the Veil · 3h ago",
+            "goth published Beyond the Black Gates · 3h ago",
+            "0x05fe…7422 bought 2 × ⦾ · 4h ago",
+            "Pixel Cats published Pixel Cats · 4h ago"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "no-connect-control",
+        "clicked": null,
+        "topCandidates": [],
+        "fingerprint": {
+          "id": "appkit",
+          "confidence": "medium",
+          "signals": [
+            "appkit:static:customElements:appkit-modal,w3m-modal,appkit-button,w3m-button"
+          ]
+        },
+        "urlChanges": [],
+        "detail": "no eligible connect control (strict scoring)"
+      }
+    },
+    {
+      "url": "https://highlight.xyz/",
+      "observedAt": "2026-11-06T14:49:42.114Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://highlight.xyz/",
+        "title": "Highlight"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Highlight home",
+            "Previous artwork",
+            "Next artwork",
+            "Explore →",
+            "Artwork 1 of 12",
+            "Artwork 2 of 12",
+            "Artwork 3 of 12",
+            "Artwork 4 of 12",
+            "Artwork 5 of 12",
+            "Artwork 6 of 12",
+            "Artwork 7 of 12",
+            "Artwork 8 of 12",
+            "Artwork 9 of 12",
+            "Artwork 10 of 12",
+            "Artwork 11 of 12",
+            "Artwork 12 of 12",
+            "Explore",
+            "Artists",
+            "Sign in",
+            "Create"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Highlight home",
+            "Previous artwork",
+            "Next artwork",
+            "Explore →",
+            "Artwork 1 of 12",
+            "Artwork 2 of 12",
+            "Artwork 3 of 12",
+            "Artwork 4 of 12",
+            "Artwork 5 of 12",
+            "Artwork 6 of 12",
+            "Artwork 7 of 12",
+            "Artwork 8 of 12",
+            "Artwork 9 of 12",
+            "Artwork 10 of 12",
+            "Artwork 11 of 12",
+            "Artwork 12 of 12",
+            "Explore",
+            "Artists",
+            "Sign in",
+            "Create"
+          ],
+          "dialogs": [
+            "Log in or sign up"
+          ],
+          "walletLabels": [
+            "Coinbase Wallet",
+            "Igris Canary Wallet",
+            "MetaMask"
+          ],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "span",
+          "attrs": [],
+          "classes": [
+            "whitespace-nowrap"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [],
+          "classes": [
+            "relative",
+            "inline-flex",
+            "items-center"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "gap-6"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "flex-col",
+            "gap-10"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex-1",
+            "overflow-y-auto",
+            "py-8"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "radix-_r_0_",
+          "attrs": [
+            "role",
+            "data-state"
+          ],
+          "classes": [
+            "ds-dialog-content",
+            "fixed",
+            "left-1/2"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [
+            "data-scroll-locked"
+          ],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "html",
+          "attrs": [
+            "data-theme"
+          ],
+          "classes": [],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Sign in",
+        "topCandidates": [
+          "Sign in (80)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Sign in\""
+      }
+    },
+    {
+      "url": "https://app.ens.domains/",
+      "observedAt": "2026-11-06T14:50:04.546Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://app.ens.domains/",
+        "title": "ENS App"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Open navigation",
+            "search",
+            "CONNECT login",
+            "Previous slide",
+            "Go to slide 1",
+            "Go to slide 2",
+            "Go to slide 3",
+            "Next slide",
+            "@VitalikButerin",
+            "vButerin",
+            "vitalik.eth.limo",
+            "@nicksdjohnson",
+            "arachnid",
+            "arachnied@notdot",
+            "@erni_eth",
+            "myemail.me.com",
+            "Privacy policy",
+            "Yes, happy to help",
+            "No thanks"
+          ],
+          "dialogs": [],
+          "walletLabels": [
+            "Phantom",
+            "MetaMask",
+            "Rainbow"
+          ],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Open navigation",
+            "search",
+            "CONNECT login",
+            "Previous slide",
+            "Go to slide 1",
+            "Go to slide 2",
+            "Go to slide 3",
+            "Next slide",
+            "@VitalikButerin",
+            "vButerin",
+            "vitalik.eth.limo",
+            "@nicksdjohnson",
+            "arachnid",
+            "arachnied@notdot",
+            "@erni_eth",
+            "myemail.me.com",
+            "Privacy policy",
+            "Yes, happy to help",
+            "No thanks"
+          ],
+          "dialogs": [],
+          "walletLabels": [
+            "Phantom",
+            "MetaMask",
+            "Rainbow"
+          ],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "no-connect-control",
+        "clicked": null,
+        "topCandidates": [],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no eligible connect control (strict scoring)"
+      }
+    },
+    {
+      "url": "https://guild.xyz/",
+      "observedAt": "2026-11-06T14:50:07.389Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://guild.xyz/",
+        "title": "Guild - Build Engaged and Unified Communities | Community Management Platform"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Guild",
+            "Explorer",
+            "Docs",
+            "Team",
+            "Pricing",
+            "Sign in",
+            "Create Guild",
+            "Explore Guilds",
+            "Score",
+            "Quests",
+            "NFT Launch",
+            "Start Growing",
+            "Token-gating",
+            "Role ranking",
+            "Sybil resistance",
+            "Gated forms",
+            "Get Organized",
+            "Discord roles",
+            "Telegram access",
+            "NFT collectibles"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Guild",
+            "Explorer",
+            "Docs",
+            "Team",
+            "Pricing",
+            "Sign in",
+            "Create Guild",
+            "Explore Guilds",
+            "Score",
+            "Quests",
+            "NFT Launch",
+            "Start Growing",
+            "Token-gating",
+            "Role ranking",
+            "Sybil resistance",
+            "Gated forms",
+            "Get Organized",
+            "Discord roles",
+            "Telegram access",
+            "NFT collectibles"
+          ],
+          "dialogs": [
+            "First time?"
+          ],
+          "walletLabels": [
+            "Igris Canary Wallet"
+          ],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "span",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [
+            "data-slot",
+            "data-ui-button"
+          ],
+          "classes": [
+            "ui:font-semibold",
+            "ui:inline-flex",
+            "ui:items-center"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "grid",
+            "gap-2"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "grid",
+            "gap-8"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "px-6",
+            "pb-10",
+            "sm:px-7"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "ui:overflow-y-auto",
+            "ui:[scrollbar-width:none]",
+            "ui:[&::-webkit-scrollbar]:hidden"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "radix-«rd»",
+          "attrs": [
+            "role",
+            "data-state",
+            "data-slot"
+          ],
+          "classes": [
+            "ui:motion-reduce:animate-none!",
+            "ui:flex",
+            "ui:flex-col"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-state",
+            "data-slot"
+          ],
+          "classes": [
+            "ui:data-[state=closed]:fade-out-0",
+            "ui:data-[state=open]:fade-in-0",
+            "ui:fixed"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [
+            "data-scroll-locked"
+          ],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "html",
+          "attrs": [
+            "data-v3-theme"
+          ],
+          "classes": [
+            "frosted"
+          ],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Sign in",
+        "topCandidates": [
+          "Sign in (80)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Sign in\""
+      }
+    },
+    {
+      "url": "https://snapshot.box/",
+      "observedAt": "2026-11-06T14:50:31.945Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://snapshot.box/#/explore",
+        "title": "Explore"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Log in",
+            "Explore",
+            "Protocol Snapshot",
+            "Category All categories",
+            "Decentraland 1 2.9k 35k",
+            "Mantle (prev. BitDAO) 1 36 89k",
+            "QuickSwap 1 81 26k",
+            "ssv.network 1 127 560",
+            "Shutter DAO 0x36 2 spaces 1 70 4.2k",
+            "Exactly Protocol 1 36 150",
+            "Orderly 1 17 38",
+            "Aave DAO 1 993 158k",
+            "CoW DAO 3 94 7.4k",
+            "Index Coop 1 1.5k 2.8k",
+            "CLever 1 1.6k 201",
+            "Beets Gauge Votes 1 48 170",
+            "Ambire Wallet 1 40 316",
+            "sdCRV-Governance 2 1.3k 171",
+            "Stake DAO CRV 1 276 144",
+            "Stake DAO FXS 1 527 62"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Log in",
+            "Explore",
+            "Protocol Snapshot",
+            "Category All categories",
+            "Decentraland 1 2.9k 35k",
+            "Mantle (prev. BitDAO) 1 36 89k",
+            "QuickSwap 1 81 26k",
+            "ssv.network 1 127 560",
+            "Shutter DAO 0x36 2 spaces 1 70 4.2k",
+            "Exactly Protocol 1 36 150",
+            "Orderly 1 17 38",
+            "Aave DAO 1 993 158k",
+            "CoW DAO 3 94 7.4k",
+            "Index Coop 1 1.5k 2.8k",
+            "CLever 1 1.6k 201",
+            "Beets Gauge Votes 1 48 170",
+            "Ambire Wallet 1 40 316",
+            "sdCRV-Governance 2 1.3k 171",
+            "Stake DAO CRV 1 276 144",
+            "Stake DAO FXS 1 527 62"
+          ],
+          "dialogs": [],
+          "walletLabels": [
+            "Igris Canary Wallet",
+            "MetaMask",
+            "WalletConnect",
+            "Coinbase"
+          ],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "span",
+          "attrs": [],
+          "classes": [
+            "flex-grow",
+            "text-left"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "w-full",
+            "items-center"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "m-4"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-testid=modal-body"
+          ],
+          "classes": [
+            "modal-body"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "shell",
+            "overflow-hidden",
+            "relative"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-v-64cc03d7",
+            "data-testid=modal"
+          ],
+          "classes": [
+            "modal",
+            "mx-auto",
+            "pt-electron-titlebar-height"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-v-64cc03d7"
+          ],
+          "classes": [
+            "min-h-screen",
+            "overflow-clip"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "max-w-maximum",
+            "mx-auto"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "app",
+          "attrs": [
+            "data-v-app"
+          ],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [],
+          "classes": [
+            "overflow-y-hidden"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "html",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Log in",
+        "topCandidates": [
+          "Log in (80)",
+          "Log in (80)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Log in\""
+      }
+    },
+    {
+      "url": "https://www.tally.xyz/",
+      "observedAt": "2026-11-06T14:50:47.368Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://www.tally.xyz/",
+        "title": "Cactus - Explore DAOs"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "all about the change",
+            "@CactusHQxyz",
+            "Search Cactus",
+            "View ZKsync",
+            "View more",
+            "Optimism Optimism 186 Proposals",
+            "GMX Arbitrum 23 Proposals",
+            "Unlock DAO Base 158 Proposals",
+            "Term Ethereum 71 Proposals",
+            "ENS Ethereum 77 Proposals",
+            "ARK BNB Smart Chain 29 Proposals",
+            "Explore More DAOs",
+            "ScopeLift",
+            "Terms of Service",
+            "Support",
+            "Privacy Policy",
+            "Resources",
+            "Go to X profile",
+            "Go to GitHub profile"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "all about the change",
+            "@CactusHQxyz",
+            "Search Cactus",
+            "View ZKsync",
+            "View more",
+            "Optimism Optimism 186 Proposals",
+            "GMX Arbitrum 23 Proposals",
+            "Unlock DAO Base 158 Proposals",
+            "Term Ethereum 71 Proposals",
+            "ENS Ethereum 77 Proposals",
+            "ARK BNB Smart Chain 29 Proposals",
+            "Explore More DAOs",
+            "ScopeLift",
+            "Terms of Service",
+            "Support",
+            "Privacy Policy",
+            "Resources",
+            "Go to X profile",
+            "Go to GitHub profile"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "no-connect-control",
+        "clicked": null,
+        "topCandidates": [],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no eligible connect control (strict scoring)"
+      }
+    },
+    {
+      "url": "https://nouns.wtf/",
+      "observedAt": "2026-11-06T14:50:50.083Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://nouns.wtf/",
+        "title": "Nouns DAO"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Treasury Ξ 3,810",
+            "←",
+            "→",
+            "Bid",
+            "Prop 113",
+            "Prop 190",
+            "Prop 143",
+            "Nounspot",
+            "PlayDNA",
+            "CryptoPunks",
+            "Playground",
+            "Summary",
+            "Daily Auctions",
+            "Nouns DAO",
+            "Nouns DUNA",
+            "Governance ‘Slow Start’",
+            "Noun Traits",
+            "On-Chain Artwork",
+            "Noun Seeder Contract",
+            "Nounder's Reward"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": [
+            "www.youtube.com",
+            "nounspot.com"
+          ]
+        },
+        "afterClick": {
+          "controls": [
+            "Treasury Ξ 3,810",
+            "←",
+            "→",
+            "Bid",
+            "Prop 113",
+            "Prop 190",
+            "Prop 143",
+            "Nounspot",
+            "PlayDNA",
+            "CryptoPunks",
+            "Playground",
+            "Summary",
+            "Daily Auctions",
+            "Nouns DAO",
+            "Nouns DUNA",
+            "Governance ‘Slow Start’",
+            "Noun Traits",
+            "On-Chain Artwork",
+            "Noun Seeder Contract",
+            "Nounder's Reward"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": [
+            "www.youtube.com",
+            "nounspot.com"
+          ]
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "no-connect-control",
+        "clicked": null,
+        "topCandidates": [],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no eligible connect control (strict scoring)"
+      }
+    },
+    {
+      "url": "https://hey.xyz/",
+      "observedAt": "2026-11-06T14:51:05.539Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://hey.xyz/",
+        "title": "Home · Hey"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Skip to main content",
+            "Home",
+            "Search",
+            "Notifications",
+            "Wallet",
+            "Bridge",
+            "Stocks",
+            "Premium",
+            "Leaderboard",
+            "Connect",
+            "Communities",
+            "Bookmarks",
+            "Login",
+            "Account menu",
+            "Create post",
+            "Join Hey",
+            "Posted in heyfeedback",
+            "Hey",
+            "@hey",
+            "4:56 PM · Nov 5, 2026 · @hey"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": [
+            "www.youtube-nocookie.com"
+          ]
+        },
+        "afterClick": {
+          "controls": [
+            "Skip to main content",
+            "Home",
+            "Search",
+            "Notifications",
+            "Wallet",
+            "Bridge",
+            "Stocks",
+            "Premium",
+            "Leaderboard",
+            "Connect",
+            "Communities",
+            "Bookmarks",
+            "Login",
+            "Account menu",
+            "Create post",
+            "Join Hey",
+            "Posted in heyfeedback",
+            "Hey",
+            "@hey",
+            "4:56 PM · Nov 5, 2026 · @hey"
+          ],
+          "dialogs": [
+            "Login"
+          ],
+          "walletLabels": [
+            "Igris Canary Wallet",
+            "MetaMask"
+          ],
+          "customTags": [],
+          "iframes": [
+            "www.youtube-nocookie.com"
+          ]
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "span",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [],
+          "classes": [
+            "transition-colors",
+            "duration-150",
+            "ease-standard"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "inline-block",
+            "w-full",
+            "space-y-3"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "space-y-4",
+            "md:space-y-5"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "section",
+          "attrs": [
+            "data-page-id"
+          ],
+          "classes": [
+            "t-page",
+            "overflow-y-auto",
+            "p-0"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-page"
+          ],
+          "classes": [
+            "t-page-slide",
+            "m-3",
+            "transition-[height]"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "flex",
+            "min-h-0",
+            "flex-1"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "headlessui-dialog-panel-_r_eb_",
+          "attrs": [
+            "data-headlessui-state",
+            "data-open"
+          ],
+          "classes": [
+            "sm:max-w-lg",
+            "t-modal",
+            "my-0"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "w-full",
+            "relative",
+            "z-local"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "headlessui-dialog-_r_e5_",
+          "attrs": [
+            "role",
+            "aria-modal",
+            "data-headlessui-state",
+            "data-open"
+          ],
+          "classes": [
+            "fixed",
+            "inset-0",
+            "z-modal"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-headlessui-portal"
+          ],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "id": "headlessui-portal-root",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        },
+        {
+          "tag": "body",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Login",
+        "topCandidates": [
+          "Login (80)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Login\""
+      }
+    },
+    {
+      "url": "https://app.galxe.com/",
+      "observedAt": "2026-11-06T14:51:30.379Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://app.galxe.com/",
+        "title": "Under Maintenance | Galxe"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "no-connect-control",
+        "clicked": null,
+        "topCandidates": [],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no eligible connect control (strict scoring)"
+      }
+    },
+    {
+      "url": "https://portfolio.metamask.io/",
+      "observedAt": "2026-11-06T14:51:31.799Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://portfolio.metamask.io/",
+        "title": "MetaMask Portfolio"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Dashboard",
+            "Move crypto",
+            "Discover",
+            "Card",
+            "Tax Hub",
+            "Travel Pilot",
+            "Pilot",
+            "Terms of Use",
+            "Support",
+            "CONNECT",
+            "WATCH AN ADDRESS",
+            "BUY",
+            "SWAP",
+            "STAKE",
+            "SPEND",
+            "EXPLORE WEB3",
+            "Learn more",
+            "Privacy Notice",
+            "In addition to MetaMetrics, we'd like to use data ",
+            "Manage in Settings"
+          ],
+          "dialogs": [
+            "Help us improve MetaMaskWe'd like to gather basic usage and "
+          ],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Dashboard",
+            "Move crypto",
+            "Discover",
+            "Card",
+            "Tax Hub",
+            "Travel Pilot",
+            "Pilot",
+            "Terms of Use",
+            "Support",
+            "CONNECT",
+            "WATCH AN ADDRESS",
+            "BUY",
+            "SWAP",
+            "STAKE",
+            "SPEND",
+            "EXPLORE WEB3",
+            "Learn more",
+            "Privacy Notice",
+            "In addition to MetaMetrics, we'd like to use data ",
+            "Manage in Settings"
+          ],
+          "dialogs": [
+            "Help us improve MetaMaskWe'd like to gather basic usage and "
+          ],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "click-failed",
+        "clicked": "CONNECT",
+        "topCandidates": [
+          "CONNECT (95)",
+          "CONNECT (95)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "click failed: TimeoutError: elementHandle.click: Timeout 5000ms exceeded.\nCall log:\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n"
+      }
+    },
+    {
+      "url": "https://debank.com/",
+      "observedAt": "2026-11-06T14:51:45.240Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://debank.com/",
+        "title": "DeBank | Your go-to portfolio tracker for Ethereum and EVM"
+      },
+      "staticFingerprint": {
+        "id": "appkit",
+        "confidence": "medium",
+        "signals": [
+          "appkit:static:customElements:w3m-modal"
+        ]
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Portfolio",
+            "Community",
+            "Portfolio API",
+            "Connect Wallet",
+            "View more👉",
+            "Read More👉",
+            "View More👉",
+            "DeBank XP Earn DeBank XP by referring, joining Que",
+            "Credit A comprehensive system to measure the authe",
+            "Web3 Badges Reflects the unique achievements accom",
+            "Subscribe Now👉",
+            "Download Now👉",
+            "icon/githubCreated with Sketch.",
+            "Brand assets",
+            "Terms of service",
+            "Privacy Policy",
+            "Reject",
+            "Accept"
+          ],
+          "dialogs": [
+            "We use cookies to improve your experience.Privacy PolicyReje"
+          ],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Portfolio",
+            "Community",
+            "Portfolio API",
+            "Connect Wallet",
+            "View more👉",
+            "Read More👉",
+            "View More👉",
+            "DeBank XP Earn DeBank XP by referring, joining Que",
+            "Credit A comprehensive system to measure the authe",
+            "Web3 Badges Reflects the unique achievements accom",
+            "Subscribe Now👉",
+            "Download Now👉",
+            "icon/githubCreated with Sketch.",
+            "Brand assets",
+            "Terms of service",
+            "Privacy Policy",
+            "Reject",
+            "Accept",
+            "Igris Canary Wallet",
+            "MetaMask"
+          ],
+          "dialogs": [
+            "We use cookies to improve your experience.Privacy PolicyReje"
+          ],
+          "walletLabels": [
+            "Igris Canary Wallet",
+            "MetaMask",
+            "Coinbase Wallet",
+            "Phantom",
+            "Rabby Wallet",
+            "Rainbow",
+            "Trust Wallet"
+          ],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": [
+        {
+          "tag": "span",
+          "attrs": [],
+          "classes": [
+            "button-label",
+            "svelte-jyyvr8"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "button",
+          "attrs": [],
+          "classes": [
+            "button",
+            "lg",
+            "ready"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "ready-wallet-container",
+            "svelte-1rpkvp7"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "scroll",
+            "svelte-yg827"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "container",
+            "svelte-1rpkvp7"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "sidebar",
+            "svelte-veh8pn"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "body",
+            "svelte-veh8pn"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "modal-content",
+            "svelte-18y99pm"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [],
+          "classes": [
+            "modal",
+            "svelte-18y99pm"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "div",
+          "attrs": [
+            "data-rabbykit"
+          ],
+          "classes": [
+            "svelte-1r568gc"
+          ],
+          "shadowHost": false
+        },
+        {
+          "tag": "rabby-kit",
+          "attrs": [
+            "data-rk-mounted"
+          ],
+          "classes": [],
+          "shadowHost": true
+        },
+        {
+          "tag": "html",
+          "attrs": [],
+          "classes": [],
+          "shadowHost": false
+        }
+      ],
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Connect Wallet",
+        "topCandidates": [
+          "Connect Wallet (100)",
+          "Connect Wallet (100)"
+        ],
+        "fingerprint": {
+          "id": "appkit",
+          "confidence": "medium",
+          "signals": [
+            "appkit:static:customElements:w3m-modal"
+          ]
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Connect Wallet\""
+      }
+    },
+    {
+      "url": "https://polymarket.com/",
+      "observedAt": "2026-11-06T14:52:02.436Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://polymarket.com/",
+        "title": "Polymarket | The World’s Largest Prediction Market™"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Skip to main content",
+            "Polymarket Logo",
+            "Predict Sections",
+            "How it works",
+            "Log in",
+            "Sign up",
+            "Open user menu",
+            "Trending",
+            "Breaking",
+            "New",
+            "Politics",
+            "Sports",
+            "Crypto",
+            "Esports",
+            "Iran",
+            "Finance",
+            "Geopolitics",
+            "Tech",
+            "Elections",
+            "Culture"
+          ],
+          "dialogs": [],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": [
+            "auth.magic.link"
+          ]
+        },
+        "afterClick": {
+          "controls": [
+            "Skip to main content",
+            "Polymarket Logo",
+            "Predict Sections",
+            "How it works",
+            "Log in",
+            "Sign up",
+            "Open user menu",
+            "Trending",
+            "Breaking",
+            "New",
+            "Politics",
+            "Sports",
+            "Crypto",
+            "Esports",
+            "Iran",
+            "Finance",
+            "Geopolitics",
+            "Tech",
+            "Elections",
+            "Culture"
+          ],
+          "dialogs": [
+            "Authentication"
+          ],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": [
+            "auth.magic.link"
+          ]
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "modal-not-opened",
+        "clicked": "Log in",
+        "topCandidates": [
+          "Log in (80)"
+        ],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no wallet-kit modal within 10000 ms after clicking \"Log in\""
+      }
+    },
+    {
+      "url": "https://linea.build/",
+      "observedAt": "2026-11-06T14:52:25.611Z",
+      "load": {
+        "ok": true,
+        "finalUrl": "https://linea.build/",
+        "title": "Linea: The L2 Where Ethereum Wins"
+      },
+      "staticFingerprint": {
+        "id": "none",
+        "confidence": "none",
+        "signals": []
+      },
+      "inventory": {
+        "beforeClick": {
+          "controls": [
+            "Close this dialog",
+            "Privacy Policy",
+            "Manage Preferences",
+            "Cookie Preferences",
+            "Go to homepage",
+            "Contact",
+            "Explore the Ecosystem",
+            "Bridge to Linea",
+            "Learn more",
+            "Start building",
+            "Work with us",
+            "Start Building",
+            "Strategic Inquiries",
+            "SUBSCRIBE FOR UPDATES",
+            "ABOUT LINEA",
+            "LINEA ASSOCIATION",
+            "LINEA CONSORTIUM",
+            "DOCUMENTARY",
+            "SECURITY",
+            "IDENTITY"
+          ],
+          "dialogs": [
+            "Cookie Consent Banner"
+          ],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        },
+        "afterClick": {
+          "controls": [
+            "Close this dialog",
+            "Privacy Policy",
+            "Manage Preferences",
+            "Cookie Preferences",
+            "Go to homepage",
+            "Contact",
+            "Explore the Ecosystem",
+            "Bridge to Linea",
+            "Learn more",
+            "Start building",
+            "Work with us",
+            "Start Building",
+            "Strategic Inquiries",
+            "SUBSCRIBE FOR UPDATES",
+            "ABOUT LINEA",
+            "LINEA ASSOCIATION",
+            "LINEA CONSORTIUM",
+            "DOCUMENTARY",
+            "SECURITY",
+            "IDENTITY"
+          ],
+          "dialogs": [
+            "Cookie Consent Banner"
+          ],
+          "walletLabels": [],
+          "customTags": [],
+          "iframes": []
+        }
+      },
+      "walletOptionAncestry": null,
+      "open": {
+        "outcome": "no-connect-control",
+        "clicked": null,
+        "topCandidates": [],
+        "fingerprint": {
+          "id": "none",
+          "confidence": "none",
+          "signals": []
+        },
+        "urlChanges": [],
+        "detail": "no eligible connect control (strict scoring)"
+      }
+    }
+  ]
+}

@@ -58,6 +58,10 @@ function evidenceSummary(item: EvidenceItem | undefined): string {
     }
     case 'third-party-contact':
       return `<div><code>${esc(item.host)}</code> (${esc(item.recipientClass)}) · ${item.phases.map(esc).join(', ')}</div>`;
+    case 'contact-classification':
+      return `<div><code>${esc(item.host)}</code> → <strong>${esc(item.relationship)}</strong> (${esc(item.confidence)} confidence, rule <code>${esc(item.rule)}</code>)</div><ul class="hdrs">${item.basis
+        .map((b) => `<li>${esc(b.kind)}: ${esc(b.detail)}</li>`)
+        .join('')}</ul>`;
     case 'document-headers':
       return `<div><code>${esc(item.documentUrl)}</code> → HTTP ${item.status}</div><ul class="hdrs">${Object.entries(
         item.headers,

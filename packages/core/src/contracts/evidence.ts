@@ -1,5 +1,8 @@
 /**
- * Evidence bundle v1 (`igris.evidence.v1`).
+ * Evidence bundles. `igris.evidence.v1` (P0.5) is FROZEN — its schema objects
+ * below are pinned by hash in contracts.test.ts. `igris.evidence.v2` (P1) is
+ * v1 plus exactly one additive item type, `contact-classification`. Both
+ * validate; new bundles are written as v2.
  *
  * The redacted, self-contained artifact holding every piece of evidence a
  * report's findings reference. Properties:
@@ -22,7 +25,11 @@ import { RECIPIENT_CLASSES } from '../report.js';
 import type { MatchCategory } from '../encodings.js';
 import { contentHash } from './hash.js';
 
-export const EVIDENCE_BUNDLE_VERSION = 'igris.evidence.v1' as const;
+export const EVIDENCE_BUNDLE_VERSION_V1 = 'igris.evidence.v1' as const;
+/** The version new bundles are written with. */
+export const EVIDENCE_BUNDLE_VERSION = 'igris.evidence.v2' as const;
+export type EvidenceBundleVersion =
+  typeof EVIDENCE_BUNDLE_VERSION_V1 | typeof EVIDENCE_BUNDLE_VERSION;
 
 /** The canary (any form) observed inside captured traffic. */
 export interface CanaryMatchEvidence {
@@ -70,13 +77,84 @@ export interface DocumentHeadersEvidence {
   };
 }
 
+/**
+ * How IGRIS relates a contacted host to the scanned dapp (evidence v2).
+ * Descriptive and precise; the frozen RecipientClass stays the SCORING class.
+ */
+export const RELATIONSHIPS = [
+  'first-party',
+  'same-organisation',
+  'tenant-infrastructure',
+  'shared-cdn',
+  'wallet-sdk',
+  'rpc',
+  'walletconnect-relay',
+  'ipfs-gateway',
+  'analytics',
+  'advertising',
+  'error-monitoring',
+  'support-chat',
+  'security-service',
+  'anon-rpc',
+  'unknown',
+] as const;
+export type Relationship = (typeof RELATIONSHIPS)[number];
+
+/** Relationships that may be unscored infrastructure (only with sufficient evidence). */
+export const INFRASTRUCTURE_RELATIONSHIPS: readonly Relationship[] = [
+  'first-party',
+  'same-organisation',
+  'tenant-infrastructure',
+];
+
+export const CLASSIFICATION_CONFIDENCES = ['high', 'medium', 'low'] as const;
+export type ClassificationConfidence = (typeof CLASSIFICATION_CONFIDENCES)[number];
+
+/** What a classification rests on; every basis entry names a check and its result. */
+export const BASIS_KINDS = [
+  'registrable-domain-match',
+  'organisation-mapping',
+  'third-party-db',
+  'tenant-hostname',
+  'resource-profile',
+  'no-cookies',
+  'no-canary',
+  'no-match',
+] as const;
+export type BasisKind = (typeof BASIS_KINDS)[number];
+
+/**
+ * The classification of one contacted host, with the rule that produced it
+ * and the evidence it rests on (evidence v2). Every classification is
+ * traceable: rule id@version + basis entries.
+ */
+export interface ContactClassificationEvidence {
+  type: 'contact-classification';
+  host: string;
+  registrableDomain: string;
+  relationship: Relationship;
+  confidence: ClassificationConfidence;
+  /** e.g. "third-party-db@1", "tenant-infrastructure@1". */
+  rule: string;
+  basis: Array<{ kind: BasisKind; detail: string }>;
+}
+
 export type EvidenceItem =
-  CanaryMatchEvidence | ThirdPartyContactEvidence | DocumentHeadersEvidence;
+  | CanaryMatchEvidence
+  | ThirdPartyContactEvidence
+  | DocumentHeadersEvidence
+  | ContactClassificationEvidence;
 export type EvidenceType = EvidenceItem['type'];
-export const EVIDENCE_TYPES: readonly EvidenceType[] = [
+/** Item types of the frozen v1 bundle. */
+export const EVIDENCE_TYPES_V1 = [
   'canary-match',
   'third-party-contact',
   'document-headers',
+] as const;
+/** Item types of the current (v2) bundle. */
+export const EVIDENCE_TYPES: readonly EvidenceType[] = [
+  ...EVIDENCE_TYPES_V1,
+  'contact-classification',
 ];
 
 /** A finding's pointer into the bundle. */
@@ -85,11 +163,13 @@ export interface EvidenceRef {
   type: EvidenceType;
 }
 
-export interface EvidenceBundleV1 {
-  bundleVersion: typeof EVIDENCE_BUNDLE_VERSION;
+export interface EvidenceBundle {
+  bundleVersion: EvidenceBundleVersion;
   /** Keyed by content id. */
   items: Record<string, EvidenceItem>;
 }
+/** @deprecated name kept for P0.5 callers; covers v1 and v2 bundles. */
+export type EvidenceBundleV1 = EvidenceBundle;
 
 /** Header values are truncated to this many characters in evidence. */
 export const MAX_HEADER_VALUE = 512;
@@ -100,7 +180,7 @@ export function evidenceId(item: EvidenceItem): string {
 }
 
 /** Hash of a whole bundle (64 hex). */
-export function bundleHash(bundle: EvidenceBundleV1): string {
+export function bundleHash(bundle: EvidenceBundle): string {
   return contentHash(bundle);
 }
 
@@ -152,7 +232,18 @@ const nullableHeader = {
   anyOf: [{ type: 'null' }, { type: 'string', maxLength: MAX_HEADER_VALUE }],
 } as const;
 
-export const EVIDENCE_ITEM_SCHEMA = {
+export const CONTACT_CLASSIFICATION_KEYS = [
+  'type',
+  'host',
+  'registrableDomain',
+  'relationship',
+  'confidence',
+  'rule',
+  'basis',
+] as const;
+
+/** FROZEN (P0.5). Pinned by hash in contracts.test.ts — do not edit. */
+export const EVIDENCE_ITEM_SCHEMA_V1 = {
   $id: 'https://igris.dev/schemas/evidence-item-1.json',
   oneOf: [
     {
@@ -217,10 +308,63 @@ export const EVIDENCE_ITEM_SCHEMA = {
   ],
 } as const;
 
-export const EVIDENCE_BUNDLE_SCHEMA = {
+/** FROZEN (P0.5). Pinned by hash in contracts.test.ts — do not edit. */
+export const EVIDENCE_BUNDLE_SCHEMA_V1 = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $id: 'https://igris.dev/schemas/evidence-bundle-1.json',
   title: 'IGRIS evidence bundle (igris.evidence.v1)',
+  type: 'object',
+  additionalProperties: false,
+  required: ['bundleVersion', 'items'],
+  properties: {
+    bundleVersion: { const: EVIDENCE_BUNDLE_VERSION_V1 },
+    items: {
+      type: 'object',
+      propertyNames: { pattern: '^ev_[0-9a-f]{24}$' },
+      additionalProperties: { $ref: 'https://igris.dev/schemas/evidence-item-1.json' },
+    },
+  },
+} as const;
+
+const CONTACT_CLASSIFICATION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: [...CONTACT_CLASSIFICATION_KEYS],
+  properties: {
+    type: { const: 'contact-classification' },
+    host: { type: 'string', minLength: 1, maxLength: 253 },
+    registrableDomain: { type: 'string', minLength: 1, maxLength: 253 },
+    relationship: { enum: [...RELATIONSHIPS] },
+    confidence: { enum: [...CLASSIFICATION_CONFIDENCES] },
+    rule: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}@\\d+$' },
+    basis: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 16,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['kind', 'detail'],
+        properties: {
+          kind: { enum: [...BASIS_KINDS] },
+          detail: { type: 'string', minLength: 1, maxLength: 500 },
+        },
+      },
+    },
+  },
+} as const;
+
+/** Current (v2) item schema: the frozen v1 item types + contact-classification. */
+export const EVIDENCE_ITEM_SCHEMA = {
+  $id: 'https://igris.dev/schemas/evidence-item-2.json',
+  oneOf: [...EVIDENCE_ITEM_SCHEMA_V1.oneOf, CONTACT_CLASSIFICATION_SCHEMA],
+} as const;
+
+/** Current (v2) bundle schema. */
+export const EVIDENCE_BUNDLE_SCHEMA = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $id: 'https://igris.dev/schemas/evidence-bundle-2.json',
+  title: 'IGRIS evidence bundle (igris.evidence.v2)',
   type: 'object',
   additionalProperties: false,
   required: ['bundleVersion', 'items'],
@@ -229,7 +373,7 @@ export const EVIDENCE_BUNDLE_SCHEMA = {
     items: {
       type: 'object',
       propertyNames: { pattern: '^ev_[0-9a-f]{24}$' },
-      additionalProperties: { $ref: 'https://igris.dev/schemas/evidence-item-1.json' },
+      additionalProperties: { $ref: 'https://igris.dev/schemas/evidence-item-2.json' },
     },
   },
 } as const;

@@ -104,7 +104,7 @@ describe('POST /api/scan', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.provenance).toBe('unpublished');
-    expect((body.evidence as { bundleVersion: string }).bundleVersion).toBe('igris.evidence.v1');
+    expect((body.evidence as { bundleVersion: string }).bundleVersion).toBe('igris.evidence.v2');
     expect((body.preview as { summary: { evidenceSha256: string } }).summary.evidenceSha256).toBe(
       (body.report as ReportV2).evidence.sha256,
     );

@@ -14,3 +14,19 @@ export {
   type Resolver,
 } from './egress/proxy.js';
 export { isPublicAddress, isPublicIPv4, isPublicIPv6 } from './egress/ip-policy.js';
+export { classifyLoad, observeLoad, type LoadObservation, type LoadVerdict } from './load-state.js';
+export {
+  collectKitSignals,
+  identifyKit,
+  type KitFingerprint,
+  type KitSignal,
+} from './connect/fingerprint.js';
+export {
+  scoreCandidates,
+  isNavigatingLink,
+  TIERS,
+  MIN_SCORE,
+  type ScoredCandidate,
+} from './connect/candidates.js';
+export { openConnectUi, isUnexpectedNavigation, type OpenResult } from './connect/open.js';
+export { INVENTORY_PROBE, walletOptionAncestryProbe } from './connect/page-probes.js';

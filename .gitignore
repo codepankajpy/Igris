@@ -17,3 +17,4 @@ playwright-report/
 igris-registry.json
 igris-snapshot.json
 igris-batch/
+corpus/runs/

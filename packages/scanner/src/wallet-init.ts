@@ -85,6 +85,13 @@ export function igrisInitWallet(cfg: {
         case 'eth_accounts':
           return connected ? [cfg.address] : [];
         case 'eth_requestAccounts': {
+          // Tell the scanner (Node side) that the dapp asked for accounts:
+          // this, not DOM guessing, is the connection signal.
+          try {
+            void w.__igrisWalletEvent?.('eth_requestAccounts');
+          } catch {
+            /* binding absent (e.g. discovery tooling) */
+          }
           if (!connected) {
             connected = true;
             provider.selectedAddress = cfg.address;

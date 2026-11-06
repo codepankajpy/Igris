@@ -34,6 +34,8 @@ import {
 } from './contracts/evidence.js';
 import {
   REPORT_V2_VERSION,
+  type ConnectionDiagnostics,
+  type ScanFailure,
   type DetectorRun,
   type FindingV2,
   type PrivacyFinding,
@@ -208,6 +210,10 @@ export interface ScanResultInput {
   firstParty?: string[];
   notes: string[];
   connectionLog?: string[];
+  /** 2.1.0: structured connect-phase diagnostics (scanner-produced). */
+  connection?: ConnectionDiagnostics;
+  /** 2.1.0: why nothing was measured, when status is page-load-failed. */
+  failure?: ScanFailure;
   /** "host:port" pairs refused by the egress proxy (never sent). */
   excludeHosts?: Set<string>;
   detectors?: readonly Detector[];
@@ -297,6 +303,8 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
       egress: input.egress,
       connectionLog: input.connectionLog ?? [],
       notes: input.notes,
+      ...(input.connection ? { connection: input.connection } : {}),
+      ...(input.failure ? { failure: input.failure } : {}),
     },
     detectors: detectorRuns,
     privacy: { score, coverage, ledger, findings: privacy },

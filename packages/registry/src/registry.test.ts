@@ -30,7 +30,7 @@ describe('recordFromReport (Report v2 + bundle)', () => {
   it('maps the queryable attributes from the v2 report', () => {
     expect(record.hostname).toBe('app.example.org');
     expect(record.score).toBe(report.privacy.score);
-    expect(record.reportVersion).toBe('2.0.0');
+    expect(record.reportVersion).toBe('2.1.0');
     expect(record.leakClasses).toBe('analytics,error-monitoring,rpc-provider');
     expect(record.leakCount).toBe(3); // counted canary findings only (storage excluded)
     expect(record.thirdPartyCount).toBe(report.contacts.length);

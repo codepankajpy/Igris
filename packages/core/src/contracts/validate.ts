@@ -6,9 +6,15 @@
 // Named export: avoids CJS default-import interop differences between
 // tsc (NodeNext), tsx and vitest.
 import { Ajv2020, type ErrorObject, type ValidateFunction } from 'ajv/dist/2020.js';
-import { EVIDENCE_BUNDLE_SCHEMA, EVIDENCE_ITEM_SCHEMA } from './evidence.js';
+import {
+  EVIDENCE_BUNDLE_SCHEMA,
+  EVIDENCE_BUNDLE_SCHEMA_V1,
+  EVIDENCE_BUNDLE_VERSION_V1,
+  EVIDENCE_ITEM_SCHEMA,
+  EVIDENCE_ITEM_SCHEMA_V1,
+} from './evidence.js';
 import type { EvidenceBundleV1, EvidenceItem } from './evidence.js';
-import { REPORT_V2_SCHEMA } from './report-v2.js';
+import { REPORT_SCHEMA_2_0_0, REPORT_SCHEMA_2_1_0, REPORT_V2_0_VERSION } from './report-v2.js';
 import type { ReportV2 } from './report-v2.js';
 
 export class SchemaValidationError extends Error {
@@ -30,7 +36,9 @@ export class SchemaValidationError extends Error {
 let compiled:
   | {
       item: ValidateFunction;
+      bundleV1: ValidateFunction;
       bundle: ValidateFunction;
+      report200: ValidateFunction;
       report: ValidateFunction;
     }
   | undefined;
@@ -46,11 +54,14 @@ function validators() {
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(s) &&
         !Number.isNaN(Date.parse(s)),
     });
+    ajv.addSchema(EVIDENCE_ITEM_SCHEMA_V1);
     ajv.addSchema(EVIDENCE_ITEM_SCHEMA);
     compiled = {
       item: ajv.getSchema(EVIDENCE_ITEM_SCHEMA.$id)!,
+      bundleV1: ajv.compile(EVIDENCE_BUNDLE_SCHEMA_V1),
       bundle: ajv.compile(EVIDENCE_BUNDLE_SCHEMA),
-      report: ajv.compile(REPORT_V2_SCHEMA),
+      report200: ajv.compile(REPORT_SCHEMA_2_0_0),
+      report: ajv.compile(REPORT_SCHEMA_2_1_0),
     };
   }
   return compiled;
@@ -61,14 +72,23 @@ function check<T>(fn: ValidateFunction, name: string, value: unknown): T {
   return value as T;
 }
 
+/** Validates an evidence item against the CURRENT (v2) item schema. */
 export function validateEvidenceItem(value: unknown): EvidenceItem {
   return check(validators().item, 'evidence item', value);
 }
 
+/** Validates igris.evidence.v1 (frozen) and igris.evidence.v2 bundles, by version. */
 export function validateEvidenceBundle(value: unknown): EvidenceBundleV1 {
-  return check(validators().bundle, 'evidence bundle', value);
+  const v = (value as { bundleVersion?: unknown } | null)?.bundleVersion;
+  return v === EVIDENCE_BUNDLE_VERSION_V1
+    ? check(validators().bundleV1, 'evidence bundle v1', value)
+    : check(validators().bundle, 'evidence bundle', value);
 }
 
+/** Validates report 2.0.0 (frozen) and 2.1.0, by reportVersion. */
 export function validateReportV2(value: unknown): ReportV2 {
-  return check(validators().report, 'report v2', value);
+  const v = (value as { reportVersion?: unknown } | null)?.reportVersion;
+  return v === REPORT_V2_0_VERSION
+    ? check(validators().report200, 'report 2.0.0', value)
+    : check(validators().report, 'report 2.1.0', value);
 }

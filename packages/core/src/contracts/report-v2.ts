@@ -26,10 +26,23 @@ import type {
 } from '../report.js';
 import { RECIPIENT_CLASSES } from '../report.js';
 import type { EvidenceRef } from './evidence.js';
-import { EVIDENCE_BUNDLE_VERSION, EVIDENCE_TYPES } from './evidence.js';
+import {
+  EVIDENCE_BUNDLE_VERSION,
+  EVIDENCE_BUNDLE_VERSION_V1,
+  EVIDENCE_TYPES,
+  EVIDENCE_TYPES_V1,
+  type EvidenceBundleVersion,
+} from './evidence.js';
 import { CANONICALIZATION } from './hash.js';
 
-export const REPORT_V2_VERSION = '2.0.0' as const;
+/** FROZEN P0.5 report version. */
+export const REPORT_V2_0_VERSION = '2.0.0' as const;
+/**
+ * The version new reports are written with. 2.1.0 = 2.0.0 + optional
+ * scan.connection / scan.failure + evidence bundle v2 (additive; P1).
+ */
+export const REPORT_V2_VERSION = '2.1.0' as const;
+export type ReportVersion = typeof REPORT_V2_0_VERSION | typeof REPORT_V2_VERSION;
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export const SEVERITIES: readonly Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
@@ -95,6 +108,55 @@ export interface ScanMetaV2 {
   connectionLog: string[];
   /** Scan notes and errors (human-readable). */
   notes: string[];
+  /** 2.1.0+: structured connect-phase diagnostics. */
+  connection?: ConnectionDiagnostics;
+  /** 2.1.0+: structured reason when the scan measured nothing. */
+  failure?: ScanFailure;
+}
+
+/** Wallet-kit implementations IGRIS can identify. */
+export const KIT_IDS = ['rainbowkit', 'connectkit', 'appkit', 'privy', 'dynamic'] as const;
+export type KitId = (typeof KIT_IDS)[number];
+
+/** Why a scan (or its connect phase) did not succeed. */
+export const FAILURE_CATEGORIES = [
+  'site-unavailable',
+  'bot-blocked',
+  'browser-incompatible',
+  'no-connect-control',
+  'modal-not-opened',
+  'wallet-option-missing',
+  'request-not-issued',
+  'unexpected-navigation',
+  'recipe-error',
+  'scanner-error',
+] as const;
+export type FailureCategory = (typeof FAILURE_CATEGORIES)[number];
+
+/** How the connect phase went (report 2.1.0+). Diagnostics, not evidence. */
+export interface ConnectionDiagnostics {
+  kit: {
+    id: KitId | 'none';
+    confidence: 'high' | 'medium' | 'low' | 'none';
+    /** Observable markers that led to the identification. */
+    signals: string[];
+  };
+  /** kit-recipe: a kit was identified; generic: none was; recipe-file: user-supplied. */
+  strategy: 'kit-recipe' | 'generic' | 'recipe-file' | 'none';
+  /** e.g. "connectkit@1", "generic@1", null when nothing ran. */
+  recipe: string | null;
+  outcome: 'connected' | 'failed' | 'not-attempted';
+  failure: { category: FailureCategory; step: string; detail: string } | null;
+  steps: Array<{ step: string; result: 'ok' | 'failed' | 'skipped'; detail: string; ms: number }>;
+  navigation: { urlChanges: string[]; aborted: boolean };
+  /** eth_requestAccounts calls the wallet received. */
+  requestAccountsCalls: number;
+}
+
+/** Page-level failure (report 2.1.0+): why there is no score. */
+export interface ScanFailure {
+  category: FailureCategory;
+  detail: string;
 }
 
 export interface DetectorRun {
@@ -117,7 +179,7 @@ export interface TelemetryV2 {
 }
 
 export interface EvidenceSummary {
-  bundleVersion: typeof EVIDENCE_BUNDLE_VERSION;
+  bundleVersion: EvidenceBundleVersion;
   canonicalization: typeof CANONICALIZATION;
   /** sha256 (64 hex) of the canonical bundle. */
   sha256: string;
@@ -139,7 +201,7 @@ export interface FindingSetDigest {
 }
 
 export interface ReportV2 {
-  reportVersion: typeof REPORT_V2_VERSION;
+  reportVersion: ReportVersion;
   scan: ScanMetaV2;
   detectors: DetectorRun[];
   privacy: {
@@ -185,7 +247,8 @@ export const FINDING_KEYS = [
   'evidence',
   'countsTowardPrivacyScore',
 ] as const;
-export const SCAN_META_KEYS = [
+/** Scan-meta keys of the FROZEN 2.0.0 schema (all required). */
+export const SCAN_META_KEYS_2_0_0 = [
   'target',
   'hostname',
   'scannedAt',
@@ -198,6 +261,8 @@ export const SCAN_META_KEYS = [
   'connectionLog',
   'notes',
 ] as const;
+/** Scan-meta keys of the current type/schema (connection, failure optional). */
+export const SCAN_META_KEYS = [...SCAN_META_KEYS_2_0_0, 'connection', 'failure'] as const;
 export const TELEMETRY_KEYS = [
   'totalRequests',
   'preConnectRequests',
@@ -227,7 +292,7 @@ const SHA256 = { type: 'string', pattern: '^[0-9a-f]{64}$' } as const;
 const COUNT = { type: 'integer', minimum: 0 } as const;
 const TEXT = (max: number) => ({ type: 'string', minLength: 1, maxLength: max }) as const;
 
-const findingSchema = (domain: FindingDomain) =>
+const findingSchema = (domain: FindingDomain, evidenceTypes: readonly string[]) =>
   ({
     type: 'object',
     additionalProperties: false,
@@ -253,7 +318,7 @@ const findingSchema = (domain: FindingDomain) =>
           required: ['id', 'type'],
           properties: {
             id: { type: 'string', pattern: '^ev_[0-9a-f]{24}$' },
-            type: { enum: [...EVIDENCE_TYPES] },
+            type: { enum: [...evidenceTypes] },
           },
         },
       },
@@ -261,7 +326,8 @@ const findingSchema = (domain: FindingDomain) =>
     },
   }) as const;
 
-export const REPORT_V2_SCHEMA = {
+/** FROZEN (P0.5). Pinned by hash in contracts.test.ts — do not edit. */
+export const REPORT_SCHEMA_2_0_0 = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $id: 'https://igris.dev/schemas/report-2.0.0.json',
   title: 'IGRIS scan report v2',
@@ -269,11 +335,11 @@ export const REPORT_V2_SCHEMA = {
   additionalProperties: false,
   required: REPORT_V2_REQUIRED,
   properties: {
-    reportVersion: { const: REPORT_V2_VERSION },
+    reportVersion: { const: REPORT_V2_0_VERSION },
     scan: {
       type: 'object',
       additionalProperties: false,
-      required: [...SCAN_META_KEYS],
+      required: [...SCAN_META_KEYS_2_0_0],
       properties: {
         target: { type: 'string', pattern: '^https?://' },
         hostname: { type: 'string', minLength: 1, maxLength: 253 },
@@ -323,14 +389,16 @@ export const REPORT_V2_SCHEMA = {
             },
           },
         },
-        findings: { type: 'array', items: findingSchema('privacy') },
+        findings: { type: 'array', items: findingSchema('privacy', EVIDENCE_TYPES_V1) },
       },
     },
     security: {
       type: 'object',
       additionalProperties: false,
       required: ['observations'],
-      properties: { observations: { type: 'array', items: findingSchema('security') } },
+      properties: {
+        observations: { type: 'array', items: findingSchema('security', EVIDENCE_TYPES_V1) },
+      },
     },
     contacts: {
       type: 'array',
@@ -389,7 +457,7 @@ export const REPORT_V2_SCHEMA = {
       additionalProperties: false,
       required: ['bundleVersion', 'canonicalization', 'sha256', 'itemCount'],
       properties: {
-        bundleVersion: { const: EVIDENCE_BUNDLE_VERSION },
+        bundleVersion: { const: EVIDENCE_BUNDLE_VERSION_V1 },
         canonicalization: { const: CANONICALIZATION },
         sha256: SHA256,
         itemCount: COUNT,
@@ -404,3 +472,133 @@ export const REPORT_V2_SCHEMA = {
     migratedFrom: { type: 'string', pattern: '^1\\.\\d+\\.\\d+$' },
   },
 } as const;
+
+// ---------------------------------------------------------------------------
+// Report 2.1.0 — built from the frozen 2.0.0 schema by ADDITIVE changes only:
+//  - reportVersion "2.1.0";
+//  - scan.connection and scan.failure: new OPTIONAL properties;
+//  - evidence.bundleVersion "igris.evidence.v2" and evidence refs may point
+//    at contact-classification items.
+// contracts.test.ts asserts that nothing else differs.
+// ---------------------------------------------------------------------------
+
+const STRING_LIST = { type: 'array', items: { type: 'string', maxLength: 500 } } as const;
+
+export const CONNECTION_DIAGNOSTICS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'kit',
+    'strategy',
+    'recipe',
+    'outcome',
+    'failure',
+    'steps',
+    'navigation',
+    'requestAccountsCalls',
+  ],
+  properties: {
+    kit: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id', 'confidence', 'signals'],
+      properties: {
+        id: { enum: [...KIT_IDS, 'none'] },
+        confidence: { enum: ['high', 'medium', 'low', 'none'] },
+        signals: STRING_LIST,
+      },
+    },
+    strategy: { enum: ['kit-recipe', 'generic', 'recipe-file', 'none'] },
+    recipe: { anyOf: [{ type: 'null' }, { type: 'string', pattern: '^[a-z0-9-]+@\\d+$' }] },
+    outcome: { enum: ['connected', 'failed', 'not-attempted'] },
+    failure: {
+      anyOf: [
+        { type: 'null' },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['category', 'step', 'detail'],
+          properties: {
+            category: { enum: [...FAILURE_CATEGORIES] },
+            step: { type: 'string', maxLength: 100 },
+            detail: { type: 'string', maxLength: 500 },
+          },
+        },
+      ],
+    },
+    steps: {
+      type: 'array',
+      maxItems: 50,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['step', 'result', 'detail', 'ms'],
+        properties: {
+          step: { type: 'string', maxLength: 100 },
+          result: { enum: ['ok', 'failed', 'skipped'] },
+          detail: { type: 'string', maxLength: 500 },
+          ms: { type: 'integer', minimum: 0 },
+        },
+      },
+    },
+    navigation: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['urlChanges', 'aborted'],
+      properties: { urlChanges: { ...STRING_LIST, maxItems: 20 }, aborted: { type: 'boolean' } },
+    },
+    requestAccountsCalls: { type: 'integer', minimum: 0 },
+  },
+} as const;
+
+export const SCAN_FAILURE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['category', 'detail'],
+  properties: {
+    category: { enum: [...FAILURE_CATEGORIES] },
+    detail: { type: 'string', maxLength: 500 },
+  },
+} as const;
+
+/** Current (2.1.0) report schema. */
+export const REPORT_SCHEMA_2_1_0 = {
+  ...REPORT_SCHEMA_2_0_0,
+  $id: 'https://igris.dev/schemas/report-2.1.0.json',
+  title: 'IGRIS scan report v2.1',
+  properties: {
+    ...REPORT_SCHEMA_2_0_0.properties,
+    reportVersion: { const: REPORT_V2_VERSION },
+    scan: {
+      ...REPORT_SCHEMA_2_0_0.properties.scan,
+      properties: {
+        ...REPORT_SCHEMA_2_0_0.properties.scan.properties,
+        connection: CONNECTION_DIAGNOSTICS_SCHEMA,
+        failure: SCAN_FAILURE_SCHEMA,
+      },
+    },
+    privacy: {
+      ...REPORT_SCHEMA_2_0_0.properties.privacy,
+      properties: {
+        ...REPORT_SCHEMA_2_0_0.properties.privacy.properties,
+        findings: { type: 'array', items: findingSchema('privacy', EVIDENCE_TYPES) },
+      },
+    },
+    security: {
+      ...REPORT_SCHEMA_2_0_0.properties.security,
+      properties: {
+        observations: { type: 'array', items: findingSchema('security', EVIDENCE_TYPES) },
+      },
+    },
+    evidence: {
+      ...REPORT_SCHEMA_2_0_0.properties.evidence,
+      properties: {
+        ...REPORT_SCHEMA_2_0_0.properties.evidence.properties,
+        bundleVersion: { const: EVIDENCE_BUNDLE_VERSION },
+      },
+    },
+  },
+} as const;
+
+/** The current report schema (alias). */
+export const REPORT_V2_SCHEMA = REPORT_SCHEMA_2_1_0;

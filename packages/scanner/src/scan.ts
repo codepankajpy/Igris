@@ -12,10 +12,15 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import {
   buildScanResult,
   loadThirdPartyDb,
+  type ConnectionDiagnostics,
+  type FailureCategory,
+  type ScanFailure,
   type ScanResult,
   type ScanStatus,
   type ThirdPartyEntry,
 } from '@igris/core';
+import { classifyLoad, observeLoad } from './load-state.js';
+import { collectKitSignals, identifyKit } from './connect/fingerprint.js';
 import { TrafficRecorder } from './capture.js';
 import { connectWallet, isWalletConnected, type Recipe } from './connect.js';
 import { WalletReadHandler } from './stub-rpc.js';
@@ -83,6 +88,9 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   const spoofMetaMask = options.spoofMetaMask ?? true;
   const errors: string[] = [];
   let status: ScanStatus = 'completed';
+  let failure: ScanFailure | undefined;
+  let connection: ConnectionDiagnostics | undefined;
+  let requestAccountsCalls = 0;
 
   // Fresh throwaway key per scan; the canary is its address. The key signs
   // personal_sign / typed-data requests Node-side and is never logged.
@@ -142,6 +150,10 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       throw new Error(`unsupported sign kind ${kind}`);
     });
 
+    await context.exposeFunction('__igrisWalletEvent', (event: string) => {
+      if (event === 'eth_requestAccounts') requestAccountsCalls += 1;
+    });
+
     await context.addInitScript(
       buildWalletInitScript({ address: canaryAddress, chainId, spoofMetaMask }),
     );
@@ -151,20 +163,22 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
 
     // --- Phase A: pre-connect ---
     recorder.setPhase('pre-connect');
+    let response: import('playwright').Response | null = null;
+    let navError: string | undefined;
     try {
-      const response = await page.goto(options.url, {
-        waitUntil: 'domcontentloaded',
-        timeout: 30_000,
-      });
-      // An HTTP error page is not the dapp: scoring it would publish a claim
-      // about a page we never saw (bot walls, 404s, 5xx).
-      if (response && response.status() >= 400) {
-        status = 'page-load-failed';
-        errors.push(`page load failed: main document returned HTTP ${response.status()}`);
-      }
+      response = await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     } catch (err) {
+      navError = String(err);
+    }
+    // Not the dapp (unavailable, bot wall, unsupported browser, HTTP error):
+    // never scored — a score would describe a page nobody intended to scan.
+    const verdict = classifyLoad(
+      navError ? { error: navError } : await observeLoad(page, response),
+    );
+    if (!verdict.ok) {
       status = 'page-load-failed';
-      errors.push(`page load failed: ${String(err).slice(0, 300)}`);
+      failure = { category: verdict.category!, detail: verdict.detail ?? '' };
+      errors.push(`page load failed: ${verdict.detail ?? verdict.category}`);
     }
     if (status === 'completed') {
       await settle(page, dwellMs);
@@ -173,6 +187,8 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       // --- Phase B: post-connect ---
       recorder.setPhase('post-connect');
       const connectLog: string[] = [];
+      const t0 = Date.now();
+      const startUrl = page.url();
       try {
         await connectWallet(page, options.recipe, connectLog);
       } catch (err) {
@@ -186,6 +202,25 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
           if (connected) break;
         }
       }
+      const hosts = new Set(
+        recorder.capture.requests.map((r) => {
+          try {
+            return new URL(r.url).hostname;
+          } catch {
+            return '';
+          }
+        }),
+      );
+      connection = legacyDiagnostics({
+        connected,
+        log: connectLog,
+        recipeFile: Boolean(options.recipe),
+        requestAccountsCalls,
+        fingerprint: identifyKit(await collectKitSignals(page, hosts)),
+        startUrl,
+        endUrl: page.url(),
+        ms: Date.now() - t0,
+      });
       if (!connected) {
         status = 'wallet-connect-failed';
         errors.push(`could not connect wallet (${connectLog.join('; ') || 'no steps ran'})`);
@@ -205,7 +240,10 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
 
     await context.close();
   } catch (err) {
-    status = status === 'completed' ? 'page-load-failed' : status;
+    if (status === 'completed') {
+      status = 'page-load-failed';
+      failure = { category: 'scanner-error', detail: String(err).slice(0, 300) };
+    }
     errors.push(`scan error: ${String(err).slice(0, 300)}`);
   } finally {
     options.signal?.removeEventListener('abort', onAbort);
@@ -216,6 +254,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   // An aborted scan measured an unknown fraction of the page: never score it.
   if (aborted) {
     status = 'page-load-failed';
+    failure = { category: 'scanner-error', detail: 'scan aborted (timeout or cancellation)' };
     errors.push('scan aborted (timeout or cancellation); partial capture discarded from scoring');
   }
 
@@ -236,7 +275,59 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     recorder,
     readHandler,
     ...(egressProxy ? { egressBlockedHosts: egressProxy.blockedHosts } : {}),
+    ...(connection ? { connection } : {}),
+    ...(failure ? { failure } : {}),
   });
+}
+
+/**
+ * Diagnostics for the LEGACY connect heuristic (kept until the P1 connect
+ * engine replaces it): the outcome plus a coarse failure step reconstructed
+ * from its log. Labelled legacy-heuristic@0 so baseline numbers are never
+ * mistaken for the new engine's.
+ */
+function legacyDiagnostics(a: {
+  connected: boolean;
+  log: string[];
+  recipeFile: boolean;
+  requestAccountsCalls: number;
+  fingerprint: ReturnType<typeof identifyKit>;
+  startUrl: string;
+  endUrl: string;
+  ms: number;
+}): ConnectionDiagnostics {
+  const clickedConnect = a.log.some((l) => l.startsWith('clicked connect button'));
+  const clickedOption = a.log.some((l) => l.startsWith('clicked wallet option'));
+  const navigated = a.startUrl !== a.endUrl;
+  let category: FailureCategory | null = null;
+  let step = '';
+  if (!a.connected) {
+    if (navigated && new URL(a.startUrl).origin !== new URL(a.endUrl).origin) {
+      category = 'unexpected-navigation';
+      step = 'open-connect-ui';
+    } else if (!clickedConnect && !a.recipeFile) {
+      category = 'no-connect-control';
+      step = 'find-connect-control';
+    } else if (!clickedOption && !a.recipeFile) {
+      category = 'wallet-option-missing';
+      step = 'select-wallet';
+    } else {
+      category = 'request-not-issued';
+      step = 'await-connection';
+    }
+  }
+  return {
+    kit: a.fingerprint,
+    strategy: a.recipeFile ? 'recipe-file' : 'generic',
+    recipe: a.recipeFile ? 'recipe-file@1' : 'legacy-heuristic@0',
+    outcome: a.connected ? 'connected' : 'failed',
+    failure: category ? { category, step, detail: a.log.join('; ').slice(0, 480) } : null,
+    steps: a.log
+      .slice(0, 50)
+      .map((l) => ({ step: 'legacy', result: 'ok' as const, detail: l.slice(0, 480), ms: 0 })),
+    navigation: { urlChanges: navigated ? [a.endUrl.slice(0, 480)] : [], aborted: false },
+    requestAccountsCalls: a.requestAccountsCalls,
+  };
 }
 
 interface InternalBuildArgs {
@@ -249,6 +340,8 @@ interface InternalBuildArgs {
   recorder: TrafficRecorder;
   readHandler: WalletReadHandler;
   egressBlockedHosts?: Set<string>;
+  connection?: ConnectionDiagnostics;
+  failure?: ScanFailure;
 }
 
 function buildReportFromScan(args: InternalBuildArgs): ScanResult {
@@ -272,5 +365,7 @@ function buildReportFromScan(args: InternalBuildArgs): ScanResult {
     notes: args.errors.filter((e) => !e.startsWith('connect: ')),
     connectionLog: args.errors.filter((e) => e.startsWith('connect: ')),
     ...(args.egressBlockedHosts ? { excludeHosts: args.egressBlockedHosts } : {}),
+    ...(args.connection ? { connection: args.connection } : {}),
+    ...(args.failure ? { failure: args.failure } : {}),
   });
 }
