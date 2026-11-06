@@ -4,7 +4,18 @@
  */
 import type { MatchCategory } from './encodings.js';
 
-export const REPORT_VERSION = '1.0.0';
+/**
+ * 1.1.0 (additive over 1.0.0, P0 integrity fixes):
+ *  - `score` is null when the page never loaded (nothing was measured);
+ *  - `coverage` states which phases the score actually covers;
+ *  - `securityHeaders` come from the main document's response and are
+ *    omitted (unknown) when no such response was observed;
+ *  - `summary.wsFrames` added; `summary.wsConnections` now counts connections.
+ */
+export const REPORT_VERSION = '1.1.0';
+
+/** Report versions this code can read (older reports stay valid input). */
+export const READABLE_REPORT_VERSIONS = ['1.0.0', '1.1.0'] as const;
 
 export type Phase = 'pre-connect' | 'post-connect';
 
@@ -33,6 +44,21 @@ export type LeakLocation =
   | 'session-storage';
 
 export type ScanStatus = 'completed' | 'page-load-failed' | 'wallet-connect-failed';
+
+/**
+ * What the score covers:
+ *  - full: both phases ran (page loaded, wallet connected);
+ *  - pre-connect-only: the page loaded but the wallet never connected, so
+ *    post-connect canary leaks were NOT tested — the score is a partial view;
+ *  - none: the page never loaded; nothing was measured and there is no score.
+ */
+export type ScanCoverage = 'full' | 'pre-connect-only' | 'none';
+
+export function coverageForStatus(status: ScanStatus): ScanCoverage {
+  if (status === 'completed') return 'full';
+  if (status === 'wallet-connect-failed') return 'pre-connect-only';
+  return 'none';
+}
 
 export interface Finding {
   /** Stable, deterministic id: "f1", "f2", … in sorted order. */
@@ -72,14 +98,28 @@ export interface ReportSummary {
   totalRequests: number;
   preConnectRequests: number;
   postConnectRequests: number;
+  /** Distinct WebSocket connections opened. */
   wsConnections: number;
+  /** WebSocket frames sent + received (1.1.0+). */
+  wsFrames?: number;
   cookiesCount: number;
   localStorageCount: number;
   sessionStorageCount: number;
 }
 
+/**
+ * Security headers of the MAIN DOCUMENT's final response (after redirects).
+ * Absent from the report when no main-document response was observed —
+ * "unknown", never "missing".
+ */
 export interface SecurityHeaders {
+  /** Final URL of the main document (canary-free: it is the scan target or its redirect). */
+  documentUrl?: string;
+  /** HTTP status of that response. */
+  documentStatus?: number;
   cspPresent: boolean;
+  /** Content-Security-Policy-Report-Only present (not enforced). */
+  cspReportOnly?: boolean;
   hstsPresent: boolean;
   xFrameOptions?: string;
 }
@@ -116,7 +156,10 @@ export interface Report {
   /** Reads the dapp routed through the wallet — best case, no penalty. */
   readsViaWallet: WalletRead[];
   usesAnonRpc: boolean;
-  score: number;
+  /** 0–100, or null when nothing was measured (coverage "none"). */
+  score: number | null;
+  /** Which phases the score covers (1.1.0+; derive from status for 1.0.0). */
+  coverage?: ScanCoverage;
   ledger: PenaltyLine[];
   errors: string[];
   summary?: ReportSummary;
@@ -232,7 +275,8 @@ export const REPORT_JSON_SCHEMA = {
       },
     },
     usesAnonRpc: { type: 'boolean' },
-    score: { type: 'integer', minimum: 0, maximum: 100 },
+    score: { type: ['integer', 'null'], minimum: 0, maximum: 100 },
+    coverage: { enum: ['full', 'pre-connect-only', 'none'] },
     ledger: {
       type: 'array',
       items: {
@@ -255,6 +299,7 @@ export const REPORT_JSON_SCHEMA = {
         preConnectRequests: { type: 'integer' },
         postConnectRequests: { type: 'integer' },
         wsConnections: { type: 'integer' },
+        wsFrames: { type: 'integer' },
         cookiesCount: { type: 'integer' },
         localStorageCount: { type: 'integer' },
         sessionStorageCount: { type: 'integer' },
@@ -262,8 +307,12 @@ export const REPORT_JSON_SCHEMA = {
     },
     securityHeaders: {
       type: 'object',
+      required: ['cspPresent', 'hstsPresent'],
       properties: {
+        documentUrl: { type: 'string' },
+        documentStatus: { type: 'integer' },
         cspPresent: { type: 'boolean' },
+        cspReportOnly: { type: 'boolean' },
         hstsPresent: { type: 'boolean' },
         xFrameOptions: { type: 'string' },
       },

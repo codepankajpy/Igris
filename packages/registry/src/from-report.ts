@@ -4,14 +4,29 @@
  * embedded sha256 is reproducible by anyone holding that file.
  */
 import { createHash } from 'node:crypto';
-import type { Report } from '@igris/core';
+import { coverageForStatus, type Report } from '@igris/core';
 import { RECORD_VERSION, type ScanRecord } from './record.js';
 
 export function sha256Hex(bytes: string | Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+/** Thrown when a report must not be published (nothing was measured). */
+export class UnpublishableReportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnpublishableReportError';
+  }
+}
+
 export function recordFromReport(report: Report, reportJson: string): ScanRecord {
+  // A report without a score measured nothing (page never loaded). Publishing
+  // it would put an unfounded claim on a public registry.
+  if (report.score === null || report.status === 'page-load-failed') {
+    throw new UnpublishableReportError(
+      `refusing to publish ${report.hostname}: status ${report.status}, no score (nothing was measured)`,
+    );
+  }
   const leakClasses = [
     ...new Set(report.findings.filter((f) => f.countsTowardScore).map((f) => f.class)),
   ].sort();
@@ -30,6 +45,7 @@ export function recordFromReport(report: Report, reportJson: string): ScanRecord
     summary: {
       v: RECORD_VERSION,
       status: report.status,
+      coverage: report.coverage ?? coverageForStatus(report.status),
       spoofMetaMask: report.spoofMetaMask,
       canaryAddress: report.canaryAddress,
       findings: report.findings.map((f) => ({
@@ -57,10 +73,32 @@ export function recordFromReport(report: Report, reportJson: string): ScanRecord
               preConnectRequests: report.summary.preConnectRequests,
               postConnectRequests: report.summary.postConnectRequests,
               wsConnections: report.summary.wsConnections,
+              ...(report.summary.wsFrames !== undefined
+                ? { wsFrames: report.summary.wsFrames }
+                : {}),
             },
           }
         : {}),
-      ...(report.securityHeaders ? { securityHeaders: report.securityHeaders } : {}),
+      // No URL in the summary (summaries never carry URLs); `source` marks
+      // the headers as main-document headers (legacy rows lack it).
+      ...(report.securityHeaders
+        ? {
+            securityHeaders: {
+              source: 'main-document' as const,
+              ...(report.securityHeaders.documentStatus !== undefined
+                ? { documentStatus: report.securityHeaders.documentStatus }
+                : {}),
+              cspPresent: report.securityHeaders.cspPresent,
+              ...(report.securityHeaders.cspReportOnly !== undefined
+                ? { cspReportOnly: report.securityHeaders.cspReportOnly }
+                : {}),
+              hstsPresent: report.securityHeaders.hstsPresent,
+              ...(report.securityHeaders.xFrameOptions !== undefined
+                ? { xFrameOptions: report.securityHeaders.xFrameOptions }
+                : {}),
+            },
+          }
+        : {}),
       ...(report.connectionLog ? { connectionLog: report.connectionLog } : {}),
     },
   };

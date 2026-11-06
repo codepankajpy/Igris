@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import {
   buildFixture,
@@ -76,6 +76,37 @@ describe('igris CLI', () => {
     expect(r.code).toBe(2);
     const report = JSON.parse(r.stdout);
     expect(report.status).toBe('page-load-failed');
+    // P0-1: nothing was measured, so there is no score (was 100 before).
+    expect(report.score).toBeNull();
+    expect(report.coverage).toBe('none');
+    expect(report.ledger).toEqual([]);
+  });
+
+  it('publish refuses an unscored report (exit 2, nothing written)', async () => {
+    const r = await runCli([
+      'scan',
+      `http://does-not-exist.test:1/`,
+      '--host-resolver-rules',
+      HOST_RULES,
+      '--dwell',
+      '300',
+      '--json',
+    ]);
+    const dir = mkdtempSync(join(tmpdir(), 'igris-unpub-'));
+    const reportPath = join(dir, 'report.json');
+    writeFileSync(reportPath, r.stdout);
+    const registryPath = join(dir, 'registry.json');
+    const pub = await runCli([
+      'publish',
+      reportPath,
+      '--registry',
+      'local',
+      '--local-file',
+      registryPath,
+    ]);
+    expect(pub.code).toBe(2);
+    expect(pub.stderr).toMatch(/refusing to publish/);
+    expect(existsSync(registryPath)).toBe(false);
   });
 
   it('leaky fixture: --fail-under 90 exits 1; --json prints only the report; artifacts written', async () => {

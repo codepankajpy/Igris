@@ -18,9 +18,9 @@ import {
   type RegistryQuery,
   type RegistryRecord,
   type ScanRecord,
-  type SummaryPayload,
 } from './record.js';
 import { ScanSchema } from './schema.js';
+import { validateRecords, type ValidatedRecords } from './validate.js';
 
 export const RABDI_RPC_URL = 'https://rpc.rabdi.db-chain.testnet.arkiv.network';
 export const RABDI_EXPLORER_URL = 'https://rabdi.explorer.arkiv.network';
@@ -41,6 +41,8 @@ export interface ArkivRegistryOptions {
 
 export class ArkivRegistry implements RegistryBackend {
   readonly kind = 'arkiv' as const;
+  /** Validation outcome of the most recent query()/snapshot() call. */
+  lastValidation: Omit<ValidatedRecords, 'records'> = { dropped: 0, reasons: [] };
   private chain;
   private transport;
 
@@ -112,7 +114,9 @@ export class ArkivRegistry implements RegistryBackend {
     else if (conditions.length > 1) builder = builder.where(and(...conditions));
 
     const { entities } = await builder.fetch();
-    const records = entities.map((e: any) => rowToRecord(e));
+    const validated = validateRecords(entities.map(rawRowToCandidate), { source: 'arkiv' });
+    this.lastValidation = { dropped: validated.dropped, reasons: validated.reasons };
+    const records = validated.records;
     // leakClass has no server-side operator (no substring match in the Arkiv
     // query language) — filter client-side; recorded in arkiv/friction.md.
     const leakClass = q.leakClass;
@@ -123,6 +127,8 @@ export class ArkivRegistry implements RegistryBackend {
   /** Walk every entity of our schema (key-cursor pagination, pages of 100). */
   async snapshot(): Promise<RegistryRecord[]> {
     const out: RegistryRecord[] = [];
+    let dropped = 0;
+    const reasons: string[] = [];
     let lastKey: Hex | undefined;
     for (;;) {
       let builder: any = this.publicClient()
@@ -132,46 +138,53 @@ export class ArkivRegistry implements RegistryBackend {
         .limit(100);
       if (lastKey) builder = builder.where(gt('$key', key(lastKey)));
       const { entities } = await builder.fetch();
-      for (const e of entities) out.push(rowToRecord(e));
+      const validated = validateRecords(entities.map(rawRowToCandidate), { source: 'arkiv' });
+      out.push(...validated.records);
+      dropped += validated.dropped;
+      reasons.push(...validated.reasons.slice(0, Math.max(0, 5 - reasons.length)));
       if (entities.length < 100) break;
       lastKey = entities[entities.length - 1].$key;
     }
+    this.lastValidation = { dropped, reasons };
     return out;
   }
 }
 
-/** Convert an SDK row (typed values with .value) into a RegistryRecord. */
-export function rowToRecord(e: any): RegistryRecord {
-  let summary: SummaryPayload;
+/**
+ * Map an SDK row (typed values with .value) onto the RegistryRecord shape
+ * WITHOUT trusting it: any field may be missing or of the wrong type, and the
+ * summary bytes may be anything. The result is a candidate for
+ * parseRegistryRecord (validate.ts); this function itself never throws.
+ */
+export function rawRowToCandidate(e: any): unknown {
+  const val = (k: string): unknown => (e && typeof e[k] === 'object' ? e[k]?.value : undefined);
+  const num = (k: string): unknown => {
+    const v = val(k);
+    if (typeof v === 'bigint') return v <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(v) : NaN;
+    return v;
+  };
+  let summary: unknown = undefined;
   try {
-    summary = JSON.parse(hexToString(e.summary.value)) as SummaryPayload;
+    const raw = val('summary');
+    if (typeof raw === 'string') summary = JSON.parse(hexToString(raw as Hex));
   } catch {
-    summary = {
-      v: 0,
-      status: 'completed',
-      spoofMetaMask: false,
-      canaryAddress: '',
-      findings: [],
-      thirdParties: [],
-      ledger: [],
-      readsViaWallet: [],
-    };
+    summary = undefined; // invalid → the record is rejected by validation
   }
   return {
-    id: e.$key,
-    scanner: e.$owner,
-    expiresAt: `block ${e.$expiresAt}`,
-    hostname: e.hostname.value,
-    score: Number(e.score.value),
-    scannedAt: Number(e.scannedAt.value),
-    leakCount: Number(e.leakCount.value),
-    thirdPartyCount: Number(e.thirdPartyCount.value),
-    usesAnonRpc: Boolean(e.usesAnonRpc.value),
-    leakClasses: e.leakClasses.value,
-    scannerVersion: e.scannerVersion.value,
-    reportVersion: e.reportVersion.value,
-    chainId: Number(e.chainId.value),
-    reportSha256: e.reportSha256.value,
+    id: e?.$key,
+    scanner: e?.$owner,
+    ...(e?.$expiresAt !== undefined ? { expiresAt: `block ${String(e.$expiresAt)}` } : {}),
+    hostname: val('hostname'),
+    score: num('score'),
+    scannedAt: num('scannedAt'),
+    leakCount: num('leakCount'),
+    thirdPartyCount: num('thirdPartyCount'),
+    usesAnonRpc: val('usesAnonRpc'),
+    leakClasses: val('leakClasses'),
+    scannerVersion: val('scannerVersion'),
+    reportVersion: val('reportVersion'),
+    chainId: num('chainId'),
+    reportSha256: val('reportSha256'),
     summary,
   };
 }

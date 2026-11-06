@@ -47,15 +47,42 @@ export interface CapturedCookie {
   domain: string;
 }
 
+/**
+ * The main document's final (non-redirect) response during the pre-connect
+ * phase: the page the user actually asked for. Security headers are judged on
+ * THIS response only — later navigations (a connect heuristic clicking a
+ * login link, say) are a different document.
+ */
+export interface CapturedMainDocument {
+  url: string;
+  status: number;
+  /** Lower-cased header names; repeated headers joined with ", ". */
+  headers: Record<string, string>;
+}
+
 export interface Capture {
   requests: CapturedRequest[];
   wsFrames: CapturedWsFrame[];
+  /** Distinct WebSocket connections opened by the page. */
+  wsConnections: number;
   storage: CapturedStorage[];
   cookies: CapturedCookie[];
+  /** Undefined when no main-document response was observed (load failure). */
+  mainDocument?: CapturedMainDocument;
+}
+
+function isRedirectStatus(status: number): boolean {
+  return status >= 300 && status < 400;
 }
 
 export class TrafficRecorder {
-  readonly capture: Capture = { requests: [], wsFrames: [], storage: [], cookies: [] };
+  readonly capture: Capture = {
+    requests: [],
+    wsFrames: [],
+    wsConnections: 0,
+    storage: [],
+    cookies: [],
+  };
   private phase: Phase = 'pre-connect';
 
   setPhase(phase: Phase): void {
@@ -82,6 +109,16 @@ export class TrafficRecorder {
         setCookies: [],
       };
       this.capture.requests.push(entry);
+      const phaseAtRequest = this.phase;
+      let isMainDocument = false;
+      try {
+        isMainDocument =
+          request.isNavigationRequest() &&
+          request.resourceType() === 'document' &&
+          request.frame().parentFrame() === null;
+      } catch {
+        /* requests without a frame (e.g. service workers) are never the main document */
+      }
       // Mark failures (aborted, DNS, connection refused) on the same entry.
       request
         .response()
@@ -91,8 +128,21 @@ export class TrafficRecorder {
             return;
           }
           try {
+            const headers: Record<string, string> = {};
             for (const h of await response.headersArray()) {
-              if (h.name.toLowerCase() === 'set-cookie') entry.setCookies.push(h.value);
+              const name = h.name.toLowerCase();
+              if (name === 'set-cookie') entry.setCookies.push(h.value);
+              headers[name] =
+                headers[name] === undefined ? h.value : `${headers[name]}, ${h.value}`;
+            }
+            const status = response.status();
+            if (
+              isMainDocument &&
+              phaseAtRequest === 'pre-connect' &&
+              !this.capture.mainDocument &&
+              !isRedirectStatus(status)
+            ) {
+              this.capture.mainDocument = { url: response.url(), status, headers };
             }
           } catch {
             /* response may be gone (page closed) */
@@ -106,6 +156,7 @@ export class TrafficRecorder {
 
   attachPage(page: Page): void {
     page.on('websocket', (ws) => {
+      this.capture.wsConnections += 1;
       const url = ws.url();
       ws.on('framesent', (frame) =>
         this.capture.wsFrames.push({

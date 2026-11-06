@@ -12,6 +12,7 @@ import {
   type RegistryRecord,
   type ScanRecord,
 } from './record.js';
+import { validateRecords, type ValidatedRecords } from './validate.js';
 
 export const DEFAULT_LOCAL_PATH = 'igris-registry.json';
 
@@ -25,9 +26,16 @@ export class LocalRegistry implements RegistryBackend {
 
   constructor(private path: string = DEFAULT_LOCAL_PATH) {}
 
+  /** Validation outcome of the most recent load (local files are untrusted too). */
+  lastValidation: Omit<ValidatedRecords, 'records'> = { dropped: 0, reasons: [] };
+
   private load(): LocalFile {
     if (!existsSync(this.path)) return { version: 1, records: [] };
-    return JSON.parse(readFileSync(this.path, 'utf8')) as LocalFile;
+    const raw = JSON.parse(readFileSync(this.path, 'utf8')) as { records?: unknown };
+    const rows = Array.isArray(raw?.records) ? raw.records : [];
+    const validated = validateRecords(rows, { source: 'local' });
+    this.lastValidation = { dropped: validated.dropped, reasons: validated.reasons };
+    return { version: 1, records: validated.records };
   }
 
   private save(file: LocalFile): void {

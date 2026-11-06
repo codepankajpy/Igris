@@ -105,7 +105,16 @@ export async function scan(options: ScanOptions): Promise<Report> {
     // --- Phase A: pre-connect ---
     recorder.setPhase('pre-connect');
     try {
-      await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      const response = await page.goto(options.url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30_000,
+      });
+      // An HTTP error page is not the dapp: scoring it would publish a claim
+      // about a page we never saw (bot walls, 404s, 5xx).
+      if (response && response.status() >= 400) {
+        status = 'page-load-failed';
+        errors.push(`page load failed: main document returned HTTP ${response.status()}`);
+      }
     } catch (err) {
       status = 'page-load-failed';
       errors.push(`page load failed: ${String(err).slice(0, 300)}`);

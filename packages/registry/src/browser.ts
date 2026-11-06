@@ -5,4 +5,5 @@
  */
 export * from './record.js';
 export * from './schema.js';
-export { ArkivRegistry, rowToRecord, RABDI_RPC_URL, RABDI_EXPLORER_URL } from './arkiv.js';
+export * from './validate.js';
+export { ArkivRegistry, rawRowToCandidate, RABDI_RPC_URL, RABDI_EXPLORER_URL } from './arkiv.js';

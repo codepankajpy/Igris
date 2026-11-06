@@ -36,6 +36,8 @@ export interface ScanRecord {
 export interface SummaryPayload {
   v: number;
   status: Report['status'];
+  /** Which phases the score covers (absent on records made before report 1.1.0). */
+  coverage?: 'full' | 'pre-connect-only' | 'none';
   spoofMetaMask: boolean;
   canaryAddress: string;
   findings: Array<{
@@ -61,9 +63,15 @@ export interface SummaryPayload {
     preConnectRequests: number;
     postConnectRequests: number;
     wsConnections: number;
+    wsFrames?: number;
   };
+  /** Main-document security headers; absent = not observed (unknown). */
   securityHeaders?: {
+    /** Always 'main-document' (1.1.0+). Legacy rows without it are discarded as unknown. */
+    source: 'main-document';
+    documentStatus?: number;
     cspPresent: boolean;
+    cspReportOnly?: boolean;
     hstsPresent: boolean;
     xFrameOptions?: string;
   };

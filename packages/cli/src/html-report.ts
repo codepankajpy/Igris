@@ -3,7 +3,30 @@
  * ZERO external requests (we eat our own cooking — a report about privacy
  * must not phone home).
  */
-import type { Finding, Report } from '@igris/core';
+import { coverageForStatus, type Finding, type Report, type ScanCoverage } from '@igris/core';
+
+/** Coverage of a report; 1.0.0 reports predate the field, derive it. */
+export function reportCoverage(report: Report): ScanCoverage {
+  return report.coverage ?? coverageForStatus(report.status);
+}
+
+/** "82/100", "82/100 (pre-connect only)" or "not scored". */
+export function scoreLabel(report: Report): string {
+  if (report.score === null || reportCoverage(report) === 'none') return 'not scored';
+  return reportCoverage(report) === 'pre-connect-only'
+    ? `${report.score}/100 (pre-connect only)`
+    : `${report.score}/100`;
+}
+
+/** Plain-language statement of what the score does NOT cover, or null. */
+export function coverageNote(report: Report): string | null {
+  const c = reportCoverage(report);
+  if (c === 'none')
+    return 'NOT SCORED: the page never loaded, so nothing was measured. This is not a privacy result.';
+  if (c === 'pre-connect-only')
+    return 'PARTIAL: the wallet never connected, so post-connect address leaks were NOT tested. The score covers only what happens before connect.';
+  return null;
+}
 
 function esc(s: string): string {
   return s
@@ -13,7 +36,8 @@ function esc(s: string): string {
     .replaceAll('"', '&quot;');
 }
 
-function scoreColor(score: number): string {
+function scoreColor(score: number | null): string {
+  if (score === null) return '#57606a';
   if (score >= 90) return '#1a7f37';
   if (score >= 60) return '#9a6700';
   return '#cf222e';
@@ -75,6 +99,7 @@ export function renderHtmlReport(report: Report): string {
   code.snippet { font-size: 0.78rem; word-break: break-all; }
   .ledger td.pts { text-align: right; font-variant-numeric: tabular-nums; }
   details { margin: 0.5rem 0; }
+  .coverage { border-left: 4px solid #9a6700; padding: 0.5rem 1rem; background: #9a670014; }
   footer { margin: 3rem 0 1rem; color: #666; font-size: 0.85rem; border-top: 1px solid #8884; padding-top: 1rem; }
 </style>
 </head>
@@ -82,8 +107,9 @@ export function renderHtmlReport(report: Report): string {
 <h1>Igris scan: <code>${esc(report.hostname)}</code></h1>
 <p class="meta">${esc(report.target)} · scanned ${esc(report.scannedAt)} · scanner v${esc(report.scannerVersion)} · report v${esc(report.reportVersion)} · chain ${report.chainId} · status: <strong>${esc(report.status)}</strong></p>
 
+${coverageNote(report) ? `<p class="coverage"><strong>${esc(coverageNote(report) ?? '')}</strong></p>` : ''}
 <div class="cards">
-  <div class="card"><div class="n score" style="color:${scoreColor(report.score)}">${report.score}</div>privacy score / 100</div>
+  <div class="card"><div class="n score" style="color:${scoreColor(report.score)}">${report.score === null ? '—' : report.score}</div>privacy score / 100${reportCoverage(report) === 'pre-connect-only' ? ' (pre-connect only)' : ''}</div>
   <div class="card"><div class="n">${exact.length}</div>exact address leaks</div>
   <div class="card"><div class="n">${hashed.length}</div>hashed (still linkable)</div>
   <div class="card"><div class="n">${partial.length}</div>partial (unscored)</div>
@@ -101,7 +127,7 @@ ${report.ledger
       `<tr><td>${esc(l.id)}</td><td>${esc(l.label)}</td><td><code>${esc(l.rule)}</code></td><td>${l.findingIds.map(esc).join(', ') || '—'}</td><td class="pts">−${l.points}</td></tr>`,
   )
   .join('\n')}
-<tr><th colspan="4">score</th><th class="pts">${report.score}</th></tr>
+<tr><th colspan="4">score</th><th class="pts">${report.score === null ? 'not scored' : report.score}</th></tr>
 </table>
 
 <h2>Findings (${report.findings.length})</h2>

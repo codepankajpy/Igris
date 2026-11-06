@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import type { Report } from '@igris/core';
 import { scan, type Recipe, type ScanOptions } from '@igris/scanner';
 import { EXIT } from '../exit-codes.js';
-import { renderHtmlReport } from '../html-report.js';
+import { coverageNote, renderHtmlReport, scoreLabel } from '../html-report.js';
 import { renderTable } from '../table.js';
 
 export const SCAN_HELP = `igris scan <url> [options]
@@ -126,7 +126,8 @@ export async function runScan(argv: string[]): Promise<ScanCliResult> {
     process.stdout.write(`\nreport.json and report.html written to ${outDir}/\n`);
   }
 
-  if (report.status === 'page-load-failed') return { exitCode: EXIT.SCAN_ERROR, report };
+  if (report.status === 'page-load-failed' || report.score === null)
+    return { exitCode: EXIT.SCAN_ERROR, report };
   if (failUnder !== undefined && report.score < failUnder)
     return { exitCode: EXIT.BELOW_THRESHOLD, report };
   return { exitCode: EXIT.OK, report };
@@ -136,8 +137,10 @@ function printSummary(report: Report, explain: boolean): void {
   const w = process.stdout.write.bind(process.stdout);
   w(`\nIgris scan: ${report.hostname}  —  status: ${report.status}\n`);
   w(
-    `score: ${report.score}/100   usesAnonRpc: ${report.usesAnonRpc}   canary: ${report.canaryAddress}\n\n`,
+    `score: ${scoreLabel(report)}   usesAnonRpc: ${report.usesAnonRpc}   canary: ${report.canaryAddress}\n`,
   );
+  const note = coverageNote(report);
+  w(note ? `${note}\n\n` : '\n');
 
   const counted = report.findings.filter((f) => f.countsTowardScore);
   const informational = report.findings.filter((f) => !f.countsTowardScore);

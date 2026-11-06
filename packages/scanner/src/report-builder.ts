@@ -16,12 +16,14 @@ import {
   registrableDomain,
   scoreReport,
   REPORT_VERSION,
+  coverageForStatus,
   type CanaryForms,
   type Finding,
   type LeakLocation,
   type Phase,
   type Report,
   type ScanStatus,
+  type SecurityHeaders,
   type ThirdPartyContact,
   type ThirdPartyEntry,
 } from '@igris/core';
@@ -93,9 +95,6 @@ export function buildReport(input: BuildReportInput): Report {
 
   let preConnectRequests = 0;
   let postConnectRequests = 0;
-  let cspPresent = false;
-  let hstsPresent = false;
-  let xFrameOptions: string | undefined = undefined;
 
   for (const req of input.capture.requests) {
     let host: string;
@@ -110,13 +109,6 @@ export function buildReport(input: BuildReportInput): Report {
 
     if (req.phase === 'pre-connect') preConnectRequests++;
     else postConnectRequests++;
-
-    for (const [k, v] of Object.entries(req.headers)) {
-      const lk = k.toLowerCase();
-      if (lk === 'content-security-policy') cspPresent = true;
-      if (lk === 'strict-transport-security') hstsPresent = true;
-      if (lk === 'x-frame-options') xFrameOptions = v;
-    }
 
     const meta = { url: req.url, method: req.method, host, phase: req.phase };
     scanText(req.url, 'url', meta);
@@ -216,7 +208,14 @@ export function buildReport(input: BuildReportInput): Report {
   }
   const thirdParties = [...contacts.values()].sort((a, b) => a.host.localeCompare(b.host));
 
-  const { score, ledger } = scoreReport(findings, thirdParties);
+  // Nothing was measured when the page never loaded: no score, no ledger.
+  // (A score of 100 here would claim "nothing detectable" about a page we
+  // never saw.)
+  const coverage = coverageForStatus(input.status);
+  const { score, ledger } =
+    coverage === 'none' ? { score: null, ledger: [] } : scoreReport(findings, thirdParties);
+
+  const securityHeaders = securityHeadersFromCapture(input.capture);
 
   const connectionLog = input.errors.filter((e) => e.startsWith('connect: '));
 
@@ -235,22 +234,41 @@ export function buildReport(input: BuildReportInput): Report {
     readsViaWallet: input.readHandler.summary(),
     usesAnonRpc: input.readHandler.anonRpcBootstrapSeen,
     score,
+    coverage,
     ledger,
     errors: input.errors,
     summary: {
       totalRequests: preConnectRequests + postConnectRequests,
       preConnectRequests,
       postConnectRequests,
-      wsConnections: input.capture.wsFrames.length,
+      wsConnections: input.capture.wsConnections,
+      wsFrames: input.capture.wsFrames.length,
       cookiesCount: input.capture.cookies.length,
       localStorageCount: input.capture.storage.filter((s) => s.kind === 'local-storage').length,
       sessionStorageCount: input.capture.storage.filter((s) => s.kind === 'session-storage').length,
     },
-    securityHeaders: {
-      cspPresent,
-      hstsPresent,
-      ...(xFrameOptions ? { xFrameOptions } : {}),
-    },
+    ...(securityHeaders ? { securityHeaders } : {}),
     connectionLog,
+  };
+}
+
+/**
+ * Security headers from the main document's final response only. Request
+ * headers never carry these (they are response headers), and subresource
+ * responses describe other documents. No observed main document → undefined
+ * ("unknown"), never "missing".
+ */
+export function securityHeadersFromCapture(capture: Capture): SecurityHeaders | undefined {
+  const doc = capture.mainDocument;
+  if (!doc) return undefined;
+  const h = doc.headers;
+  const xfo = h['x-frame-options'];
+  return {
+    documentUrl: doc.url,
+    documentStatus: doc.status,
+    cspPresent: h['content-security-policy'] !== undefined,
+    cspReportOnly: h['content-security-policy-report-only'] !== undefined,
+    hstsPresent: h['strict-transport-security'] !== undefined,
+    ...(xfo !== undefined ? { xFrameOptions: xfo } : {}),
   };
 }
