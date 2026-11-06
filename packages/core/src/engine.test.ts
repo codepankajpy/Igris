@@ -362,3 +362,48 @@ describe('evidence bundle and determinism (P05-4)', () => {
     expect(securityHeadersDetector.domain).toBe('security');
   });
 });
+
+describe('first party follows the page that loaded (redirects)', () => {
+  // app.example.net redirects to app.example.org; the dApp's own API on
+  // example.org receives the address. Found live: app.spark.fi → app.spark.finance.
+  const capture = () => {
+    const c = sampleCapture();
+    c.requests.push(
+      req({
+        phase: 'post-connect',
+        url: `https://api.example.org/v1/address/status?address=${CANARY_A}`,
+        resourceType: 'fetch',
+      }),
+    );
+    return c;
+  };
+
+  it('a leak to the landed site is a first-party observation, not a third-party issue', () => {
+    const r = sampleResult({ target: 'https://app.example.net/', capture: capture() });
+    const own = r.report.privacy.findings.filter(
+      (f) => f.detector === 'canary-leak' && f.title.includes('api.example.org'),
+    );
+    expect(own.length).toBeGreaterThan(0);
+    for (const f of own)
+      expect(f).toMatchObject({ kind: 'observation', countsTowardPrivacyScore: false });
+    expect(r.report.contacts.some((c) => c.registrableDomain === 'example.org')).toBe(false);
+    expect(r.report.scan.notes).toContain(
+      'the target redirected to app.example.org; example.org is treated as first party',
+    );
+  });
+
+  it('without a redirect nothing changes (no note, same findings)', () => {
+    const a = sampleResult();
+    expect(a.report.scan.notes).toEqual([]);
+    const b = sampleResult({ firstParty: [] });
+    expect(b.report.findingSet).toEqual(a.report.findingSet);
+  });
+
+  it('third parties are still third parties after a redirect', () => {
+    const r = sampleResult({ target: 'https://app.example.net/', capture: capture() });
+    const leakDomains = r.report.privacy.findings
+      .filter((f) => f.detector === 'canary-leak' && f.countsTowardPrivacyScore)
+      .flatMap((f) => evidenceOf<CanaryMatchEvidence>(r, f).map((e) => e.registrableDomain));
+    expect(new Set(leakDomains)).toEqual(new Set(['infura.io', 'segment.io', 'sentry.io']));
+  });
+});

@@ -223,15 +223,43 @@ function defaultPort(protocol: string): number {
   return protocol === 'https:' || protocol === 'wss:' ? 443 : 80;
 }
 
+/** The main document's registrable domain when it differs from the target's. */
+function landedRegistrableDomain(
+  capture: Capture,
+  targetRd: string,
+): { host: string; registrableDomain: string } | undefined {
+  if (!capture.mainDocument) return undefined;
+  let host: string;
+  try {
+    host = new URL(capture.mainDocument.url).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+  const rd = registrableDomain(host);
+  return rd && rd !== targetRd ? { host, registrableDomain: rd } : undefined;
+}
+
 export function buildScanResult(input: ScanResultInput): ScanResult {
   const targetUrl = new URL(input.target);
   const canary = buildCanaryForms(input.canaryAddress);
   const coverage: ScanCoverage = coverageForStatus(input.status);
   const targetRd = registrableDomain(targetUrl.hostname);
+  // The dApp is the page that actually loaded. When the target redirects to
+  // another site (app.spark.fi → app.spark.finance), that site's own servers
+  // are first party too — otherwise its own API is scored as a third party.
+  // Derived from the captured main document only, and stated in the notes.
+  const landed = landedRegistrableDomain(input.capture, targetRd);
+  const firstParty = [...(input.firstParty ?? []), ...(landed ? [landed.registrableDomain] : [])];
+  const notes = landed
+    ? [
+        ...input.notes,
+        `the target redirected to ${landed.host}; ${landed.registrableDomain} is treated as first party`,
+      ]
+    : input.notes;
   const classifyOpts = {
     targetRegistrableDomain: targetRd,
     db: input.thirdPartyDb,
-    ...(input.firstParty ? { firstParty: input.firstParty } : {}),
+    ...(firstParty.length ? { firstParty } : {}),
   };
   const exclude = input.excludeHosts;
   const ctx: DetectorContext = {
@@ -302,7 +330,7 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
       canaryAddress: input.canaryAddress,
       egress: input.egress,
       connectionLog: input.connectionLog ?? [],
-      notes: input.notes,
+      notes,
       ...(input.connection ? { connection: input.connection } : {}),
       ...(input.failure ? { failure: input.failure } : {}),
     },
