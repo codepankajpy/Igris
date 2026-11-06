@@ -18,7 +18,7 @@ import type { CanaryMatchEvidence } from '../contracts/evidence.js';
 import type { Confidence, FindingKind, Severity } from '../contracts/report-v2.js';
 
 export const CANARY_LEAK_DETECTOR_ID = 'canary-leak';
-export const CANARY_LEAK_DETECTOR_VERSION = '1.0.0';
+export const CANARY_LEAK_DETECTOR_VERSION = '1.1.0'; // 1.1.0: wallet-sdk recipients
 
 /** Replace every canary occurrence in `text` with <CANARY>. */
 export function redactText(text: string, forms: CanaryForms): string {
@@ -41,6 +41,8 @@ const IMPACT: Record<RecipientClass, string> = {
     'The RPC provider can link this wallet address to the visitor’s IP address and request timing for every read, building a record of who controls which address.',
   'walletconnect-relay':
     'The relay operator can link the wallet address to the visitor’s IP address.',
+  'wallet-sdk':
+    'The wallet / login SDK vendor the dapp chose receives the wallet address with the visitor’s IP and keeps its own user record (address, IP, device, sessions) outside the dapp’s control.',
   analytics:
     'An analytics vendor now holds the wallet address alongside the visitor’s IP, device and behaviour — a durable identity-to-address link outside the dapp’s control.',
   'error-monitoring':
@@ -63,6 +65,8 @@ const REMEDIATION: Record<RecipientClass, string> = {
     'Route RPC reads through Anon-RPC (`igris fix <repo>` rewrites viem / ethers / wagmi transports), or let the user’s wallet perform reads via EIP-1193.',
   'walletconnect-relay':
     'Avoid putting the address in relay metadata; if a relay is required, document the exposure or operate the relay yourself.',
+  'wallet-sdk':
+    'Disclose the SDK vendor in your privacy policy, disable its optional analytics/telemetry, and prefer SDK modes that connect injected wallets without registering users server-side.',
   analytics:
     'Stop sending the wallet address to analytics: allowlist event properties, scrub URLs and identify() calls, or remove the SDK.',
   'error-monitoring':

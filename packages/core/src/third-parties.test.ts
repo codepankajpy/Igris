@@ -4,7 +4,7 @@ import { loadThirdPartyDb, validateThirdPartyDb, ThirdPartyDbError } from './thi
 describe('data/third-parties.json', () => {
   it('validates against its schema', () => {
     const db = loadThirdPartyDb();
-    expect(db.version).toBe(1);
+    expect(db.version).toBe(2);
     expect(db.entries.length).toBeGreaterThan(20);
   });
 
@@ -30,13 +30,13 @@ describe('data/third-parties.json', () => {
 describe('validateThirdPartyDb', () => {
   it('rejects a missing class', () => {
     expect(() =>
-      validateThirdPartyDb({ version: 1, entries: [{ name: 'x', domains: ['a.b'], source: 's' }] }),
+      validateThirdPartyDb({ version: 2, entries: [{ name: 'x', domains: ['a.b'], source: 's' }] }),
     ).toThrow(ThirdPartyDbError);
   });
   it('rejects an unknown class', () => {
     expect(() =>
       validateThirdPartyDb({
-        version: 1,
+        version: 2,
         entries: [{ name: 'x', class: 'nonsense', domains: ['a.b'], source: 's' }],
       }),
     ).toThrow(/class/);
@@ -44,7 +44,7 @@ describe('validateThirdPartyDb', () => {
   it('rejects empty domains', () => {
     expect(() =>
       validateThirdPartyDb({
-        version: 1,
+        version: 2,
         entries: [{ name: 'x', class: 'cdn', domains: [], source: 's' }],
       }),
     ).toThrow(/domains/);
@@ -52,7 +52,7 @@ describe('validateThirdPartyDb', () => {
   it('rejects unknown properties', () => {
     expect(() =>
       validateThirdPartyDb({
-        version: 1,
+        version: 2,
         entries: [{ name: 'x', class: 'cdn', domains: ['a.b'], source: 's', extra: true }],
       }),
     ).toThrow(/unknown property/);
@@ -60,8 +60,17 @@ describe('validateThirdPartyDb', () => {
   it('accepts a valid db', () => {
     expect(() =>
       validateThirdPartyDb({
-        version: 1,
+        version: 2,
         entries: [{ name: 'x', class: 'cdn', domains: ['a.b'], suffixes: ['c.a.b'], source: 's' }],
+      }),
+    ).not.toThrow();
+  });
+  it('rejects a format-1 file (it cannot express wallet-sdk) and accepts wallet-sdk in format 2', () => {
+    expect(() => validateThirdPartyDb({ version: 1, entries: [] })).toThrow();
+    expect(() =>
+      validateThirdPartyDb({
+        version: 2,
+        entries: [{ name: 'x', class: 'wallet-sdk', domains: ['a.b'], source: 's' }],
       }),
     ).not.toThrow();
   });

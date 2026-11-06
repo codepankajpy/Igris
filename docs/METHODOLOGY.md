@@ -161,7 +161,9 @@ cannot handle (terms gates, multi-step onboarding).
 1. First party: the target's registrable domain, the domain the target
    redirected to (stated in `scan.notes`), and `--first-party` entries.
 2. `data/third-parties.json`: exact host or registrable domain, then suffix
-   rules. Every entry cites a source.
+   rules. Every entry cites a source. Wallet connection / login SDK backends
+   (Privy, Dynamic, the Reown AppKit API, …) are `wallet-sdk` (report
+   2.2.0).
 3. **RPC by behaviour**: an unknown registrable domain becomes
    `rpc-provider` only if **every** request the page sent to any of its
    hosts is a pure Ethereum JSON-RPC 2.0 call (`eth_` / `net_` / `web3_`

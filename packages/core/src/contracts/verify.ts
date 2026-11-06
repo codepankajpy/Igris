@@ -5,6 +5,8 @@
  * resolve to an item of the claimed type whose id matches its content?
  */
 import {
+  EVIDENCE_BUNDLE_VERSION,
+  EVIDENCE_BUNDLE_VERSION_V2,
   EVIDENCE_BUNDLE_VERSION_V1,
   bundleHash,
   evidenceId,
@@ -12,6 +14,13 @@ import {
 } from './evidence.js';
 import type { FindingSetDigest, FindingV2, ReportV2 } from './report-v2.js';
 import { contentHash } from './hash.js';
+
+/** Which bundle version each report version must reference. */
+const BUNDLE_FOR_REPORT: Record<string, string> = {
+  '2.0.0': EVIDENCE_BUNDLE_VERSION_V1,
+  '2.1.0': EVIDENCE_BUNDLE_VERSION_V2,
+  '2.2.0': EVIDENCE_BUNDLE_VERSION,
+};
 
 export interface IntegrityResult {
   ok: boolean;
@@ -30,9 +39,9 @@ export function findingSetDigest(
 
 export function verifyReportIntegrity(report: ReportV2, bundle: EvidenceBundleV1): IntegrityResult {
   const problems: string[] = [];
-  // Version pairing: a 2.0.0 report points at a v1 bundle, later reports at v2.
-  const expectV1 = report.reportVersion === '2.0.0';
-  if (expectV1 !== (bundle.bundleVersion === EVIDENCE_BUNDLE_VERSION_V1)) {
+  // Version pairing: report 2.0.0 ↔ bundle v1, 2.1.0 ↔ v2, 2.2.0 ↔ v3.
+  const expected = BUNDLE_FOR_REPORT[report.reportVersion];
+  if (expected !== bundle.bundleVersion) {
     problems.push(
       `report ${report.reportVersion} cannot reference a ${bundle.bundleVersion} bundle`,
     );

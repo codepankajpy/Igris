@@ -22,15 +22,18 @@
  * Browser-safe.
  */
 import type { LeakLocation, Phase, RecipientClass } from '../report.js';
-import { RECIPIENT_CLASSES } from '../report.js';
+import { RECIPIENT_CLASSES, RECIPIENT_CLASSES_V1 } from '../report.js';
 import type { MatchCategory } from '../encodings.js';
 import { contentHash } from './hash.js';
 
 export const EVIDENCE_BUNDLE_VERSION_V1 = 'igris.evidence.v1' as const;
-/** The version new bundles are written with. */
-export const EVIDENCE_BUNDLE_VERSION = 'igris.evidence.v2' as const;
+export const EVIDENCE_BUNDLE_VERSION_V2 = 'igris.evidence.v2' as const;
+/** The version new bundles are written with (v3: + wallet-sdk recipient class). */
+export const EVIDENCE_BUNDLE_VERSION = 'igris.evidence.v3' as const;
 export type EvidenceBundleVersion =
-  typeof EVIDENCE_BUNDLE_VERSION_V1 | typeof EVIDENCE_BUNDLE_VERSION;
+  | typeof EVIDENCE_BUNDLE_VERSION_V1
+  | typeof EVIDENCE_BUNDLE_VERSION_V2
+  | typeof EVIDENCE_BUNDLE_VERSION;
 
 /** The canary (any form) observed inside captured traffic. */
 export interface CanaryMatchEvidence {
@@ -192,7 +195,8 @@ export function bundleHash(bundle: EvidenceBundle): string {
 // ---------------------------------------------------------------------------
 
 const PHASE = { enum: ['pre-connect', 'post-connect'] } as const;
-const RECIPIENT = { enum: [...RECIPIENT_CLASSES] } as const;
+/** FROZEN class enum of the v1 / v2 item schemas. */
+const RECIPIENT = { enum: [...RECIPIENT_CLASSES_V1] } as const;
 const SORTED_STRINGS = {
   type: 'array',
   items: { type: 'string', maxLength: 64 },
@@ -355,17 +359,53 @@ const CONTACT_CLASSIFICATION_SCHEMA = {
   },
 } as const;
 
-/** Current (v2) item schema: the frozen v1 item types + contact-classification. */
-export const EVIDENCE_ITEM_SCHEMA = {
+/** FROZEN (approved 2026-11-06): v2 item schema = v1 item types + contact-classification. */
+export const EVIDENCE_ITEM_SCHEMA_V2 = {
   $id: 'https://igris.dev/schemas/evidence-item-2.json',
   oneOf: [...EVIDENCE_ITEM_SCHEMA_V1.oneOf, CONTACT_CLASSIFICATION_SCHEMA],
 } as const;
 
-/** Current (v2) bundle schema. */
-export const EVIDENCE_BUNDLE_SCHEMA = {
+/** FROZEN (approved 2026-11-06): igris.evidence.v2 bundle schema. */
+export const EVIDENCE_BUNDLE_SCHEMA_V2 = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $id: 'https://igris.dev/schemas/evidence-bundle-2.json',
   title: 'IGRIS evidence bundle (igris.evidence.v2)',
+  type: 'object',
+  additionalProperties: false,
+  required: ['bundleVersion', 'items'],
+  properties: {
+    bundleVersion: { const: EVIDENCE_BUNDLE_VERSION_V2 },
+    items: {
+      type: 'object',
+      propertyNames: { pattern: '^ev_[0-9a-f]{24}$' },
+      additionalProperties: { $ref: 'https://igris.dev/schemas/evidence-item-2.json' },
+    },
+  },
+} as const;
+
+/** The v2 item schemas with the current recipient-class enum (wallet-sdk). */
+const withCurrentClasses = <T extends { properties: object }>(item: T): T =>
+  'recipientClass' in item.properties
+    ? {
+        ...item,
+        properties: { ...item.properties, recipientClass: { enum: [...RECIPIENT_CLASSES] } },
+      }
+    : item;
+
+/**
+ * Current (v3) item schema: identical to v2 except that `recipientClass`
+ * (canary-match, third-party-contact) also allows `wallet-sdk`.
+ */
+export const EVIDENCE_ITEM_SCHEMA = {
+  $id: 'https://igris.dev/schemas/evidence-item-3.json',
+  oneOf: EVIDENCE_ITEM_SCHEMA_V2.oneOf.map(withCurrentClasses),
+};
+
+/** Current (v3) bundle schema. */
+export const EVIDENCE_BUNDLE_SCHEMA = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $id: 'https://igris.dev/schemas/evidence-bundle-3.json',
+  title: 'IGRIS evidence bundle (igris.evidence.v3)',
   type: 'object',
   additionalProperties: false,
   required: ['bundleVersion', 'items'],
@@ -374,7 +414,7 @@ export const EVIDENCE_BUNDLE_SCHEMA = {
     items: {
       type: 'object',
       propertyNames: { pattern: '^ev_[0-9a-f]{24}$' },
-      additionalProperties: { $ref: 'https://igris.dev/schemas/evidence-item-2.json' },
+      additionalProperties: { $ref: 'https://igris.dev/schemas/evidence-item-3.json' },
     },
   },
 } as const;

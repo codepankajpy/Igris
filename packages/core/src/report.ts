@@ -19,7 +19,11 @@ export const READABLE_REPORT_VERSIONS = ['1.0.0', '1.1.0'] as const;
 
 export type Phase = 'pre-connect' | 'post-connect';
 
-export const RECIPIENT_CLASSES = [
+/**
+ * FROZEN recipient classes of report 1.x, report 2.0.0 / 2.1.0 and evidence
+ * bundles v1 / v2. Their schemas are hash-pinned; never edit this list.
+ */
+export const RECIPIENT_CLASSES_V1 = [
   'first-party',
   'rpc-provider',
   'analytics',
@@ -31,6 +35,15 @@ export const RECIPIENT_CLASSES = [
   'anon-rpc',
   'unknown-third-party',
 ] as const;
+
+/**
+ * Current recipient classes (report 2.2.0+, evidence v3+). `wallet-sdk`
+ * (approved by the project owner 2026-11-06): the backend of a wallet
+ * connection / login / embedded-wallet SDK the dApp chose (Privy, Dynamic,
+ * the Reown AppKit API, …). It needs the address to authenticate the user
+ * but keeps its own record of it outside the dApp.
+ */
+export const RECIPIENT_CLASSES = [...RECIPIENT_CLASSES_V1, 'wallet-sdk'] as const;
 export type RecipientClass = (typeof RECIPIENT_CLASSES)[number];
 
 export type LeakLocation =
@@ -243,7 +256,7 @@ export const REPORT_JSON_SCHEMA = {
           method: { type: 'string' },
           host: { type: 'string' },
           registrableDomain: { type: 'string' },
-          class: { enum: [...RECIPIENT_CLASSES] },
+          class: { enum: [...RECIPIENT_CLASSES_V1] },
           phase: { enum: ['pre-connect', 'post-connect'] },
           snippet: { type: 'string' },
           countsTowardScore: { type: 'boolean' },
@@ -258,7 +271,7 @@ export const REPORT_JSON_SCHEMA = {
         properties: {
           host: { type: 'string' },
           registrableDomain: { type: 'string' },
-          class: { enum: [...RECIPIENT_CLASSES] },
+          class: { enum: [...RECIPIENT_CLASSES_V1] },
           phases: { type: 'array', items: { enum: ['pre-connect', 'post-connect'] } },
           requestCount: { type: 'integer' },
           methods: { type: 'array', items: { type: 'string' } },

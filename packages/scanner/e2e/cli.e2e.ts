@@ -143,7 +143,7 @@ describe('igris CLI', () => {
     ).toBe('completed');
     expect(r.code).toBe(1);
     expect(report.privacy.score).toBeLessThan(90);
-    expect(evidence.bundleVersion).toBe('igris.evidence.v2');
+    expect(evidence.bundleVersion).toBe('igris.evidence.v3');
 
     // Default mode writes report.json + report.html.
     const r2 = await runCli([

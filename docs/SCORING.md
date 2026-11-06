@@ -31,18 +31,19 @@ Charged **once per (registrable domain, class) pair** — a tracker that
 receives the address fifty times is one leak, not fifty, so one chatty SDK
 cannot dominate the score (dedup rule, tested in scoring.test.ts).
 
-| Recipient class     | Points | Rationale                                                                                                       |
-| ------------------- | ------ | --------------------------------------------------------------------------------------------------------------- |
-| rpc-provider        | 15     | learns (address, IP) but needs the address to serve reads — bad, expected, and exactly what `igris fix` removes |
-| walletconnect-relay | 15     | infrastructure that inherently sees addresses                                                                   |
-| ipfs-gateway        | 20     | no business seeing addresses; often interchangeable                                                             |
-| cdn                 | 20     | an address in a CDN URL is gratuitous                                                                           |
-| analytics           | 25     | deliberate profiling of (address ↔ IP ↔ behaviour)                                                              |
-| error-monitoring    | 25     | addresses in breadcrumbs end up in a third-party DB forever                                                     |
-| support-chat        | 25     | same as analytics, plus PII adjacency                                                                           |
-| unknown-third-party | 35     | worst case: nobody can even audit the recipient                                                                 |
-| first-party         | 0      | the user chose to visit them                                                                                    |
-| anon-rpc            | 0      | the privacy-preserving path we recommend                                                                        |
+| Recipient class     | Points | Rationale                                                                                                                             |
+| ------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| rpc-provider        | 15     | learns (address, IP) but needs the address to serve reads — bad, expected, and exactly what `igris fix` removes                       |
+| walletconnect-relay | 15     | infrastructure that inherently sees addresses                                                                                         |
+| wallet-sdk          | 20     | the login / embedded-wallet vendor the dApp chose: needs the address to authenticate, but keeps its own address ↔ IP ↔ session record |
+| ipfs-gateway        | 20     | no business seeing addresses; often interchangeable                                                                                   |
+| cdn                 | 20     | an address in a CDN URL is gratuitous                                                                                                 |
+| analytics           | 25     | deliberate profiling of (address ↔ IP ↔ behaviour)                                                                                    |
+| error-monitoring    | 25     | addresses in breadcrumbs end up in a third-party DB forever                                                                           |
+| support-chat        | 25     | same as analytics, plus PII adjacency                                                                                                 |
+| unknown-third-party | 35     | worst case: nobody can even audit the recipient                                                                                       |
+| first-party         | 0      | the user chose to visit them                                                                                                          |
+| anon-rpc            | 0      | the privacy-preserving path we recommend                                                                                              |
 
 - **How a recipient gets its class**: first party (target, redirect
   target, `--first-party`), then `data/third-parties.json`, then **RPC by

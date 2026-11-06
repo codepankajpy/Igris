@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "entries": [
     {
       "name": "Infura",
@@ -197,9 +197,110 @@
     {
       "name": "WalletConnect / Reown relay",
       "class": "walletconnect-relay",
-      "domains": ["walletconnect.com", "walletconnect.org", "reown.com", "web3modal.com"],
-      "suffixes": ["relay.walletconnect.com", "relay.walletconnect.org", "pulse.walletconnect.org"],
-      "source": "https://docs.reown.com/"
+      "domains": ["relay.walletconnect.com", "relay.walletconnect.org"],
+      "suffixes": ["relay.walletconnect.com", "relay.walletconnect.org"],
+      "source": "https://docs.reown.com/advanced/faq"
+    },
+    {
+      "name": "Reown Blockchain API (WalletConnect RPC)",
+      "class": "rpc-provider",
+      "domains": ["rpc.walletconnect.org", "rpc.walletconnect.com"],
+      "source": "https://docs.reown.com/cloud/blockchain-api"
+    },
+    {
+      "name": "Reown AppKit / WalletConnect services (AppKit API, Pulse, Verify, Explorer)",
+      "class": "wallet-sdk",
+      "domains": [
+        "api.web3modal.org",
+        "api.web3modal.com",
+        "web3modal.org",
+        "web3modal.com",
+        "reown.com",
+        "pulse.walletconnect.org",
+        "pulse.walletconnect.com",
+        "verify.walletconnect.org",
+        "verify.walletconnect.com",
+        "secure.walletconnect.org",
+        "secure.walletconnect.com",
+        "keys.walletconnect.org",
+        "keys.walletconnect.com",
+        "explorer-api.walletconnect.com"
+      ],
+      "suffixes": ["walletconnect.org", "walletconnect.com"],
+      "source": "https://github.com/reown-com/appkit/blob/main/packages/common/src/utils/ConstantsUtil.ts"
+    },
+    {
+      "name": "Privy (auth API / embedded-wallet iframe)",
+      "class": "wallet-sdk",
+      "domains": ["privy.io"],
+      "source": "https://docs.privy.io/security/implementation-guide/content-security-policy"
+    },
+    {
+      "name": "Privy RPC provider",
+      "class": "rpc-provider",
+      "domains": ["rpc.privy.systems"],
+      "suffixes": ["rpc.privy.systems"],
+      "source": "https://docs.privy.io/security/implementation-guide/content-security-policy"
+    },
+    {
+      "name": "Dynamic (SDK API / embedded-wallet iframe)",
+      "class": "wallet-sdk",
+      "domains": ["dynamicauth.com", "app.dynamic.xyz"],
+      "source": "https://www.dynamic.xyz/docs/api-reference/sdk/get-environment-settings"
+    },
+    {
+      "name": "Magic (auth iframe / embedded wallet)",
+      "class": "wallet-sdk",
+      "domains": ["magic.link"],
+      "source": "https://github.com/magiclabs/magic-js/blob/master/packages/magic-sdk/src/index.ts"
+    },
+    {
+      "name": "thirdweb in-app wallet service and SDK analytics",
+      "class": "wallet-sdk",
+      "domains": ["embedded-wallet.thirdweb.com", "c.thirdweb.com"],
+      "source": "https://github.com/thirdweb-dev/js/blob/main/packages/thirdweb/src/utils/domains.ts"
+    },
+    {
+      "name": "Coinbase Smart Wallet / Base Account popup",
+      "class": "wallet-sdk",
+      "domains": ["keys.coinbase.com"],
+      "source": "https://docs.cdp.coinbase.com/coinbase-wallet/more/troubleshooting/usage-details/popups"
+    },
+    {
+      "name": "Turnkey (API and auth/export/import iframes)",
+      "class": "wallet-sdk",
+      "domains": ["turnkey.com"],
+      "source": "https://docs.turnkey.com/embedded-wallets/code-examples/export"
+    },
+    {
+      "name": "Openfort (API, embedded-wallet iframe, Shield)",
+      "class": "wallet-sdk",
+      "domains": ["openfort.io"],
+      "source": "https://github.com/openfort-xyz/openfort-js/blob/main/sdk/src/core/config/config.ts"
+    },
+    {
+      "name": "Family Accounts (ConnectKit)",
+      "class": "wallet-sdk",
+      "domains": ["app.family.co"],
+      "source": "https://family.co/docs/family-account/getting-started"
+    },
+    {
+      "name": "MetaMask SDK communication / analytics server",
+      "class": "wallet-sdk",
+      "domains": ["metamask-sdk.api.cx.metamask.io"],
+      "source": "https://github.com/MetaMask/metamask-sdk/blob/main/packages/sdk-communication-layer/src/config.ts"
+    },
+    {
+      "name": "MetaMask SDK analytics",
+      "class": "wallet-sdk",
+      "domains": ["mm-sdk-analytics.api.cx.metamask.io"],
+      "source": "https://github.com/MetaMask/metamask-sdk/blob/main/packages/sdk-analytics/src/index.ts"
+    },
+    {
+      "name": "MetaMask SDK multichain relay",
+      "class": "walletconnect-relay",
+      "domains": ["mm-sdk-relay.api.cx.metamask.io"],
+      "source": "https://github.com/MetaMask/metamask-sdk/blob/main/packages/sdk-multichain/src/config/index.ts"
     },
     {
       "name": "Coinbase WalletLink",

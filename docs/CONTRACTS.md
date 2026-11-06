@@ -11,8 +11,8 @@ exported from `@igris/core` (`REPORT_V2_SCHEMA`, `EVIDENCE_BUNDLE_SCHEMA`,
 | Canonical JSON         | RFC 8785                                         | `packages/core/src/contracts/canonical.ts` |
 | Content hash           | sha256 over canonical bytes, 64 lowercase hex    | `contracts/hash.ts`                        |
 | Capture                | v1 (internal, unredacted — never published)      | `contracts/capture.ts`                     |
-| Evidence bundle        | `igris.evidence.v2` (writes); v1 still read      | `contracts/evidence.ts`                    |
-| Report                 | `"2.1.0"` (writes); `"2.0.0"` still read         | `contracts/report-v2.ts`                   |
+| Evidence bundle        | `igris.evidence.v3` (writes); v1, v2 still read  | `contracts/evidence.ts`                    |
+| Report                 | `"2.2.0"` (writes); `"2.0.0"`, `"2.1.0"` read    | `contracts/report-v2.ts`                   |
 | Detector API           | v1                                               | `contracts/detector.ts`, `engine.ts`       |
 | Scanner node / profile | `igris.node.v1` / `igris.scanner.v1`             | `packages/registry/src/identity.ts`        |
 | Registry entity        | Arkiv schema `igris.scan.v1`, summary payload v2 | `packages/registry/src/{schema,record}.ts` |
@@ -73,8 +73,7 @@ every object.
 ## Evidence bundle `igris.evidence.v2`
 
 Approved by the project owner on 2026-11-06 and frozen: its schemas are
-pinned by canonical hash in `contracts.test.ts`, like v1's. New bundles are
-written as v2; v1 bundles still validate and verify.
+pinned by canonical hash in `contracts.test.ts`, like v1's. v2 bundles remain valid input; new bundles are written as v3 (below).
 
 v2 is v1 plus exactly one item type. The three v1 item schemas are
 byte-for-byte identical in v2 (tested).
@@ -165,8 +164,9 @@ reproduction (P6-2). Use `evidence.sha256` to prove what was seen.
 
 ## Report `2.1.0`
 
-Approved by the project owner on 2026-11-06 and frozen (hash-pinned). New
-reports are written as 2.1.0; 2.0.0 reports still validate and verify.
+Approved by the project owner on 2026-11-06 and frozen (hash-pinned).
+2.0.0 and 2.1.0 reports remain valid input; new reports are written as
+2.2.0 (below).
 
 2.1.0 is 2.0.0 with additive changes only (a test asserts that nothing else
 differs):
@@ -206,6 +206,30 @@ score. Kit `confidence` is earned: `high` means the kit's own modal was
 observed; a network host alone is `low`. Consumers must not present a `low`
 kit as an identification.
 
+## Report `2.2.0` and `igris.evidence.v3`
+
+Approved by the project owner on 2026-11-06 and frozen (hash-pinned). New
+reports are written as 2.2.0 with v3 bundles; 2.0.0 / 2.1.0 reports and
+v1 / v2 bundles still validate and verify.
+
+One addition: the recipient class **`wallet-sdk`** — the backend of a wallet
+connection, login or embedded-wallet SDK the dApp chose (Privy, Dynamic, the
+Reown AppKit API, …). It needs the address to authenticate the user but keeps
+its own record (address, IP, device, sessions) outside the dApp. Before this
+class existed such vendors could only be `unknown-third-party`.
+
+- Report 2.2.0 = 2.1.0 with `reportVersion` `"2.2.0"`, `contacts[].class`
+  also allowing `wallet-sdk`, and `evidence.bundleVersion`
+  `"igris.evidence.v3"`. A test asserts nothing else differs.
+- `igris.evidence.v3` = v2 with `recipientClass` (canary-match,
+  third-party-contact) also allowing `wallet-sdk`. A test asserts nothing
+  else differs.
+- Pairing: 2.0.0 ↔ v1, 2.1.0 ↔ v2, 2.2.0 ↔ v3 (`verifyReportIntegrity`).
+- The frozen class list of the older schemas is `RECIPIENT_CLASSES_V1`;
+  `wallet-sdk` is rejected by 2.1.0 / v2 (tested).
+- Scoring: a leak to a `wallet-sdk` recipient is severity medium and costs
+  20 points (docs/SCORING.md); the `canary-leak` detector is 1.1.0.
+
 ## Detector API v1
 
 ```ts
@@ -239,7 +263,7 @@ Built-in detectors: `canary-leak` 1.0.0 (privacy), `ip-exposure` 1.0.0
 - **Approval and freezing**: a successor contract takes effect only after
   the project owner approves it. Once approved it is frozen, and its schemas
   are pinned by canonical hash in `contracts.test.ts`. Frozen so far: report
-  2.0.0 and 2.1.0, `igris.evidence.v1` and `igris.evidence.v2`.
+  2.0.0, 2.1.0 and 2.2.0; `igris.evidence.v1`, `v2` and `v3`.
 - **Detectors**: bump `version` when logic changes. The `id` never changes,
   because it is part of every fingerprint.
 - **Arkiv entity schema**: a new schema name on breaking change

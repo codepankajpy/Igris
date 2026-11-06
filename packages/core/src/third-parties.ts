@@ -28,11 +28,12 @@ export interface ThirdPartyDb {
 
 export const THIRD_PARTIES_JSON_SCHEMA = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
-  $id: 'https://igris.dev/schemas/third-parties-1.json',
+  $id: 'https://igris.dev/schemas/third-parties-2.json',
   type: 'object',
   required: ['version', 'entries'],
   properties: {
-    version: { type: 'integer' },
+    // 2: adds the wallet-sdk class (report 2.2.0). Older readers reject it.
+    version: { const: 2 },
     entries: {
       type: 'array',
       items: {
@@ -62,7 +63,7 @@ export function validateThirdPartyDb(data: unknown): ThirdPartyDb {
   if (typeof data !== 'object' || data === null || Array.isArray(data))
     fail('$', 'must be an object');
   const obj = data as Record<string, unknown>;
-  if (!Number.isInteger(obj.version)) fail('version', 'must be an integer');
+  if (obj.version !== 2) fail('version', 'must be 2 (this code reads third-party DB format 2)');
   if (!Array.isArray(obj.entries)) fail('entries', 'must be an array');
   const classes = new Set<string>(RECIPIENT_CLASSES);
   obj.entries.forEach((e, i) => {

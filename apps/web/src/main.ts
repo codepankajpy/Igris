@@ -331,6 +331,7 @@ function renderList(): string {
     'error-monitoring',
     'support-chat',
     'walletconnect-relay',
+    'wallet-sdk',
     'ipfs-gateway',
     'cdn',
     'unknown-third-party',

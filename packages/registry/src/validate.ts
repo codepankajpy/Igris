@@ -29,6 +29,7 @@ export const KNOWN_RECIPIENT_CLASSES = [
   'cdn',
   'anon-rpc',
   'unknown-third-party',
+  'wallet-sdk',
 ] as const;
 export const KNOWN_LEAK_LOCATIONS = [
   'url',

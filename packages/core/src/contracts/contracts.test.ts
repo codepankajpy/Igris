@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  bundleHash,
   CONTACT_CLASSIFICATION_KEYS,
   EVIDENCE_BUNDLE_SCHEMA_V1,
   EVIDENCE_ITEM_SCHEMA_V1,
@@ -13,7 +14,9 @@ import {
   DOCUMENT_HEADERS_KEYS,
   DOCUMENT_HEADER_NAMES,
   EVIDENCE_BUNDLE_SCHEMA,
+  EVIDENCE_BUNDLE_SCHEMA_V2,
   EVIDENCE_ITEM_SCHEMA,
+  EVIDENCE_ITEM_SCHEMA_V2,
   THIRD_PARTY_CONTACT_KEYS,
 } from './evidence.js';
 import {
@@ -23,6 +26,7 @@ import {
   REPORT_V2_SCHEMA,
   REPORT_SCHEMA_2_0_0,
   REPORT_SCHEMA_2_1_0,
+  REPORT_SCHEMA_2_2_0,
   SCAN_META_KEYS,
   SCAN_META_KEYS_2_0_0,
   TELEMETRY_KEYS,
@@ -173,10 +177,10 @@ describe('P0.5 contracts are frozen; P1 successors are additive and, once approv
     expect(contentHash(REPORT_SCHEMA_2_1_0)).toBe(
       '9ee25dd09c0769879d2b50d8add238f6cc5b4c48382f84982ab85f5aee5406f1',
     );
-    expect(contentHash(EVIDENCE_ITEM_SCHEMA)).toBe(
+    expect(contentHash(EVIDENCE_ITEM_SCHEMA_V2)).toBe(
       '622effab4db47e09d579864881425a5b8c2bb6967d631b021da3a4d6f892ecd8',
     );
-    expect(contentHash(EVIDENCE_BUNDLE_SCHEMA)).toBe(
+    expect(contentHash(EVIDENCE_BUNDLE_SCHEMA_V2)).toBe(
       '49b6536cee6fda539ea86091d3cb27620202bca0eeee9cbd962b79086b6329f8',
     );
   });
@@ -205,10 +209,10 @@ describe('P0.5 contracts are frozen; P1 successors are additive and, once approv
   });
 
   it('evidence v2 = v1 item schemas (identical) + contact-classification', () => {
-    expect(canonicalize(EVIDENCE_ITEM_SCHEMA.oneOf.slice(0, 3))).toBe(
+    expect(canonicalize(EVIDENCE_ITEM_SCHEMA_V2.oneOf.slice(0, 3))).toBe(
       canonicalize(EVIDENCE_ITEM_SCHEMA_V1.oneOf),
     );
-    expect(EVIDENCE_ITEM_SCHEMA.oneOf).toHaveLength(4);
+    expect(EVIDENCE_ITEM_SCHEMA_V2.oneOf).toHaveLength(4);
   });
 
   it('a real P0.5 artifact (report 2.0.0 + evidence v1) still validates and verifies', () => {
@@ -241,10 +245,98 @@ describe('P0.5 contracts are frozen; P1 successors are additive and, once approv
 
   it('a report/bundle version mismatch is an integrity problem', () => {
     const { report, bundle } = sampleResult();
-    expect(report.reportVersion).toBe('2.1.0');
-    expect(bundle.bundleVersion).toBe('igris.evidence.v2');
-    const asV1 = { ...bundle, bundleVersion: 'igris.evidence.v1' as const };
-    expect(verifyReportIntegrity(report, asV1).problems.join(' ')).toMatch(/cannot reference/);
+    expect(report.reportVersion).toBe('2.2.0');
+    expect(bundle.bundleVersion).toBe('igris.evidence.v3');
+    for (const other of ['igris.evidence.v1', 'igris.evidence.v2'] as const) {
+      const wrong = { ...bundle, bundleVersion: other };
+      expect(verifyReportIntegrity(report, wrong).problems.join(' ')).toMatch(/cannot reference/);
+    }
+  });
+});
+
+describe('Report 2.2.0 / igris.evidence.v3: the wallet-sdk class (approved 2026-11-06)', () => {
+  it('approved successor schemas (2.2.0, evidence v3) are byte-for-byte unchanged', () => {
+    expect(contentHash(REPORT_SCHEMA_2_2_0)).toBe(
+      '49a585460635b60d0ff2862057fe532fbbabb08c91022fea03f795d7ba5cced2',
+    );
+    expect(contentHash(EVIDENCE_ITEM_SCHEMA)).toBe(
+      '578bfe794bb8cdfd0f4ecb3f3603a6b6fb3e8b46bc25fdc5070950b725f6b687',
+    );
+    expect(contentHash(EVIDENCE_BUNDLE_SCHEMA)).toBe(
+      'e80f9563020a29a763646c11ab627a280b43ba68627d50b31708ecbbba62a91c',
+    );
+  });
+
+  it('2.2.0 differs from 2.1.0 ONLY by version, contacts class enum and bundle version', () => {
+    const strip = (schema: unknown) => {
+      const c = structuredClone(schema) as any;
+      delete c.$id;
+      delete c.title;
+      delete c.properties.reportVersion;
+      delete c.properties.contacts.items.properties.class;
+      delete c.properties.evidence.properties.bundleVersion;
+      return canonicalize(c);
+    };
+    expect(strip(REPORT_SCHEMA_2_2_0)).toBe(strip(REPORT_SCHEMA_2_1_0));
+    expect(REPORT_SCHEMA_2_2_0.properties.contacts.items.properties.class.enum).toEqual([
+      ...REPORT_SCHEMA_2_1_0.properties.contacts.items.properties.class.enum,
+      'wallet-sdk',
+    ]);
+  });
+
+  it('evidence v3 differs from v2 ONLY by the recipientClass enums', () => {
+    const strip = (schema: { oneOf: readonly unknown[] }) =>
+      canonicalize(
+        schema.oneOf.map((o) => {
+          const c = structuredClone(o) as any;
+          delete c.properties.recipientClass;
+          return c;
+        }),
+      );
+    expect(strip(EVIDENCE_ITEM_SCHEMA)).toBe(strip(EVIDENCE_ITEM_SCHEMA_V2));
+    const enums = (schema: { oneOf: readonly unknown[] }) =>
+      schema.oneOf.map((o) => (o as any).properties.recipientClass?.enum).filter(Boolean);
+    for (const e of enums(EVIDENCE_ITEM_SCHEMA)) expect(e).toContain('wallet-sdk');
+    for (const e of enums(EVIDENCE_ITEM_SCHEMA_V2)) expect(e).not.toContain('wallet-sdk');
+  });
+
+  it('a 2.1.0 report with its v2 bundle still validates and verifies', () => {
+    const { report, bundle } = sampleResult();
+    const v2 = { ...bundle, bundleVersion: 'igris.evidence.v2' as const };
+    const r210 = {
+      ...report,
+      reportVersion: '2.1.0' as const,
+      evidence: {
+        ...report.evidence,
+        bundleVersion: 'igris.evidence.v2' as const,
+        sha256: bundleHash(v2),
+      },
+    };
+    expect(() => validateEvidenceBundle(v2)).not.toThrow();
+    expect(() => validateReportV2(r210)).not.toThrow();
+    expect(verifyReportIntegrity(r210, v2)).toMatchObject({ ok: true, problems: [] });
+  });
+
+  it('wallet-sdk is valid in 2.2.0 / v3 and rejected by 2.1.0 / v2', () => {
+    const { report, bundle } = sampleResult();
+    const contact = { ...report.contacts[0]!, class: 'wallet-sdk' as const };
+    expect(() => validateReportV2({ ...report, contacts: [contact] })).not.toThrow();
+    expect(() =>
+      validateReportV2({
+        ...report,
+        reportVersion: '2.1.0',
+        evidence: { ...report.evidence, bundleVersion: 'igris.evidence.v2' },
+        contacts: [contact],
+      }),
+    ).toThrow();
+    const [id, item] = Object.entries(bundle.items).find(([, i]) => i.type === 'canary-match')!;
+    const sdkItem = { ...item, recipientClass: 'wallet-sdk' };
+    expect(() =>
+      validateEvidenceBundle({ bundleVersion: 'igris.evidence.v3', items: { [id]: sdkItem } }),
+    ).not.toThrow();
+    expect(() =>
+      validateEvidenceBundle({ bundleVersion: 'igris.evidence.v2', items: { [id]: sdkItem } }),
+    ).toThrow();
   });
 });
 

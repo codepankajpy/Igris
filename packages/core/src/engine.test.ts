@@ -8,6 +8,7 @@ import { DetectorContractError, type Detector, type DraftFinding } from './contr
 import { bundleHash, evidenceId, type CanaryMatchEvidence } from './contracts/evidence.js';
 import type { PrivacyFinding, SecurityObservation } from './contracts/report-v2.js';
 import { verifyReportIntegrity } from './contracts/verify.js';
+import { assess } from './assessment.js';
 import {
   DEFAULT_DETECTORS,
   RedactionError,
@@ -584,5 +585,52 @@ describe('pureJsonRpcMethods', () => {
     expect(pureJsonRpcMethods('{"method":"eth_call"}')).toBeNull();
     expect(pureJsonRpcMethods('{"jsonrpc":"2.0","method":"track"}')).toBeNull();
     expect(pureJsonRpcMethods('not json')).toBeNull();
+  });
+});
+
+describe('wallet-sdk recipients (report 2.2.0)', () => {
+  const capture = () => {
+    const c = sampleCapture();
+    c.requests.push(
+      req({
+        phase: 'post-connect',
+        url: 'https://app.walletsdk.example/api/v0/sdk/connect',
+        method: 'POST',
+        resourceType: 'fetch',
+        body: JSON.stringify({ address: CANARY_A, walletName: 'igris' }),
+      }),
+    );
+    return c;
+  };
+  const db = [
+    ...sampleInput().thirdPartyDb,
+    {
+      name: 'Example wallet SDK',
+      class: 'wallet-sdk' as const,
+      domains: ['walletsdk.example'],
+      source: 'https://walletsdk.example/docs',
+    },
+  ];
+
+  it('a leak to a wallet SDK is medium, charged 20, with SDK-specific remediation', () => {
+    const r = sampleResult({ capture: capture(), thirdPartyDb: db });
+    const f = r.report.privacy.findings.find((x) => x.title.includes('walletsdk.example'))!;
+    expect(f).toMatchObject({ severity: 'medium', kind: 'issue', countsTowardPrivacyScore: true });
+    expect(f.remediation).toMatch(/SDK vendor/);
+    const line = r.report.privacy.ledger.find((l) => l.findingIds.includes(f.id))!;
+    expect(line).toMatchObject({ rule: 'leak.wallet-sdk', points: 20 });
+    expect(r.report.contacts.find((c) => c.host === 'app.walletsdk.example')?.class).toBe(
+      'wallet-sdk',
+    );
+    expect(r.report.reportVersion).toBe('2.2.0');
+    expect(r.bundle.bundleVersion).toBe('igris.evidence.v3');
+  });
+
+  it('a wallet SDK alone is not the "tracking or unidentified" (critical) case', () => {
+    const only = sampleCapture();
+    only.requests = only.requests.filter((q) => !/segment|sentry|infura/.test(q.url));
+    only.requests.push(...capture().requests.slice(-1));
+    const r = sampleResult({ capture: only, thirdPartyDb: db });
+    expect(assess(r.report, r.bundle).level).toBe('high');
   });
 });

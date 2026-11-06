@@ -24,11 +24,12 @@ import type {
   ThirdPartyContact,
   WalletRead,
 } from '../report.js';
-import { RECIPIENT_CLASSES } from '../report.js';
+import { RECIPIENT_CLASSES, RECIPIENT_CLASSES_V1 } from '../report.js';
 import type { EvidenceRef } from './evidence.js';
 import {
   EVIDENCE_BUNDLE_VERSION,
   EVIDENCE_BUNDLE_VERSION_V1,
+  EVIDENCE_BUNDLE_VERSION_V2,
   EVIDENCE_TYPES,
   EVIDENCE_TYPES_V1,
   type EvidenceBundleVersion,
@@ -38,11 +39,17 @@ import { CANONICALIZATION } from './hash.js';
 /** FROZEN P0.5 report version. */
 export const REPORT_V2_0_VERSION = '2.0.0' as const;
 /**
- * The version new reports are written with. 2.1.0 = 2.0.0 + optional
- * scan.connection / scan.failure + evidence bundle v2 (additive; P1).
+ * FROZEN (approved 2026-11-06). 2.1.0 = 2.0.0 + optional scan.connection /
+ * scan.failure + evidence bundle v2 (additive; P1).
  */
-export const REPORT_V2_VERSION = '2.1.0' as const;
-export type ReportVersion = typeof REPORT_V2_0_VERSION | typeof REPORT_V2_VERSION;
+export const REPORT_V2_1_VERSION = '2.1.0' as const;
+/**
+ * The version new reports are written with. 2.2.0 = 2.1.0 + the
+ * `wallet-sdk` recipient class (contacts) + evidence bundle v3.
+ */
+export const REPORT_V2_VERSION = '2.2.0' as const;
+export type ReportVersion =
+  typeof REPORT_V2_0_VERSION | typeof REPORT_V2_1_VERSION | typeof REPORT_V2_VERSION;
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export const SEVERITIES: readonly Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
@@ -409,7 +416,7 @@ export const REPORT_SCHEMA_2_0_0 = {
         properties: {
           host: { type: 'string' },
           registrableDomain: { type: 'string' },
-          class: { enum: [...RECIPIENT_CLASSES] },
+          class: { enum: [...RECIPIENT_CLASSES_V1] },
           phases: { type: 'array', items: { enum: ['pre-connect', 'post-connect'] } },
           requestCount: COUNT,
           methods: { type: 'array', items: { type: 'string' } },
@@ -570,7 +577,7 @@ export const REPORT_SCHEMA_2_1_0 = {
   title: 'IGRIS scan report v2.1',
   properties: {
     ...REPORT_SCHEMA_2_0_0.properties,
-    reportVersion: { const: REPORT_V2_VERSION },
+    reportVersion: { const: REPORT_V2_1_VERSION },
     scan: {
       ...REPORT_SCHEMA_2_0_0.properties.scan,
       properties: {
@@ -596,6 +603,43 @@ export const REPORT_SCHEMA_2_1_0 = {
       ...REPORT_SCHEMA_2_0_0.properties.evidence,
       properties: {
         ...REPORT_SCHEMA_2_0_0.properties.evidence.properties,
+        bundleVersion: { const: EVIDENCE_BUNDLE_VERSION_V2 },
+      },
+    },
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
+// Report 2.2.0 — built from the approved 2.1.0 schema by ADDITIVE changes only
+// (approved by the project owner 2026-11-06, "wallet-sdk" recipient class):
+//  - reportVersion "2.2.0";
+//  - contacts[].class also allows "wallet-sdk";
+//  - evidence.bundleVersion "igris.evidence.v3".
+// contracts.test.ts asserts that nothing else differs.
+// ---------------------------------------------------------------------------
+
+/** Current (2.2.0) report schema. */
+export const REPORT_SCHEMA_2_2_0 = {
+  ...REPORT_SCHEMA_2_1_0,
+  $id: 'https://igris.dev/schemas/report-2.2.0.json',
+  title: 'IGRIS scan report v2.2',
+  properties: {
+    ...REPORT_SCHEMA_2_1_0.properties,
+    reportVersion: { const: REPORT_V2_VERSION },
+    contacts: {
+      ...REPORT_SCHEMA_2_1_0.properties.contacts,
+      items: {
+        ...REPORT_SCHEMA_2_1_0.properties.contacts.items,
+        properties: {
+          ...REPORT_SCHEMA_2_1_0.properties.contacts.items.properties,
+          class: { enum: [...RECIPIENT_CLASSES] },
+        },
+      },
+    },
+    evidence: {
+      ...REPORT_SCHEMA_2_1_0.properties.evidence,
+      properties: {
+        ...REPORT_SCHEMA_2_1_0.properties.evidence.properties,
         bundleVersion: { const: EVIDENCE_BUNDLE_VERSION },
       },
     },
@@ -603,4 +647,4 @@ export const REPORT_SCHEMA_2_1_0 = {
 } as const;
 
 /** The current report schema (alias). */
-export const REPORT_V2_SCHEMA = REPORT_SCHEMA_2_1_0;
+export const REPORT_V2_SCHEMA = REPORT_SCHEMA_2_2_0;

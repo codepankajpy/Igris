@@ -15,6 +15,9 @@ export const WEIGHTS = {
   leak: {
     'rpc-provider': 15,
     'walletconnect-relay': 15,
+    // The login / embedded-wallet vendor the dapp chose: it needs the address
+    // to authenticate, but builds its own address ↔ IP ↔ session record.
+    'wallet-sdk': 20,
     'ipfs-gateway': 20,
     cdn: 20,
     analytics: 25,
