@@ -83,7 +83,7 @@ const md = [
   '| --- | --- | --- | --- | --- | --- | --- |',
   ...summaries.map(
     (s) =>
-      `| ${s.hostname} | ${s.status} | ${s.score} | ${s.leakCount} | ${s.leakClasses.join(', ') || '—'} | ${s.thirdParties} | ${s.usesAnonRpc ? 'yes' : 'no'} |`,
+      `| ${s.hostname} | ${s.status} | ${s.score === null ? 'not scored' : s.score} | ${s.leakCount} | ${s.leakClasses.join(', ') || '—'} | ${s.thirdParties} | ${s.usesAnonRpc ? 'yes' : 'no'} |`,
   ),
 ].join('\n');
 writeFileSync(join(outDir, 'summary.md'), md + '\n');

@@ -9,15 +9,24 @@ import {
   RABDI_RPC_URL,
   RABDI_EXPLORER_URL,
   matchesQuery,
+  validateRecords,
   type RegistryQuery,
   type RegistryRecord,
+  type ScanRecord,
 } from '@igris/registry/browser';
 
 /**
- * Scanner addresses pinned by default — "ours". Pre-populated with the generated
- * Igris scanner key address. Fresh visitors see our attestations as pinned.
+ * No scanner is pinned by default: trust is the viewer's decision. (A
+ * hardcoded "ours" address would pre-trust a key on the user's behalf.)
  */
-const DEFAULT_PINNED: string[] = ['0xDbd0309b80f71E12d45Ac8321DBA637156a4198B'];
+const DEFAULT_PINNED: string[] = [];
+
+/**
+ * Where a record shown here came from. Only 'arkiv-live' rows were read from
+ * Arkiv in this session; nothing else may be presented as an Arkiv entity.
+ */
+type Provenance = 'arkiv-live' | 'snapshot' | 'unpublished';
+type ViewRecord = RegistryRecord & { provenance: Provenance };
 
 const LS = {
   endpoint: 'igris:endpoint',
@@ -33,7 +42,10 @@ interface State {
   endpoint: string;
   apiUrl: string;
   pinned: string[];
-  records: RegistryRecord[];
+  records: ViewRecord[];
+  /** Scans run through the optional API in this tab — never on Arkiv. */
+  unpublished: ViewRecord[];
+  lastLoad: { count: number; dropped: number; at: string } | null;
   loaded: boolean;
   error: string | null;
   detailId: string | null;
@@ -44,7 +56,7 @@ interface State {
     repoUrl: string;
     changedFiles: string[];
     diff: string;
-    recommendations: string[];
+    notes: Array<{ file: string; line: number; message: string }>;
   } | null;
   filters: {
     hostname: string;
@@ -67,6 +79,8 @@ const state: State = {
     'http://localhost:3001',
   pinned: JSON.parse(localStorage.getItem(LS.pinned) || 'null') ?? DEFAULT_PINNED,
   records: [],
+  unpublished: [],
+  lastLoad: null,
   loaded: false,
   error: null,
   detailId: null,
@@ -93,6 +107,11 @@ function esc(s: unknown): string {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+}
+
+/** Render a number defensively: anything non-finite becomes an em dash. */
+function num(n: unknown): string {
+  return typeof n === 'number' && Number.isFinite(n) ? String(n) : '—';
 }
 
 function scoreClass(score: number): string {
@@ -125,15 +144,26 @@ async function load(): Promise<void> {
   state.loaded = false;
   render();
   try {
+    let dropped = 0;
     if (state.mode === 'arkiv') {
       const registry = new ArkivRegistry({ rpcUrl: state.endpoint });
-      state.records = await registry.query(currentQuery());
+      const rows = await registry.query(currentQuery());
+      dropped = registry.lastValidation.dropped;
+      state.records = rows.map((r) => ({ ...r, provenance: 'arkiv-live' as const }));
     } else {
       const res = await fetch('./snapshot.json');
       if (!res.ok) throw new Error(`snapshot.json not found next to the page (${res.status})`);
-      const file = (await res.json()) as { records: RegistryRecord[] };
-      state.records = file.records.filter((r) => matchesQuery(r, currentQuery()));
+      const file = (await res.json()) as { records?: unknown };
+      // Snapshot files are untrusted input too (anyone can hand you one).
+      const validated = validateRecords(Array.isArray(file.records) ? file.records : [], {
+        source: 'local',
+      });
+      dropped = validated.dropped;
+      state.records = validated.records
+        .filter((r) => matchesQuery(r, currentQuery()))
+        .map((r) => ({ ...r, provenance: 'snapshot' as const }));
     }
+    state.lastLoad = { count: state.records.length, dropped, at: new Date().toISOString() };
     state.loaded = true;
   } catch (err) {
     state.error = String(err);
@@ -142,8 +172,8 @@ async function load(): Promise<void> {
 }
 
 /** Latest record per (hostname, scanner); also counts agreeing scanners. */
-function latestPerScanner(records: RegistryRecord[]): Array<RegistryRecord & { agree: number }> {
-  const latest = new Map<string, RegistryRecord>();
+function latestPerScanner(records: ViewRecord[]): Array<ViewRecord & { agree: number }> {
+  const latest = new Map<string, ViewRecord>();
   for (const r of records) {
     const k = `${r.hostname}|${r.scanner.toLowerCase()}`;
     const prev = latest.get(k);
@@ -159,22 +189,23 @@ function latestPerScanner(records: RegistryRecord[]): Array<RegistryRecord & { a
 }
 
 function render(): void {
-  const detail = state.detailId ? state.records.find((r) => r.id === state.detailId) : null;
+  const detail = state.detailId
+    ? [...state.records, ...state.unpublished].find((r) => r.id === state.detailId)
+    : null;
   app.innerHTML = `
   <div class="wrap">
     <header>
-      <div class="tagline-badge">🛡️ Web3 Privacy & Security Oracle</div>
+      <div class="tagline-badge">Runtime privacy audits for dapps</div>
       <div class="header-brand">
         <div class="logo-icon">I</div>
         <h1>Igris Registry</h1>
       </div>
-      <p>Empirical privacy audits for Ethereum dapps. Detect RPC IP surveillance, third-party trackers, and Anon-RPC readiness.</p>
+      <p>Which third parties learn a dapp user's wallet address or IP — measured with a throwaway canary wallet, published as signed attestations by independent scanners.</p>
     </header>
 
     ${renderHeroAuditor()}
     ${renderSource()}
     ${detail ? renderDetail(detail) : renderList()}
-    ${renderEducationalCards()}
   </div>`;
   wire();
 }
@@ -229,13 +260,18 @@ function renderHeroAuditor(): string {
     ${
       state.repoPatchResult
         ? `<div class="audit-result-banner">
-        <h4 style="margin:0 0 0.5rem;color:var(--good)">✅ Repository Analysis Complete for ${esc(state.repoPatchResult.repoUrl)}</h4>
-        <p style="font-size:0.85rem;margin:0 0 0.5rem">${esc(state.repoPatchResult.recommendations.join(' '))}</p>
+        <h4 style="margin:0 0 0.5rem">Repository analysed: ${esc(state.repoPatchResult.repoUrl)}</h4>
+        <p style="font-size:0.85rem;margin:0 0 0.5rem">${
+          state.repoPatchResult.changedFiles.length
+            ? `${num(state.repoPatchResult.changedFiles.length)} file(s) would change to route RPC reads through Anon-RPC. Review the diff and apply it yourself (or run <span class="mono">igris fix --write</span> locally).`
+            : 'The patcher found no viem / ethers / wagmi RPC setup it can rewrite. This does not mean the dapp is private: it may use other libraries or patterns the patcher does not recognise.'
+        }</p>
         ${
-          state.repoPatchResult.diff
-            ? `<div class="diff-box">${esc(state.repoPatchResult.diff)}</div>`
-            : '<p class="muted">No code changes required. Dapp already uses an anonymizing RPC shim.</p>'
+          state.repoPatchResult.notes.length
+            ? `<ul class="row-meta">${state.repoPatchResult.notes.map((n) => `<li>${esc(n.file)}:${num(n.line)} — ${esc(n.message)}</li>`).join('')}</ul>`
+            : ''
         }
+        ${state.repoPatchResult.diff ? `<div class="diff-box">${esc(state.repoPatchResult.diff)}</div>` : ''}
       </div>`
         : ''
     }
@@ -246,7 +282,13 @@ function renderSource(): string {
   return `<div class="panel">
     <div class="panel-header">
       <span>📡 Data Source & Attestation Network</span>
-      <span style="font-size:0.8rem;font-weight:normal" class="muted"><span class="pulse-dot"></span> Rabdi Testnet Live</span>
+      <span style="font-size:0.8rem;font-weight:normal" class="muted">${
+        state.error
+          ? 'Last load failed'
+          : state.lastLoad
+            ? `${num(state.lastLoad.count)} record(s) from ${state.mode === 'arkiv' ? 'Arkiv' : 'snapshot'} at ${esc(state.lastLoad.at.slice(11, 19))} UTC${state.lastLoad.dropped ? ` · ${num(state.lastLoad.dropped)} malformed entit${state.lastLoad.dropped === 1 ? 'y' : 'ies'} ignored` : ''}`
+            : 'Not loaded yet'
+      }</span>
     </div>
     <div class="filters">
       <label>Data Source
@@ -262,7 +304,7 @@ function renderSource(): string {
     </div>
     <div class="row-meta">Chain: Rabdi testnet · Explorer: <span class="mono">${esc(RABDI_EXPLORER_URL)}</span></div>
     <div style="margin-top:0.75rem">
-      <span class="muted" style="font-size:0.85rem;font-weight:600">Pinned Trusted Auditors:</span>
+      <span class="muted" style="font-size:0.85rem;font-weight:600">Pinned scanners (your choice, stored in this browser):</span>
       <span class="pin-list" id="pins">
         ${
           state.pinned.length
@@ -275,7 +317,7 @@ function renderSource(): string {
             : '<span class="muted">none yet — every scanner is shown, labelled “unpinned”.</span>'
         }
         <input id="pin-input" placeholder="0x… scanner address" size="18" />
-        <button id="pin-add">Pin Auditor</button>
+        <button id="pin-add">Pin scanner</button>
       </span>
     </div>
   </div>`;
@@ -294,11 +336,12 @@ function renderList(): string {
     'unknown-third-party',
   ];
   let rows = latestPerScanner(state.records);
-  if (f.pinnedOnly) rows = rows.filter((r) => isPinned(r.scanner) || r.scanner === 'local');
+  if (f.pinnedOnly) rows = rows.filter((r) => isPinned(r.scanner));
   return `
+  ${renderUnpublished()}
   <div class="panel">
     <div class="panel-header">
-      <span>🔎 Dapp Privacy Registry</span>
+      <span>Registry</span>
       <span class="muted" style="font-size:0.85rem">${rows.length} Audited Application(s)</span>
     </div>
     <div class="filters">
@@ -325,7 +368,7 @@ function renderList(): string {
   </div>
   <div class="status">
     ${state.error ? `<span class="error">${esc(state.error)}</span>` : ''}
-    ${!state.error && !state.loaded ? 'Loading verifiable records from Arkiv…' : ''}
+    ${!state.error && !state.loaded ? `Loading records from ${state.mode === 'arkiv' ? 'Arkiv' : 'the snapshot file'}…` : ''}
     ${state.loaded ? `${rows.length} result(s) — latest entity per hostname per scanner` : ''}
   </div>
   <div class="table-container">
@@ -337,14 +380,13 @@ function renderList(): string {
             (r) => `<tr data-id="${esc(r.id)}">
           <td><strong>${esc(r.hostname)}</strong>
               ${r.usesAnonRpc ? '<span class="badge anon-rpc">anon-rpc</span>' : ''}
-              ${r.agree > 1 ? `<span class="badge agree">${r.agree} scanners agree</span>` : ''}</td>
-          <td class="score ${scoreClass(r.score)}">${r.score}</td>
-          <td>${r.leakCount}</td>
+              ${r.agree > 1 ? `<span class="badge agree">${num(r.agree)} scanners published</span>` : ''}</td>
+          <td class="score ${scoreClass(r.score)}">${num(r.score)}${coveragePartial(r) ? '<span class="row-meta"> partial</span>' : ''}</td>
+          <td>${num(r.leakCount)}</td>
           <td>${esc(r.leakClasses || '—')}</td>
-          <td>${r.thirdPartyCount}</td>
-          <td class="row-meta">${new Date(r.scannedAt * 1000).toISOString().slice(0, 16).replace('T', ' ')}</td>
-          <td><span class="mono">${esc(shortAddr(r.scanner))}</span>
-              ${isPinned(r.scanner) || r.scanner === 'local' ? '' : '<span class="badge unpinned">unpinned</span>'}</td>
+          <td>${num(r.thirdPartyCount)}</td>
+          <td class="row-meta">${esc(new Date(r.scannedAt * 1000).toISOString().slice(0, 16).replace('T', ' '))}</td>
+          <td>${scannerLabel(r)}</td>
         </tr>`,
           )
           .join('')}
@@ -353,105 +395,156 @@ function renderList(): string {
   </div>`;
 }
 
-function renderDetail(r: RegistryRecord): string {
+/** Scan covered only the pre-connect phase (wallet never connected). */
+function coveragePartial(r: RegistryRecord): boolean {
+  const c =
+    r.summary.coverage ??
+    (r.summary.status === 'wallet-connect-failed' ? 'pre-connect-only' : 'full');
+  return c === 'pre-connect-only';
+}
+
+/** Scanner cell for the list: only live Arkiv rows have an attested owner. */
+function scannerLabel(r: ViewRecord): string {
+  if (r.provenance === 'unpublished') return '<span class="badge unpinned">unpublished</span>';
+  if (r.scanner === 'local') return '<span class="row-meta">local file</span>';
+  const pin = isPinned(r.scanner)
+    ? '<span class="badge anon-rpc">pinned</span>'
+    : '<span class="badge unpinned">not pinned</span>';
+  const src = r.provenance === 'snapshot' ? '<span class="row-meta"> (snapshot)</span>' : '';
+  return `<span class="mono">${esc(shortAddr(r.scanner))}</span> ${pin}${src}`;
+}
+
+/** Provenance paragraph: says exactly what is and is not established. */
+function provenanceBlock(r: ViewRecord): string {
+  if (r.provenance === 'unpublished') {
+    return `<p class="provenance unpublished"><strong>Unpublished — not on Arkiv.</strong>
+      Produced in this browser tab by the scanner API at <span class="mono">${esc(state.apiUrl)}</span>.
+      No scanner key attests it, it is not stored anywhere, and it disappears on reload.
+      To publish an attestation, run <span class="mono">igris scan</span> + <span class="mono">igris publish</span> with your own scanner key.</p>`;
+  }
+  if (r.provenance === 'snapshot') {
+    return `<p class="provenance">From a <strong>snapshot file</strong> (offline mode).
+      Entity key and scanner below are as recorded in the file and were <strong>not checked against Arkiv</strong> in this session.<br>
+      Recorded entity: <span class="mono">${esc(r.id)}</span> · scanner: <span class="mono">${esc(r.scanner)}</span></p>`;
+  }
+  return `<p class="provenance">Read live from <strong>Arkiv</strong> (${esc(state.endpoint)}).
+    Entity <span class="mono">${esc(r.id)}</span> · owner (scanner) <span class="mono">${esc(r.scanner)}</span>
+    ${isPinned(r.scanner) ? '<span class="badge anon-rpc">pinned by you</span>' : '<span class="badge unpinned">not pinned by you</span>'}
+    · expires ${esc(r.expiresAt ?? 'unknown')}<br>
+    <a href="${esc(RABDI_EXPLORER_URL)}" rel="noreferrer noopener" target="_blank">Open the Rabdi explorer</a> and search the entity key to inspect it independently.</p>`;
+}
+
+function renderDetail(r: ViewRecord): string {
   const s = r.summary;
-  const isOk = s.status === 'completed';
-  const statusBadge = isOk
-    ? '<span class="badge anon-rpc">✅ Handshake Complete</span>'
-    : '<span class="badge unpinned">⚠️ Wallet Handshake Incomplete</span>';
+  const partial = coveragePartial(r);
+  const statusBadge =
+    s.status === 'completed'
+      ? '<span class="badge anon-rpc">wallet connected</span>'
+      : '<span class="badge unpinned">wallet not connected</span>';
+  const counted = s.findings.filter((f) => f.counted);
+  const uncounted = s.findings.length - counted.length;
+  const h = s.securityHeaders;
 
   return `<div class="panel detail">
-    <button class="back" id="back">← Back to Registry Results</button>
-    <h2>${esc(r.hostname)} <span class="score ${scoreClass(r.score)}">${r.score}</span> / 100 ${statusBadge}</h2>
+    <button class="back" id="back">← Back to results</button>
+    <h2>${esc(r.hostname)} <span class="score ${scoreClass(r.score)}">${num(r.score)}</span> / 100 ${statusBadge}</h2>
+    ${
+      partial
+        ? `<p class="coverage-note"><strong>Partial scan:</strong> the wallet never connected, so address leaks after connect were <strong>not tested</strong>. The score covers only what happens before connect.</p>`
+        : ''
+    }
+    ${provenanceBlock(r)}
     <p class="row-meta">
-      Scanned: ${new Date(r.scannedAt * 1000).toISOString()} · Scanner: <span class="mono">${esc(r.scanner)}</span>
-      ${isPinned(r.scanner) || r.scanner === 'local' ? '<span class="badge anon-rpc">trusted</span>' : '<span class="badge unpinned">unpinned</span>'}<br>
-      Arkiv Entity: <span class="mono">${esc(r.id)}</span> · Expiry: ${esc(r.expiresAt ?? '30-day TTL')} ·<br>
-      report sha256 <span class="mono">${esc(r.reportSha256)}</span><br>
-      Canary Address: <span class="mono">${esc(s.canaryAddress)}</span> · MetaMask Spoofing: <strong>${s.spoofMetaMask ? 'Enabled' : 'Disabled'}</strong>
+      Scanned ${esc(new Date(r.scannedAt * 1000).toISOString())} · scanner v${esc(r.scannerVersion)} · report v${esc(r.reportVersion)}<br>
+      report sha256 <span class="mono">${esc(r.reportSha256)}</span>
+      <span class="row-meta">(hash of the scanner's full report; that report is not published yet, so this hash cannot be checked independently)</span><br>
+      Canary address <span class="mono">${esc(s.canaryAddress)}</span> (throwaway) · MetaMask spoofing ${s.spoofMetaMask ? 'on' : 'off'}
     </p>
 
-    <!-- Telemetry Stats -->
     <div class="telemetry-grid">
       <div class="telemetry-card">
-        <div class="telemetry-label">Network Traffic</div>
-        <div class="telemetry-value">${s.telemetry?.totalRequests ?? r.thirdPartyCount} requests</div>
-        <div class="telemetry-sub">${s.telemetry?.preConnectRequests ?? '—'} pre / ${s.telemetry?.postConnectRequests ?? '—'} post</div>
+        <div class="telemetry-label">Network traffic</div>
+        <div class="telemetry-value">${s.telemetry ? `${num(s.telemetry.totalRequests)} requests` : 'not recorded'}</div>
+        <div class="telemetry-sub">${s.telemetry ? `${num(s.telemetry.preConnectRequests)} pre / ${num(s.telemetry.postConnectRequests)} post connect` : ''}</div>
       </div>
       <div class="telemetry-card">
-        <div class="telemetry-label">Third Parties</div>
-        <div class="telemetry-value">${s.thirdParties.length} contacted</div>
-        <div class="telemetry-sub">${s.thirdParties.filter((t) => t.phases.includes('pre-connect')).length} pre-connect</div>
+        <div class="telemetry-label">Third parties</div>
+        <div class="telemetry-value">${num(s.thirdParties.length)} contacted</div>
+        <div class="telemetry-sub">${num(s.thirdParties.filter((t) => t.phases.includes('pre-connect')).length)} before connect</div>
       </div>
       <div class="telemetry-card">
-        <div class="telemetry-label">Security Headers</div>
-        <div class="telemetry-value">${s.securityHeaders?.cspPresent ? 'CSP Active' : 'CSP Missing'}</div>
-        <div class="telemetry-sub">${s.securityHeaders?.hstsPresent ? 'HSTS Enforced' : 'HSTS Absent'}</div>
+        <div class="telemetry-label">Security headers (main document)</div>
+        <div class="telemetry-value">${h ? (h.cspPresent ? 'CSP present' : 'CSP missing') : 'Unknown'}</div>
+        <div class="telemetry-sub">${h ? (h.hstsPresent ? 'HSTS present' : 'HSTS missing') : 'not observed in this record'}</div>
       </div>
       <div class="telemetry-card">
-        <div class="telemetry-label">Canary Leaks</div>
-        <div class="telemetry-value" style="color:${s.findings.length ? 'var(--bad)' : 'var(--good)'}">${s.findings.length} detected</div>
-        <div class="telemetry-sub">${s.findings.length ? 'Identity compromised' : 'Zero canary leaks'}</div>
+        <div class="telemetry-label">Address leaks to third parties</div>
+        <div class="telemetry-value" style="color:${counted.length ? 'var(--bad)' : 'var(--fg)'}">${num(counted.length)}</div>
+        <div class="telemetry-sub">${uncounted ? `${num(uncounted)} more observation(s) not scored (local storage, first-party, partial)` : partial ? 'post-connect not tested' : 'none observed'}</div>
       </div>
     </div>
 
     ${
       s.connectionLog && s.connectionLog.length
-        ? `<h3>Wallet Connection Diagnostic Log</h3>
+        ? `<h3>Wallet connection log</h3>
         <div class="connection-log">
           ${s.connectionLog.map((line) => `<div class="connection-log-step">${esc(line)}</div>`).join('')}
         </div>`
         : ''
     }
 
-    <h3>Detected Leaks & Evidence (${s.findings.length})</h3>
+    <h3>Observations (${num(s.findings.length)})</h3>
+    <p class="row-meta">Per-request evidence (redacted snippets) lives in the scanner's full report, which is not part of this record.</p>
     ${
       s.findings.length
-        ? `<div class="table-container"><table><thead><tr><th>class</th><th>destination</th><th>where</th><th>encoding</th><th>phase</th><th>counted</th></tr></thead>
+        ? `<div class="table-container"><table><thead><tr><th>class</th><th>destination</th><th>where</th><th>encoding</th><th>phase</th><th>scored</th></tr></thead>
       <tbody>${s.findings
         .map(
           (f) =>
             `<tr><td><strong>${esc(f.class)}</strong></td><td>${esc(f.host)}</td><td>${esc(f.location)}</td><td class="mono">${esc(f.encoding)}</td><td>${esc(f.phase)}</td><td>${f.counted ? 'yes' : 'no'}</td></tr>`,
         )
         .join('')}</tbody></table></div>`
-        : '<p class="muted">No canary leaks recorded. User identity remained sealed.</p>'
+        : `<p class="muted">No canary address observed in captured traffic${partial ? ' (post-connect phase not tested)' : ''}.</p>`
     }
 
-    <h3>Score Penalty Ledger</h3>
+    <h3>Score ledger</h3>
     <div class="table-container"><table><thead><tr><th>rule</th><th>why</th><th style="text-align:right">points</th></tr></thead>
     <tbody>${s.ledger
       .map(
         (l) =>
-          `<tr><td class="mono">${esc(l.rule)}</td><td>${esc(l.label)}</td><td style="text-align:right;color:var(--bad)">−${l.points}</td></tr>`,
+          `<tr><td class="mono">${esc(l.rule)}</td><td>${esc(l.label)}</td><td style="text-align:right;color:var(--bad)">−${num(l.points)}</td></tr>`,
       )
       .join('')}</tbody></table></div>
 
-    <h3>Third Parties Contacted (${s.thirdParties.length})</h3>
+    <h3>Third parties contacted (${num(s.thirdParties.length)})</h3>
     <div class="table-container"><table><thead><tr><th>host</th><th>class</th><th>requests</th><th>phases</th></tr></thead>
     <tbody>${s.thirdParties
       .map(
         (t) =>
-          `<tr><td><strong>${esc(t.host)}</strong></td><td>${esc(t.class)}</td><td>${t.requestCount ?? 1}</td><td>${t.phases.map(esc).join(', ')}</td></tr>`,
+          `<tr><td><strong>${esc(t.host)}</strong></td><td>${esc(t.class)}</td><td>${num(t.requestCount)}</td><td>${t.phases.map(esc).join(', ')}</td></tr>`,
       )
       .join('')}</tbody></table></div>
   </div>`;
 }
 
-function renderEducationalCards(): string {
-  return `
-  <div class="feature-grid">
-    <div class="feature-card">
-      <h4>🔍 Closed-Source Dapps & Wallets</h4>
-      <p>Igris does not require source code access. Because it audits live network traffic and DOM wallet providers (EIP-1193 / EIP-6963), any closed-source dapp (or proprietary wallet like MetaMask) can be evaluated by inspecting runtime socket and HTTP telemetry.</p>
-    </div>
-    <div class="feature-card">
-      <h4>⚡ Anon-RPC Remediation</h4>
-      <p>When dapps read balances or state, Infura/Alchemy logs their IP. Igris automatically patches dapps with the Ethereum Foundation's Anon-RPC shim, routing calls through Nym or Tor mixnets to break IP-wallet correlation.</p>
-    </div>
-    <div class="feature-card">
-      <h4>📜 Verifiable On-Chain Registry</h4>
-      <p>Audit records are cryptographically signed and stored on Arkiv (Ethereum Rabdi testnet) with a mandatory 30-day time-to-live. Dapps that fix privacy issues are automatically upgraded on the next audit pass.</p>
-    </div>
+function renderUnpublished(): string {
+  if (!state.unpublished.length) return '';
+  return `<div class="panel">
+    <div class="panel-header"><span>Your unpublished scans (this tab only — not on Arkiv)</span></div>
+    <div class="table-container"><table>
+      <thead><tr><th>dapp</th><th>score</th><th>leaks</th><th>scanned</th><th>status</th></tr></thead>
+      <tbody>${state.unpublished
+        .map(
+          (r) => `<tr data-id="${esc(r.id)}">
+        <td><strong>${esc(r.hostname)}</strong></td>
+        <td class="score ${scoreClass(r.score)}">${num(r.score)}${coveragePartial(r) ? '<span class="row-meta"> partial</span>' : ''}</td>
+        <td>${num(r.leakCount)}</td>
+        <td class="row-meta">${esc(new Date(r.scannedAt * 1000).toISOString().slice(0, 16).replace('T', ' '))}</td>
+        <td><span class="badge unpinned">unpublished</span></td>
+      </tr>`,
+        )
+        .join('')}</tbody>
+    </table></div>
   </div>`;
 }
 
@@ -533,7 +626,7 @@ function wire(): void {
     if (!targetUrl) return;
 
     state.isScanning = true;
-    state.scanProgress = `Connecting to Igris Scanner worker & launching headless Canary browser for ${targetUrl}…`;
+    state.scanProgress = `Scanning ${targetUrl} on the scanner API at ${state.apiUrl} (optional hosted node; the result will be unpublished)…`;
     render();
 
     try {
@@ -550,21 +643,33 @@ function wire(): void {
         );
       }
 
-      const data = await res.json();
-      state.scanProgress = `Audit completed! Score: ${data.report.score}/100. Adding to registry…`;
-
-      // Add to records list & show detail immediately
-      state.records.unshift(data.record);
-      state.detailId = data.record.id;
+      const data = (await res.json()) as {
+        provenance: 'unpublished';
+        preview: ScanRecord | null;
+        report: { score: number | null; status: string; errors: string[] };
+      };
+      if (!data.preview) {
+        // Nothing was measured: no score, nothing to show as a result.
+        state.scanProgress = `Not scored: the page did not load (${data.report.status}). ${data.report.errors[0] ?? ''}`;
+      } else {
+        const record: ViewRecord = {
+          ...data.preview,
+          id: `unpublished-${Date.now()}-${state.unpublished.length + 1}`,
+          scanner: 'unpublished',
+          provenance: 'unpublished',
+        };
+        state.unpublished.unshift(record);
+        state.detailId = record.id;
+        state.scanProgress = `Scan finished (unpublished, not on Arkiv). Score ${num(record.score)}/100${coveragePartial(record) ? ' — partial: wallet not connected' : ''}.`;
+      }
     } catch (err: unknown) {
       console.warn('Backend scan error:', err);
-      state.scanProgress = `Note: Scanner worker at ${state.apiUrl} is offline or unreachable. Tip: Run "pnpm igris scan ${targetUrl}" locally or deploy the backend to Railway/Render. Showing offline preview.`;
+      state.scanProgress = `Scan failed: ${err instanceof Error ? err.message : 'scanner API unreachable'} (API: ${state.apiUrl}). You can always scan locally: pnpm igris scan ${targetUrl}`;
     } finally {
+      // Render the outcome immediately. The message stays until the next
+      // action, so "not scored" and failures are never silently cleared.
       state.isScanning = false;
-      setTimeout(() => {
-        state.scanProgress = null;
-        render();
-      }, 3500);
+      render();
     }
   });
 
@@ -594,8 +699,8 @@ function wire(): void {
       const data = await res.json();
       state.repoPatchResult = data;
       state.scanProgress = null;
-    } catch {
-      state.scanProgress = `Could not reach backend worker at ${state.apiUrl}. Run "pnpm igris fix <repo>" locally or deploy the API service.`;
+    } catch (err: unknown) {
+      state.scanProgress = `Repository analysis failed: ${err instanceof Error ? err.message : 'scanner API unreachable'} (API: ${state.apiUrl}). You can run "pnpm igris fix <path>" locally.`;
     } finally {
       state.isScanning = false;
       render();

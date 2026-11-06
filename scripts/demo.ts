@@ -119,7 +119,7 @@ async function main(): Promise<void> {
   writeFileSync(join(EXAMPLES, 'viewer-scan/report.json'), JSON.stringify(viewerScan, null, 2));
   writeFileSync(join(EXAMPLES, 'viewer-scan/report.html'), renderHtmlReport(viewerScan));
   log(
-    `viewer self-scan: score ${viewerScan.score} (${viewerScan.thirdParties.length} third parties; connect n/a — it has no wallet flow)`,
+    `viewer self-scan: score ${viewerScan.score} (coverage ${viewerScan.coverage}: it has no wallet flow; ${viewerScan.thirdParties.length} third parties)`,
   );
 
   // --- 8. before/after table ---
@@ -149,6 +149,8 @@ async function main(): Promise<void> {
     throw new Error('demo invariant broken: fixed fixture still leaks to RPC');
   if (!fixed.usesAnonRpc)
     throw new Error('demo invariant broken: fixed fixture not detected as Anon-RPC');
+  if (leaky.score === null || fixed.score === null)
+    throw new Error('demo invariant broken: a fixture scan was not scored (page did not load)');
   if (fixed.score <= leaky.score) throw new Error('demo invariant broken: score did not improve');
 }
 

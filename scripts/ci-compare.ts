@@ -26,6 +26,16 @@ const after = classesOf(next);
 const newClasses = [...after].filter((c) => !before.has(c));
 
 let failed = false;
+// An unscored report (page never loaded) proves nothing either way: fail
+// closed rather than letting a broken scan pass the gate.
+if (baseline.score === null || next.score === null) {
+  console.error(
+    `FAIL: cannot compare: ${baseline.score === null ? 'baseline' : 'new'} report is not scored (status ${
+      baseline.score === null ? baseline.status : next.status
+    })`,
+  );
+  process.exit(1);
+}
 if (newClasses.length > 0) {
   console.error(`FAIL: new leak class(es) introduced: ${newClasses.join(', ')}`);
   failed = true;

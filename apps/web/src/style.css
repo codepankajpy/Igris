@@ -557,3 +557,20 @@ tbody tr:last-child td {
   content: '▸';
   color: var(--accent);
 }
+
+/* P0 truthfulness: provenance and coverage statements */
+.provenance {
+  border-left: 3px solid var(--border);
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+}
+.provenance.unpublished {
+  border-left-color: var(--warn);
+}
+.coverage-note {
+  border-left: 3px solid var(--warn);
+  background: var(--warn-bg);
+  padding: 0.5rem 0.9rem;
+  font-size: 0.9rem;
+}
