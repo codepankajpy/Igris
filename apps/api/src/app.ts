@@ -46,21 +46,39 @@ export interface ApiDeps {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** Dashboard aggregates — computed only from stored scan summaries. */
+/**
+ * Dashboard aggregates — computed only from stored scan summaries. Findings,
+ * scores, leaks, third parties and kits use the LATEST completed scan of each
+ * dApp (hostname), so re-scanning a dApp never double-counts it.
+ */
 export function aggregateStats(metas: ScanMeta[]) {
-  const done = metas.filter((m) => m.state === 'completed' && m.summary);
+  const completed = metas.filter((m) => m.state === 'completed' && m.summary);
+  const latest = new Map<string, ScanMeta>();
+  for (const m of completed) {
+    const prev = latest.get(m.hostname);
+    if (!prev || prev.createdAt < m.createdAt) latest.set(m.hostname, m);
+  }
+  const done = [...latest.values()];
   const scored = done.filter((m) => m.summary!.score !== null);
   const severity = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
   const thirdParties = new Map<string, number>();
   const leakDomains = new Map<string, number>();
-  const kits = new Map<string, number>();
+  // Kit identifications by confidence: a low-confidence guess is not an identification.
+  const kits = new Map<string, { high: number; medium: number; low: number }>();
   for (const m of done) {
     const s = m.summary!;
     for (const k of Object.keys(severity) as Array<keyof typeof severity>)
       severity[k] += s.findings.bySeverity[k];
     for (const d of s.thirdPartyDomains) thirdParties.set(d, (thirdParties.get(d) ?? 0) + 1);
     for (const d of s.leakDomains) leakDomains.set(d, (leakDomains.get(d) ?? 0) + 1);
-    if (s.kit) kits.set(s.kit.id, (kits.get(s.kit.id) ?? 0) + 1);
+    if (
+      s.kit &&
+      (s.kit.confidence === 'high' || s.kit.confidence === 'medium' || s.kit.confidence === 'low')
+    ) {
+      const k = kits.get(s.kit.id) ?? { high: 0, medium: 0, low: 0 };
+      k[s.kit.confidence] += 1;
+      kits.set(s.kit.id, k);
+    }
   }
   const top = (m: Map<string, number>) =>
     [...m.entries()]
@@ -70,13 +88,14 @@ export function aggregateStats(metas: ScanMeta[]) {
   return {
     totals: {
       scans: metas.length,
-      completed: done.length,
+      completed: completed.length,
       failed: metas.filter((m) => m.state === 'failed').length,
       inProgress: metas.filter((m) => m.state === 'queued' || m.state === 'running').length,
       scored: scored.length,
       notScored: done.length - scored.length,
-      dapps: new Set(done.map((m) => m.hostname)).size,
+      dapps: done.length,
     },
+    basis: 'latest completed scan of each dApp' as const,
     averageScore: scored.length
       ? Math.round(scored.reduce((a, m) => a + m.summary!.score!, 0) / scored.length)
       : null,
@@ -84,7 +103,12 @@ export function aggregateStats(metas: ScanMeta[]) {
     addressLeaks: done.reduce((a, m) => a + m.summary!.addressLeaks, 0),
     topThirdParties: top(thirdParties),
     topLeakDomains: top(leakDomains),
-    kits: Object.fromEntries(kits),
+    kits: [...kits.entries()]
+      .map(([id, c]) => ({ id, ...c }))
+      .sort(
+        (a, b) =>
+          b.high - a.high || b.medium - a.medium || b.low - a.low || a.id.localeCompare(b.id),
+      ),
   };
 }
 

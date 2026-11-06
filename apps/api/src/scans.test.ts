@@ -246,10 +246,55 @@ describe('dashboard aggregates', () => {
       notScored: 1,
     });
     expect(stats.averageScore).toBe(80);
+    // sampleResult carries no connection diagnostics → no kit is claimed.
+    expect(stats.kits).toEqual([]);
     expect(stats.topLeakDomains.map((d) => d.domain)).toEqual([
       'infura.io',
       'segment.io',
       'sentry.io',
     ]);
+  });
+
+  it('kits are counted by confidence, so a low-confidence guess is never shown as identified', () => {
+    const base = summarize(sampleResult());
+    const meta = (id: string, kit: { id: string; confidence: string } | null): ScanMeta => ({
+      id,
+      url: 'https://x.org/',
+      hostname: `${id}.org`,
+      createdAt: '2026-11-06T00:00:00.000Z',
+      state: 'completed',
+      events: [],
+      summary: { ...base, kit },
+    });
+    const stats = aggregateStats([
+      meta('a', { id: 'privy', confidence: 'low' }),
+      meta('b', { id: 'connectkit', confidence: 'high' }),
+      meta('c', { id: 'privy', confidence: 'high' }),
+      meta('d', null),
+    ]);
+    expect(stats.kits).toEqual([
+      { id: 'privy', high: 1, medium: 0, low: 1 },
+      { id: 'connectkit', high: 1, medium: 0, low: 0 },
+    ]);
+  });
+
+  it('a re-scanned dApp counts once, with its latest result', () => {
+    const base = summarize(sampleResult());
+    const meta = (id: string, createdAt: string, score: number): ScanMeta => ({
+      id,
+      url: 'https://app.example.org/',
+      hostname: 'app.example.org',
+      createdAt,
+      state: 'completed',
+      events: [],
+      summary: { ...base, score },
+    });
+    const stats = aggregateStats([
+      meta('old', '2026-11-06T00:00:00.000Z', 5),
+      meta('new', '2026-11-06T01:00:00.000Z', 44),
+    ]);
+    expect(stats.totals).toMatchObject({ scans: 2, completed: 2, dapps: 1, scored: 1 });
+    expect(stats.averageScore).toBe(44);
+    expect(stats.topLeakDomains.every((d) => d.scans === 1)).toBe(true);
   });
 });
