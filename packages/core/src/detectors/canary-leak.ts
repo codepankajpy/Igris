@@ -12,7 +12,7 @@ import { findCanary, redactSnippet } from '../detect.js';
 import type { CanaryForms } from '../encodings.js';
 import type { LeakLocation, Phase, RecipientClass } from '../report.js';
 import { countsTowardScore } from '../scoring.js';
-import type { Capture } from '../contracts/capture.js';
+import type { Capture, CapturedRequest } from '../contracts/capture.js';
 import type { Detector, DetectorContext, DraftFinding } from '../contracts/detector.js';
 import type { CanaryMatchEvidence } from '../contracts/evidence.js';
 import type { Confidence, FindingKind, Severity } from '../contracts/report-v2.js';
@@ -159,6 +159,25 @@ function classifyMatch(e: CanaryMatchEvidence, counted: boolean): Classified {
 
 const SCANNED_PROTOCOLS = new Set(['http:', 'https:', 'ws:', 'wss:']);
 
+/**
+ * The texts of one request this detector searches, in order, with the
+ * location each one stands for. Shared with the timeline (timeline.ts) so
+ * "when did the address first leave" uses exactly the detector's view.
+ */
+export function requestTexts(
+  req: Pick<CapturedRequest, 'url' | 'headers' | 'body' | 'setCookies'>,
+): Array<[LeakLocation, string | null]> {
+  return [
+    ['url', req.url],
+    ...Object.entries(req.headers).map(([name, value]): [LeakLocation, string] => [
+      'request-header',
+      `${name}: ${value}`,
+    ]),
+    ['request-body', req.body],
+    ...req.setCookies.map((sc): [LeakLocation, string] => ['response-set-cookie', sc]),
+  ];
+}
+
 function run(capture: Capture, ctx: DetectorContext): DraftFinding[] {
   const forms = ctx.canary;
   const out = new Map<string, DraftFinding>();
@@ -218,12 +237,7 @@ function run(capture: Capture, ctx: DetectorContext): DraftFinding[] {
     }
     if (!SCANNED_PROTOCOLS.has(u.protocol) || !u.hostname || ctx.wasBlocked(u)) continue;
     const meta = { url: req.url, method: req.method, host: u.hostname, phase: req.phase };
-    scanText(req.url, 'url', meta);
-    for (const [name, value] of Object.entries(req.headers)) {
-      scanText(`${name}: ${value}`, 'request-header', meta);
-    }
-    scanText(req.body, 'request-body', meta);
-    for (const sc of req.setCookies) scanText(sc, 'response-set-cookie', meta);
+    for (const [location, text] of requestTexts(req)) scanText(text, location, meta);
   }
 
   for (const frame of capture.wsFrames) {

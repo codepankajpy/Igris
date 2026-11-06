@@ -1,7 +1,8 @@
 /**
  * The detector engine: runs detectors over a Capture, enforces the detector
  * contract, assigns fingerprint-derived ids, builds the content-addressed
- * evidence bundle, scores privacy, and assembles a schema-valid Report v2.
+ * evidence bundle, derives the recipients (with verdicts) and the timeline,
+ * and assembles a schema-valid Report 3.0.0. Reports carry no score.
  *
  * Everything that makes a report trustworthy happens here, once, for every
  * detector — detectors cannot opt out of it.
@@ -33,25 +34,29 @@ import {
   type EvidenceItem,
 } from './contracts/evidence.js';
 import {
-  REPORT_V2_VERSION,
   type ConnectionDiagnostics,
   type ScanFailure,
   type DetectorRun,
+  type FindingDomain,
   type FindingV2,
   type PrivacyFinding,
   type ReportV2,
   type SecurityObservation,
 } from './contracts/report-v2.js';
+import { REPORT_V3_VERSION, type FindingV3, type ReportV3 } from './contracts/report-v3.js';
 import {
   validateEvidenceItem,
   validateEvidenceBundle,
-  validateReportV2,
+  validateReport,
 } from './contracts/validate.js';
 import { findingSetDigest } from './contracts/verify.js';
 import { canaryLeakDetector } from './detectors/canary-leak.js';
 import { computeContacts, ipExposureDetector } from './detectors/ip-exposure.js';
 import { securityHeadersDetector } from './detectors/security-headers.js';
-import { hasScoringRule, scorePrivacy } from './scoring-v2.js';
+import { hasScoringRule } from './scoring-v2.js';
+import { buildTimeline } from './timeline.js';
+import { buildRpcInventory } from './rpc.js';
+import { computeRecipients } from './verdicts.js';
 
 export const DEFAULT_DETECTORS: readonly Detector[] = [
   canaryLeakDetector,
@@ -59,7 +64,14 @@ export const DEFAULT_DETECTORS: readonly Detector[] = [
   securityHeadersDetector,
 ];
 
+/** What the engine (and every migration to the current version) produces. */
 export interface ScanResult {
+  report: ReportV3;
+  bundle: EvidenceBundleV1;
+}
+
+/** A 2.x report with its bundle (the v1 → v2 migration's output). */
+export interface ScanResultV2 {
   report: ReportV2;
   bundle: EvidenceBundleV1;
 }
@@ -150,7 +162,7 @@ export function finalizeDrafts(
 }
 
 /** Deterministic order: severity, then detector, then id. */
-export function sortFindings<T extends FindingV2>(findings: T[]): T[] {
+export function sortFindings<T extends FindingV3>(findings: T[]): T[] {
   return [...findings].sort(
     (a, b) =>
       SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
@@ -193,6 +205,18 @@ export function partitionFindings(findings: FindingV2[]): {
       );
   }
   return { privacy: sortFindings(privacy), security: sortFindings(security) };
+}
+
+/**
+ * A finding as report 3.0.0 publishes it: the 2.x finding without
+ * `countsTowardPrivacyScore` (detector drafts still carry the flag; it
+ * drives severity and the detector contract, but is no longer published).
+ */
+export function toFindingV3<D extends FindingDomain>(
+  f: FindingV2 & { domain: D },
+): FindingV3 & { domain: D } {
+  const { countsTowardPrivacyScore: _dropped, ...rest } = f;
+  return rest;
 }
 
 export interface ScanResultInput {
@@ -389,8 +413,17 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
 
   const bundle = buildBundle(items);
   assertCanaryFree(bundle, canary);
-  const { privacy, security } = partitionFindings(all);
-  const { score, ledger } = scorePrivacy(privacy, bundle, coverage);
+  const partitioned = partitionFindings(all);
+  const privacy = partitioned.privacy.map(toFindingV3);
+  const security = partitioned.security.map(toFindingV3);
+  const contacts = computeContacts(input.capture, ctx);
+  const recipients = computeRecipients({ contacts, findings: [...privacy, ...security], bundle });
+  const timeline = buildTimeline(input.capture, {
+    classify,
+    canary,
+    wasBlocked: ctx.wasBlocked,
+    recipients,
+  });
 
   let pre = 0;
   let post = 0;
@@ -411,8 +444,8 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
     version: d.version,
     domain: d.domain,
   }));
-  const report: ReportV2 = {
-    reportVersion: REPORT_V2_VERSION,
+  const report: ReportV3 = {
+    reportVersion: REPORT_V3_VERSION,
     scan: {
       target: input.target,
       hostname: targetUrl.hostname,
@@ -439,9 +472,9 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
       ...(input.failure ? { failure: input.failure } : {}),
     },
     detectors: detectorRuns,
-    privacy: { score, coverage, ledger, findings: privacy },
+    privacy: { coverage, findings: privacy },
     security: { observations: security },
-    contacts: computeContacts(input.capture, ctx),
+    contacts,
     wallet: { readsViaWallet: input.wallet.readsViaWallet, usesAnonRpc: input.wallet.usesAnonRpc },
     telemetry: {
       totalRequests: pre + post,
@@ -460,10 +493,13 @@ export function buildScanResult(input: ScanResultInput): ScanResult {
       itemCount: items.size,
     },
     findingSet: findingSetDigest([...privacy, ...security]),
+    recipients,
+    timeline,
+    rpc: buildRpcInventory(input.capture, { classify, canary, wasBlocked: ctx.wasBlocked }),
   };
   // The engine validates its own output: drift between code and published
   // schema fails the scan instead of producing an invalid artifact.
   validateEvidenceBundle(bundle);
-  validateReportV2(report);
+  validateReport(report);
   return { report, bundle };
 }

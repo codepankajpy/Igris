@@ -1,14 +1,16 @@
 /**
  * P05-2/3/4: detectors, the detector contract, evidence bundle determinism,
- * redaction, and the privacy/security separation.
+ * redaction, and the privacy/security separation — as written into
+ * Report 3.0.0 (recipients with verdicts instead of a score).
  */
 import { describe, expect, it } from 'vitest';
 import { canonicalize } from './contracts/canonical.js';
 import { DetectorContractError, type Detector, type DraftFinding } from './contracts/detector.js';
 import { bundleHash, evidenceId, type CanaryMatchEvidence } from './contracts/evidence.js';
-import type { PrivacyFinding, SecurityObservation } from './contracts/report-v2.js';
+import type { PrivacyFinding } from './contracts/report-v2.js';
+import type { SecurityObservationV3 } from './contracts/report-v3.js';
 import { verifyReportIntegrity } from './contracts/verify.js';
-import { assess } from './assessment.js';
+import { summarise } from './assessment.js';
 import {
   DEFAULT_DETECTORS,
   RedactionError,
@@ -28,19 +30,26 @@ import {
 
 const evidenceOf = <T>(r: ReturnType<typeof sampleResult>, f: { evidence: { id: string }[] }) =>
   f.evidence.map((e) => r.bundle.items[e.id] as unknown as T);
+const recipientOf = (r: ReturnType<typeof sampleResult>, domain: string) =>
+  r.report.recipients.filter((x) => x.registrableDomain === domain);
 
 describe('canary-leak detector', () => {
   const r = sampleResult();
   const canary = r.report.privacy.findings.filter((f) => f.detector === 'canary-leak');
 
-  it('exact leak to analytics: issue / high / confirmed / counted, with redacted evidence', () => {
+  it('exact leak to analytics: issue / high / confirmed, with redacted evidence; tracking recipient', () => {
     const f = canary.find((x) => x.title.includes('api') || x.title.includes('segment.io'))!;
-    expect(f).toMatchObject({
-      kind: 'issue',
-      severity: 'high',
-      confidence: 'confirmed',
-      countsTowardPrivacyScore: true,
-    });
+    expect(f).toMatchObject({ kind: 'issue', severity: 'high', confidence: 'confirmed' });
+    expect(f).not.toHaveProperty('countsTowardPrivacyScore');
+    expect(recipientOf(r, 'segment.io')).toEqual([
+      expect.objectContaining({
+        class: 'analytics',
+        learned: { address: 'exact', addressPhases: ['post-connect'], ip: ['post-connect'] },
+        verdict: 'tracking',
+        rule: 'verdict.analytics-with-address@1',
+      }),
+    ]);
+    expect(recipientOf(r, 'segment.io')[0]!.findingIds).toContain(f.id);
     const [e] = evidenceOf<CanaryMatchEvidence>(r, f);
     expect(e).toMatchObject({
       type: 'canary-match',
@@ -57,27 +66,43 @@ describe('canary-leak detector', () => {
     ).toHaveLength(1);
   });
 
-  it('hashed leak: one severity lower, ledger charged × hashedMultiplier', () => {
+  it('hashed leak: one severity lower; the recipient learned the hashed address (still tracking)', () => {
     const f = canary.find((x) => x.title.startsWith('Hashed'))!;
     expect(f).toMatchObject({ severity: 'medium', kind: 'issue' });
-    const line = r.report.privacy.ledger.find((l) => l.findingIds.includes(f.id))!;
-    expect(line.rule).toBe('leak.error-monitoring × hashedMultiplier');
-    expect(line.points).toBe(12.5);
+    const [sentry] = recipientOf(r, 'sentry.io');
+    expect(sentry).toMatchObject({
+      class: 'error-monitoring',
+      learned: { address: 'hashed' },
+      verdict: 'tracking',
+      rule: 'verdict.error-monitoring-with-address@1',
+    });
+    expect(sentry!.findingIds).toContain(f.id);
   });
 
-  it('rpc leak is medium with an Anon-RPC remediation', () => {
+  it('rpc leak is medium with an Anon-RPC remediation; the RPC recipient is avoidable', () => {
     const f = canary.find((x) => x.title.includes('rpc-provider'))!;
     expect(f.severity).toBe('medium');
     expect(f.remediation).toMatch(/Anon-RPC/);
+    expect(recipientOf(r, 'infura.io')[0]).toMatchObject({
+      verdict: 'avoidable',
+      rule: 'verdict.rpc-with-address@1',
+    });
   });
 
-  it('storage persistence is an uncounted observation', () => {
+  it('storage persistence is an observation and makes no recipient', () => {
     const f = canary.find((x) => x.title.includes('local-storage'))!;
-    expect(f).toMatchObject({
-      kind: 'observation',
-      severity: 'info',
-      countsTowardPrivacyScore: false,
-    });
+    expect(f).toMatchObject({ kind: 'observation', severity: 'info' });
+    expect(r.report.recipients.flatMap((x) => x.findingIds)).not.toContain(f.id);
+    expect(recipientOf(r, 'example.org')).toEqual([]);
+  });
+
+  it('recipients are sorted unidentified, tracking, avoidable, expected; then domain', () => {
+    expect(r.report.recipients.map((x) => [x.verdict, x.registrableDomain])).toEqual([
+      ['tracking', 'segment.io'],
+      ['tracking', 'sentry.io'],
+      ['avoidable', 'infura.io'],
+      ['expected', 'googleapis.com'],
+    ]);
   });
 });
 
@@ -93,11 +118,20 @@ describe('ip-exposure detector', () => {
     ]);
     for (const f of ip) expect(f.evidence.length).toBeGreaterThan(0);
   });
-  it('ledger reproduces v1 contact penalties (2/domain pre, 3/domain post)', () => {
-    const pre = r.report.privacy.ledger.find((l) => l.rule === 'contact.perDomainPreConnect')!;
-    const post = r.report.privacy.ledger.find((l) => l.rule === 'contact.perDomainPostConnect')!;
-    expect(pre.points).toBe(2);
-    expect(post.points).toBe(9);
+  it('recipients record which phases learned the IP (1 before connect, 3 after)', () => {
+    const phases = Object.fromEntries(
+      r.report.recipients.map((x) => [x.registrableDomain, x.learned.ip]),
+    );
+    expect(phases).toEqual({
+      'googleapis.com': ['pre-connect'],
+      'infura.io': ['post-connect'],
+      'segment.io': ['post-connect'],
+      'sentry.io': ['post-connect'],
+    });
+    for (const f of ip) {
+      const domain = f.title.replace(/^Visitor IP exposed to (\S+).*$/, '$1');
+      expect(recipientOf(r, domain)[0]!.findingIds).toContain(f.id);
+    }
   });
   it('the evidence carries no volatile request counts', () => {
     const items = Object.values(r.bundle.items).filter((i) => i.type === 'third-party-contact');
@@ -183,14 +217,14 @@ describe('security-headers detector (security domain, never scored)', () => {
     expect(sampleResult({ capture: cap }).report.security.observations).toEqual([]);
   });
 
-  it('security observations never change the privacy score (P05-2)', () => {
+  it('security observations never change the privacy findings or recipients (P05-2)', () => {
     const withSec = sampleResult();
     const withoutSec = sampleResult({
       detectors: DEFAULT_DETECTORS.filter((d) => d.id !== 'security-headers'),
     });
     expect(withSec.report.security.observations.length).toBeGreaterThan(0);
-    expect(withSec.report.privacy.score).toBe(withoutSec.report.privacy.score);
-    expect(withSec.report.privacy.ledger).toEqual(withoutSec.report.privacy.ledger);
+    expect(withSec.report.privacy).toEqual(withoutSec.report.privacy);
+    expect(withSec.report.recipients).toEqual(withoutSec.report.recipients);
   });
 
   it('scorePrivacy refuses security observations at runtime', () => {
@@ -355,17 +389,32 @@ describe('evidence bundle and determinism (P05-4)', () => {
     expect(verifyReportIntegrity(forged, bundle).problems.join(' ')).toMatch(/findingSet digest/);
   });
 
-  it('page-load-failed: null score, empty ledger, findings still evidenced', () => {
-    const { report } = sampleResult({ status: 'page-load-failed' });
-    expect(report.privacy.score).toBeNull();
-    expect(report.privacy.ledger).toEqual([]);
+  it('page-load-failed: coverage none, no score anywhere, findings still evidenced', () => {
+    const { report, bundle } = sampleResult({ status: 'page-load-failed' });
     expect(report.privacy.coverage).toBe('none');
+    expect(Object.keys(report.privacy).sort()).toEqual(['coverage', 'findings']);
+    expect(verifyReportIntegrity(report, bundle)).toMatchObject({ ok: true });
   });
 
-  it('security observations are typed SecurityObservation with countsTowardPrivacyScore false', () => {
-    const obs: SecurityObservation[] = sampleResult().report.security.observations;
-    for (const o of obs) expect(o.countsTowardPrivacyScore).toBe(false);
+  it('report 3.0.0 carries no score, ledger or score flag', () => {
+    const { report } = sampleResult();
+    expect(report.reportVersion).toBe('3.0.0');
+    expect(JSON.stringify(report)).not.toMatch(/"score"|"ledger"|countsTowardPrivacyScore/);
+    const obs: SecurityObservationV3[] = report.security.observations;
+    for (const o of obs) expect(o.domain).toBe('security');
     expect(securityHeadersDetector.domain).toBe('security');
+  });
+
+  it('integrity: a recipient pointing at an unknown finding, or at nothing, is a problem', () => {
+    const { report, bundle } = sampleResult();
+    const forged = structuredClone(report);
+    forged.recipients[0]!.findingIds.push('F-0000000000000000');
+    expect(verifyReportIntegrity(forged, bundle).problems.join(' ')).toMatch(/unknown finding/);
+    const invented = structuredClone(report);
+    invented.recipients.push({ ...invented.recipients[0]!, registrableDomain: 'nowhere.example' });
+    expect(verifyReportIntegrity(invented, bundle).problems.join(' ')).toMatch(
+      /in no contact or evidence/,
+    );
   });
 });
 
@@ -390,9 +439,9 @@ describe('first party follows the page that loaded (redirects)', () => {
       (f) => f.detector === 'canary-leak' && f.title.includes('api.example.org'),
     );
     expect(own.length).toBeGreaterThan(0);
-    for (const f of own)
-      expect(f).toMatchObject({ kind: 'observation', countsTowardPrivacyScore: false });
+    for (const f of own) expect(f).toMatchObject({ kind: 'observation' });
     expect(r.report.contacts.some((c) => c.registrableDomain === 'example.org')).toBe(false);
+    expect(recipientOf(r, 'example.org')).toEqual([]);
     expect(r.report.scan.notes).toContain(
       'the target redirected to app.example.org; example.org is treated as first party',
     );
@@ -408,7 +457,7 @@ describe('first party follows the page that loaded (redirects)', () => {
   it('third parties are still third parties after a redirect', () => {
     const r = sampleResult({ target: 'https://app.example.net/', capture: capture() });
     const leakDomains = r.report.privacy.findings
-      .filter((f) => f.detector === 'canary-leak' && f.countsTowardPrivacyScore)
+      .filter((f) => f.detector === 'canary-leak' && f.kind === 'issue')
       .flatMap((f) => evidenceOf<CanaryMatchEvidence>(r, f).map((e) => e.registrableDomain));
     expect(new Set(leakDomains)).toEqual(new Set(['infura.io', 'segment.io', 'sentry.io']));
   });
@@ -482,7 +531,7 @@ describe('behaviour rule cannot soften a tracker leak (review findings)', () => 
   const rpc = (method = 'eth_chainId') => ({ jsonrpc: '2.0', id: 1, method, params: [] });
   const leakOf = (r: ReturnType<typeof sampleResult>, domain: string) =>
     r.report.privacy.findings.filter(
-      (f) => f.detector === 'canary-leak' && f.countsTowardPrivacyScore && f.title.includes(domain),
+      (f) => f.detector === 'canary-leak' && f.kind === 'issue' && f.title.includes(domain),
     );
   const withRequests = (...extra: ReturnType<typeof req>[]) => {
     const c = sampleCapture();
@@ -500,6 +549,9 @@ describe('behaviour rule cannot soften a tracker leak (review findings)', () => 
     const [f] = leakOf(r, 'tracker.example');
     expect(f).toMatchObject({ severity: 'high' });
     expect(f!.title).toContain('unknown-third-party');
+    expect(recipientOf(r, 'tracker.example')).toEqual([
+      expect.objectContaining({ class: 'unknown-third-party', verdict: 'unidentified' }),
+    ]);
   });
 
   it('a mixed batch (RPC + analytics event) is not RPC', () => {
@@ -514,7 +566,7 @@ describe('behaviour rule cannot soften a tracker leak (review findings)', () => 
     expect(leakOf(r, 'tracker.example')[0]).toMatchObject({ severity: 'high' });
   });
 
-  it('a domain with an RPC host and a REST host is classified once (not charged twice)', () => {
+  it('a domain with an RPC host and a REST host is classified once (one recipient)', () => {
     const r = sampleResult({
       capture: withRequests(
         post('https://rpc.vendor.example/', rpc('eth_getBalance')),
@@ -525,10 +577,16 @@ describe('behaviour rule cannot soften a tracker leak (review findings)', () => 
         }),
       ),
     });
-    const lines = r.report.privacy.ledger.filter(
-      (l) => l.rule.startsWith('leak.') && l.label.includes('vendor.example'),
-    );
-    expect(lines.map((l) => l.rule)).toEqual(['leak.unknown-third-party']);
+    expect(
+      recipientOf(r, 'vendor.example').map((x) => [x.class, x.hosts, x.learned.address, x.rule]),
+    ).toEqual([
+      [
+        'unknown-third-party',
+        ['api.vendor.example', 'rpc.vendor.example'],
+        'exact',
+        'verdict.unidentified-with-address@1',
+      ],
+    ]);
   });
 
   it('JSON-RPC over WebSocket qualifies like HTTP', () => {
@@ -546,6 +604,14 @@ describe('behaviour rule cannot soften a tracker leak (review findings)', () => 
     });
     const r = sampleResult({ capture: c });
     expect(leakOf(r, 'chain.example')[0]).toMatchObject({ severity: 'medium' });
+    // WebSocket only: no HTTP(S) contact, so no IP phase; still a recipient.
+    expect(recipientOf(r, 'chain.example')).toEqual([
+      expect.objectContaining({
+        class: 'rpc-provider',
+        learned: { address: 'exact', addressPhases: ['post-connect'], ip: [] },
+        verdict: 'avoidable',
+      }),
+    ]);
   });
 
   it('body-less preflights do not disqualify an RPC domain', () => {
@@ -588,7 +654,7 @@ describe('pureJsonRpcMethods', () => {
   });
 });
 
-describe('wallet-sdk recipients (report 2.2.0)', () => {
+describe('wallet-sdk recipients', () => {
   const capture = () => {
     const c = sampleCapture();
     c.requests.push(
@@ -612,25 +678,31 @@ describe('wallet-sdk recipients (report 2.2.0)', () => {
     },
   ];
 
-  it('a leak to a wallet SDK is medium, charged 20, with SDK-specific remediation', () => {
+  it('a leak to a wallet SDK is a medium issue with SDK-specific remediation; verdict expected, with the caveat', () => {
     const r = sampleResult({ capture: capture(), thirdPartyDb: db });
     const f = r.report.privacy.findings.find((x) => x.title.includes('walletsdk.example'))!;
-    expect(f).toMatchObject({ severity: 'medium', kind: 'issue', countsTowardPrivacyScore: true });
+    expect(f).toMatchObject({ severity: 'medium', kind: 'issue' });
     expect(f.remediation).toMatch(/SDK vendor/);
-    const line = r.report.privacy.ledger.find((l) => l.findingIds.includes(f.id))!;
-    expect(line).toMatchObject({ rule: 'leak.wallet-sdk', points: 20 });
+    const [sdk] = recipientOf(r, 'walletsdk.example');
+    expect(sdk).toMatchObject({
+      class: 'wallet-sdk',
+      verdict: 'expected',
+      rule: 'verdict.wallet-sdk-with-address@1',
+    });
+    expect(sdk!.reason).toMatch(/keeps its own record/);
+    expect(sdk!.findingIds).toContain(f.id);
     expect(r.report.contacts.find((c) => c.host === 'app.walletsdk.example')?.class).toBe(
       'wallet-sdk',
     );
-    expect(r.report.reportVersion).toBe('2.2.0');
+    expect(r.report.reportVersion).toBe('3.0.0');
     expect(r.bundle.bundleVersion).toBe('igris.evidence.v3');
   });
 
-  it('a wallet SDK alone is not the "tracking or unidentified" (critical) case', () => {
+  it('a wallet SDK alone is not the "address to trackers" case', () => {
     const only = sampleCapture();
     only.requests = only.requests.filter((q) => !/segment|sentry|infura/.test(q.url));
     only.requests.push(...capture().requests.slice(-1));
     const r = sampleResult({ capture: only, thirdPartyDb: db });
-    expect(assess(r.report, r.bundle).level).toBe('high');
+    expect(summarise(r.report, r.bundle).state).toBe('address-to-services');
   });
 });

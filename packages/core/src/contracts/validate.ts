@@ -23,8 +23,9 @@ import {
   REPORT_SCHEMA_2_2_0,
   REPORT_V2_0_VERSION,
   REPORT_V2_1_VERSION,
+  REPORT_V2_VERSION,
 } from './report-v2.js';
-import type { ReportV2 } from './report-v2.js';
+import { REPORT_SCHEMA_3_0_0, type ReportAny } from './report-v3.js';
 
 export class SchemaValidationError extends Error {
   constructor(
@@ -50,6 +51,7 @@ let compiled:
       bundle: ValidateFunction;
       report200: ValidateFunction;
       report210: ValidateFunction;
+      report220: ValidateFunction;
       report: ValidateFunction;
     }
   | undefined;
@@ -75,7 +77,8 @@ function validators() {
       bundle: ajv.compile(EVIDENCE_BUNDLE_SCHEMA),
       report200: ajv.compile(REPORT_SCHEMA_2_0_0),
       report210: ajv.compile(REPORT_SCHEMA_2_1_0),
-      report: ajv.compile(REPORT_SCHEMA_2_2_0),
+      report220: ajv.compile(REPORT_SCHEMA_2_2_0),
+      report: ajv.compile(REPORT_SCHEMA_3_0_0),
     };
   }
   return compiled;
@@ -101,12 +104,21 @@ export function validateEvidenceBundle(value: unknown): EvidenceBundleV1 {
       : check(validators().bundle, 'evidence bundle', value);
 }
 
-/** Validates report 2.0.0 / 2.1.0 (frozen) and 2.2.0, by reportVersion. */
-export function validateReportV2(value: unknown): ReportV2 {
+/**
+ * Validates every report version this code reads, by reportVersion: 2.0.0,
+ * 2.1.0, 2.2.0 (frozen) and 3.0.0 (current; also the schema any other
+ * version string is checked — and rejected — against).
+ */
+export function validateReport(value: unknown): ReportAny {
   const v = (value as { reportVersion?: unknown } | null)?.reportVersion;
   return v === REPORT_V2_0_VERSION
     ? check(validators().report200, 'report 2.0.0', value)
     : v === REPORT_V2_1_VERSION
       ? check(validators().report210, 'report 2.1.0', value)
-      : check(validators().report, 'report 2.2.0', value);
+      : v === REPORT_V2_VERSION
+        ? check(validators().report220, 'report 2.2.0', value)
+        : check(validators().report, 'report 3.0.0', value);
 }
+
+/** @deprecated The pre-3.0.0 name of validateReport (same behaviour: every readable version). */
+export const validateReportV2 = validateReport;

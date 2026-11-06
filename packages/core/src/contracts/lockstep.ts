@@ -27,6 +27,24 @@ import type {
   TelemetryV2,
 } from './report-v2.js';
 import { FINDING_KEYS, REPORT_V2_KEYS, SCAN_META_KEYS, TELEMETRY_KEYS } from './report-v2.js';
+import type {
+  FindingV3,
+  PrivacyFindingV3,
+  Recipient,
+  RecipientLearned,
+  ReportV3,
+  SecurityObservationV3,
+  Timeline,
+  TimelineRecipient,
+} from './report-v3.js';
+import {
+  FINDING_V3_KEYS,
+  RECIPIENT_KEYS,
+  RECIPIENT_LEARNED_KEYS,
+  REPORT_V3_KEYS,
+  TIMELINE_KEYS,
+  TIMELINE_RECIPIENT_KEYS,
+} from './report-v3.js';
 
 /** true iff the key list is exactly keyof T (no missing, no extra). */
 type ExactKeys<K extends readonly string[], T> = [Exclude<keyof T, K[number]>] extends [never]
@@ -47,6 +65,12 @@ export function _lockstep(): void {
   assertTrue<ExactKeys<typeof DOCUMENT_HEADERS_KEYS, DocumentHeadersEvidence>>(true);
   assertTrue<ExactKeys<typeof CONTACT_CLASSIFICATION_KEYS, ContactClassificationEvidence>>(true);
   assertTrue<ExactKeys<typeof DOCUMENT_HEADER_NAMES, DocumentHeadersEvidence['headers']>>(true);
+  assertTrue<ExactKeys<typeof FINDING_V3_KEYS, FindingV3>>(true);
+  assertTrue<ExactKeys<typeof RECIPIENT_KEYS, Recipient>>(true);
+  assertTrue<ExactKeys<typeof RECIPIENT_LEARNED_KEYS, RecipientLearned>>(true);
+  assertTrue<ExactKeys<typeof TIMELINE_KEYS, Timeline>>(true);
+  assertTrue<ExactKeys<typeof TIMELINE_RECIPIENT_KEYS, TimelineRecipient>>(true);
+  assertTrue<ExactKeys<typeof REPORT_V3_KEYS, ReportV3>>(true);
 
   // Privacy score and security observations are separate types: a security
   // observation is not a privacy finding, and it cannot count toward the score.
@@ -57,4 +81,13 @@ export function _lockstep(): void {
   const counted: SecurityObservation = { ...obs, countsTowardPrivacyScore: true };
   void asPrivacy;
   void counted;
+
+  // 3.0.0: the same separation by type, and no score flag at all.
+  const obs3 = {} as SecurityObservationV3;
+  // @ts-expect-error — a 3.0.0 security observation is not a privacy finding
+  const asPrivacy3: PrivacyFindingV3 = obs3;
+  // @ts-expect-error — 3.0.0 findings carry no countsTowardPrivacyScore
+  const flagged: FindingV3 = { ...obs3, countsTowardPrivacyScore: false };
+  void asPrivacy3;
+  void flagged;
 }

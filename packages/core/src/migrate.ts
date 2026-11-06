@@ -1,4 +1,12 @@
 /**
+ * Migrations to the current report version (3.0.0):
+ *
+ *   1.x ──migrateReportV1toV2──▶ 2.2.0 ──migrateReportV2toV3──▶ 3.0.0
+ *   2.0.0 / 2.1.0 / 2.2.0 ───────────────migrateReportV2toV3──▶ 3.0.0
+ *
+ * `migrateToCurrent` takes any readable report (+ bundle) and returns a
+ * schema-valid, integrity-verified 3.0.0 ScanResult.
+ *
  * Report v1 (1.0.0 / 1.1.0) → Report v2 + evidence bundle.
  *
  * Guarantees (regression-tested over every committed v1 report):
@@ -26,11 +34,13 @@ import {
   EVIDENCE_BUNDLE_VERSION,
   bundleHash,
   type CanaryMatchEvidence,
+  type EvidenceBundle,
   type EvidenceItem,
 } from './contracts/evidence.js';
 import { REPORT_V2_VERSION, type ReportV2, type TelemetryV2 } from './contracts/report-v2.js';
-import { validateEvidenceBundle, validateReportV2 } from './contracts/validate.js';
-import { findingSetDigest } from './contracts/verify.js';
+import { REPORT_V3_VERSION, isReportV3, type ReportV3 } from './contracts/report-v3.js';
+import { validateEvidenceBundle, validateReport } from './contracts/validate.js';
+import { findingSetDigest, verifyReportIntegrity } from './contracts/verify.js';
 import {
   CANARY_LEAK_DETECTOR_ID,
   CANARY_LEAK_DETECTOR_VERSION,
@@ -47,9 +57,12 @@ import {
   buildBundle,
   finalizeDrafts,
   partitionFindings,
+  toFindingV3,
   type ScanResult,
+  type ScanResultV2,
 } from './engine.js';
 import { scorePrivacy } from './scoring-v2.js';
+import { computeRecipients } from './verdicts.js';
 
 export class MigrationError extends Error {
   constructor(message: string) {
@@ -81,7 +94,7 @@ export function isReportV1(value: unknown): boolean {
   return typeof v === 'string' && /^1\.\d+\.\d+$/.test(v);
 }
 
-export function migrateReportV1toV2(input: unknown): ScanResult {
+export function migrateReportV1toV2(input: unknown): ScanResultV2 {
   const v1 = validateV1(input);
   const notes = [...v1.errors];
   // Known v1 defect: contacts with an empty hostname (scanner bug fixed in
@@ -219,6 +232,134 @@ export function migrateReportV1toV2(input: unknown): ScanResult {
     migratedFrom: v1.reportVersion,
   };
   validateEvidenceBundle(bundle);
-  validateReportV2(report);
+  validateReport(report);
   return { report, bundle };
+}
+
+const V2_VERSIONS: ReadonlySet<string> = new Set(['2.0.0', '2.1.0', '2.2.0']);
+
+/**
+ * Report 2.x (+ its bundle) → Report 3.0.0 + an `igris.evidence.v3` bundle.
+ *
+ *  - The input must be schema-valid and pass verifyReportIntegrity;
+ *    otherwise MigrationError (a broken report is never "upgraded").
+ *  - Findings are carried over field for field, minus
+ *    `countsTowardPrivacyScore`; ids, fingerprints and evidence refs are
+ *    unchanged, so `findingSet` is identical.
+ *  - `privacy.score` and `privacy.ledger` are dropped.
+ *  - `recipients` are computed from contacts + findings + evidence with the
+ *    engine's rules (verdicts.ts); `timeline` is null (2.x recorded no times).
+ *  - The bundle is re-labelled `igris.evidence.v3` with its items unchanged
+ *    (v1 / v2 items are valid v3 items; item ids are content hashes of the
+ *    items, so they do not change). `evidence.bundleVersion` and
+ *    `evidence.sha256` are updated, because the bundle hash covers the label.
+ *  - `migratedFrom` keeps the ORIGINAL version: the 2.x report's own
+ *    migratedFrom ("1.x.y") when it has one, else its reportVersion.
+ *  - One note states what changed.
+ */
+export function migrateReportV2toV3(
+  input: ReportV2,
+  inputBundle: EvidenceBundle,
+): { report: ReportV3; bundle: EvidenceBundle } {
+  const version = (input as { reportVersion?: unknown } | null)?.reportVersion;
+  if (typeof version !== 'string' || !V2_VERSIONS.has(version)) {
+    throw new MigrationError(`not a 2.x report (reportVersion ${String(version)})`);
+  }
+  let source: ReportV2;
+  try {
+    source = validateReport(input) as ReportV2;
+    validateEvidenceBundle(inputBundle);
+  } catch (err) {
+    throw new MigrationError(`refusing to migrate an invalid report: ${(err as Error).message}`);
+  }
+  const integrity = verifyReportIntegrity(source, inputBundle);
+  if (!integrity.ok) {
+    throw new MigrationError(
+      `refusing to migrate a report that fails integrity: ${integrity.problems.slice(0, 3).join('; ')}`,
+    );
+  }
+
+  const bundle: EvidenceBundle = {
+    bundleVersion: EVIDENCE_BUNDLE_VERSION,
+    items: { ...inputBundle.items },
+  };
+  const privacy = source.privacy.findings.map(toFindingV3);
+  const security = source.security.observations.map(toFindingV3);
+  const recipients = computeRecipients({
+    contacts: source.contacts,
+    findings: [...privacy, ...security],
+    bundle,
+  });
+  const scoreNote =
+    source.privacy.score === null ? 'no score' : `score ${String(source.privacy.score)}`;
+  const report: ReportV3 = {
+    reportVersion: REPORT_V3_VERSION,
+    scan: {
+      ...source.scan,
+      notes: [
+        ...source.scan.notes,
+        `migration: report ${source.reportVersion} → ${REPORT_V3_VERSION}; ${scoreNote} and its ledger removed (3.0.0 has no score); recipients derived from contacts and evidence; no timeline (not recorded)`,
+      ],
+    },
+    detectors: source.detectors,
+    privacy: { coverage: source.privacy.coverage, findings: privacy },
+    security: { observations: security },
+    contacts: source.contacts,
+    wallet: source.wallet,
+    telemetry: source.telemetry,
+    evidence: {
+      ...source.evidence,
+      bundleVersion: EVIDENCE_BUNDLE_VERSION,
+      sha256: bundleHash(bundle),
+    },
+    findingSet: findingSetDigest([...privacy, ...security]),
+    recipients,
+    timeline: null,
+    rpc: null,
+    migratedFrom: source.migratedFrom ?? source.reportVersion,
+  };
+  validateEvidenceBundle(bundle);
+  validateReport(report);
+  const check = verifyReportIntegrity(report, bundle);
+  if (!check.ok) {
+    throw new MigrationError(`migrated report fails integrity: ${check.problems.join('; ')}`);
+  }
+  return { report, bundle };
+}
+
+/** Report v1 → 3.0.0 (via 2.2.0). */
+export function migrateReportV1toV3(input: unknown): ScanResult {
+  const v2 = migrateReportV1toV2(input);
+  return migrateReportV2toV3(v2.report, v2.bundle);
+}
+
+/**
+ * Any readable report (+ bundle) → a schema-valid, integrity-verified
+ * 3.0.0 ScanResult. v1 reports need no bundle (it is rebuilt); 2.x and 3.0.0
+ * reports need theirs. Throws MigrationError (or SchemaValidationError for a
+ * 3.0.0 report that does not validate) instead of returning anything
+ * unverified. `migratedFrom` is set when the input was not already 3.0.0.
+ */
+export function migrateToCurrent(
+  rawReport: unknown,
+  rawBundle?: unknown,
+): ScanResult & { migratedFrom?: string } {
+  if (isReportV1(rawReport)) {
+    const result = migrateReportV1toV3(rawReport);
+    return { ...result, migratedFrom: (rawReport as { reportVersion: string }).reportVersion };
+  }
+  if (rawBundle === undefined)
+    throw new MigrationError('a 2.x / 3.x report needs its evidence bundle');
+  const report = validateReport(rawReport);
+  const bundle = validateEvidenceBundle(rawBundle);
+  if (isReportV3(report)) {
+    const integrity = verifyReportIntegrity(report, bundle);
+    if (!integrity.ok) {
+      throw new MigrationError(
+        `integrity check failed: ${integrity.problems.slice(0, 3).join('; ')}`,
+      );
+    }
+    return { report, bundle };
+  }
+  return { ...migrateReportV2toV3(report, bundle), migratedFrom: report.reportVersion };
 }

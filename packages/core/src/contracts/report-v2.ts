@@ -44,8 +44,8 @@ export const REPORT_V2_0_VERSION = '2.0.0' as const;
  */
 export const REPORT_V2_1_VERSION = '2.1.0' as const;
 /**
- * The version new reports are written with. 2.2.0 = 2.1.0 + the
- * `wallet-sdk` recipient class (contacts) + evidence bundle v3.
+ * The last 2.x version (written until report 3.0.0, report-v3.ts). 2.2.0 =
+ * 2.1.0 + the `wallet-sdk` recipient class (contacts) + evidence bundle v3.
  */
 export const REPORT_V2_VERSION = '2.2.0' as const;
 export type ReportVersion =
@@ -618,7 +618,7 @@ export const REPORT_SCHEMA_2_1_0 = {
 // contracts.test.ts asserts that nothing else differs.
 // ---------------------------------------------------------------------------
 
-/** Current (2.2.0) report schema. */
+/** Report schema 2.2.0 (frozen; the current schema is REPORT_SCHEMA_3_0_0). */
 export const REPORT_SCHEMA_2_2_0 = {
   ...REPORT_SCHEMA_2_1_0,
   $id: 'https://igris.dev/schemas/report-2.2.0.json',
@@ -646,5 +646,5 @@ export const REPORT_SCHEMA_2_2_0 = {
   },
 } as const;
 
-/** The current report schema (alias). */
+/** The latest 2.x report schema (alias). */
 export const REPORT_V2_SCHEMA = REPORT_SCHEMA_2_2_0;

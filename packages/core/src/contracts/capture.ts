@@ -22,6 +22,8 @@ export interface CapturedRequest {
   failed: boolean;
   /** Set-Cookie headers observed on the response. */
   setCookies: string[];
+  /** ms since navigation start when the request was issued (timeline only; never evidence). */
+  t?: number;
 }
 
 export interface CapturedWsFrame {
@@ -29,6 +31,8 @@ export interface CapturedWsFrame {
   url: string;
   direction: 'sent' | 'received';
   payload: string;
+  /** ms since navigation start (timeline only; never evidence). */
+  t?: number;
 }
 
 export interface CapturedStorage {
@@ -64,4 +68,20 @@ export interface Capture {
   cookies: CapturedCookie[];
   /** Undefined when no main-document response was observed. */
   mainDocument?: CapturedMainDocument;
+  /** Scan milestones, ms since navigation start (timeline only). */
+  milestones?: CapturedMilestone[];
+}
+
+export const MILESTONE_EVENTS = [
+  'page-loaded',
+  'connect-started',
+  'accounts-requested',
+  'connect-finished',
+  'observation-ended',
+] as const;
+export type MilestoneEvent = (typeof MILESTONE_EVENTS)[number];
+
+export interface CapturedMilestone {
+  event: MilestoneEvent;
+  t: number;
 }

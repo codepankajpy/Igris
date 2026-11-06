@@ -3,8 +3,8 @@
 Normative specification of everything IGRIS produces or consumes across a
 trust boundary. The code is authoritative where this document and the code
 disagree. Such a disagreement is a bug: report it. The JSON Schemas are
-exported from `@igris/core` (`REPORT_V2_SCHEMA`, `EVIDENCE_BUNDLE_SCHEMA`,
-`EVIDENCE_ITEM_SCHEMA`).
+exported from `@igris/core` (`REPORT_V3_SCHEMA`, `REPORT_V2_SCHEMA`,
+`EVIDENCE_BUNDLE_SCHEMA`, `EVIDENCE_ITEM_SCHEMA`).
 
 | Contract               | Identifier                                       | Where                                      |
 | ---------------------- | ------------------------------------------------ | ------------------------------------------ |
@@ -12,7 +12,7 @@ exported from `@igris/core` (`REPORT_V2_SCHEMA`, `EVIDENCE_BUNDLE_SCHEMA`,
 | Content hash           | sha256 over canonical bytes, 64 lowercase hex    | `contracts/hash.ts`                        |
 | Capture                | v1 (internal, unredacted — never published)      | `contracts/capture.ts`                     |
 | Evidence bundle        | `igris.evidence.v3` (writes); v1, v2 still read  | `contracts/evidence.ts`                    |
-| Report                 | `"2.2.0"` (writes); `"2.0.0"`, `"2.1.0"` read    | `contracts/report-v2.ts`                   |
+| Report                 | `"3.0.0"` (writes, proposed); `"2.x"` read       | `contracts/report-v{2,3}.ts`               |
 | Detector API           | v1                                               | `contracts/detector.ts`, `engine.ts`       |
 | Scanner node / profile | `igris.node.v1` / `igris.scanner.v1`             | `packages/registry/src/identity.ts`        |
 | Registry entity        | Arkiv schema `igris.scan.v1`, summary payload v2 | `packages/registry/src/{schema,record}.ts` |
@@ -42,8 +42,8 @@ example.
 
 On disk, `evidence.json` is written as the exact canonical bytes, so
 `shasum -a 256 evidence.json` equals `report.evidence.sha256`. `report.json`
-is pretty-printed; its content hash is `contentHash(report)`, which
-`igris verify` prints.
+is pretty-printed; its content hash is `contentHash(report)` — the
+`scanId` attribute of its Arkiv `igris.scan.v2` entity.
 
 ## Evidence bundle `igris.evidence.v1`
 
@@ -230,6 +230,62 @@ class existed such vendors could only be `unknown-third-party`.
 - Scoring: a leak to a `wallet-sdk` recipient is severity medium and costs
   20 points (docs/SCORING.md); the `canary-leak` detector is 1.1.0.
 
+## Report `3.0.0` (proposed, pending approval)
+
+Specified in [docs/design/REPORT-3.0.0.md](design/REPORT-3.0.0.md), which is
+normative for it. Implemented in `contracts/report-v3.ts`, `verdicts.ts`,
+`timeline.ts`; **not yet frozen**: its schema is not hash-pinned until the
+project owner approves the design document (a TODO marks the pin's place in
+`contracts.test.ts`). The engine writes 3.0.0 with `igris.evidence.v3`
+bundles; 2.0.0 / 2.1.0 / 2.2.0 reports still validate (`validateReport`,
+which `validateReportV2` now aliases) and verify.
+
+3.0.0 has **no score**. It is 2.2.0 with exactly these changes (a test
+strips them and asserts that nothing else differs):
+
+- removed: `privacy.score`, `privacy.ledger`, and every finding's
+  `countsTowardPrivacyScore`. Findings are otherwise identical (same ids,
+  fingerprints, evidence), so `findingSet` is comparable with 2.x reports;
+- added `recipients[]`: one per (registrable domain, class), never first
+  party, with `hosts`, `learned { address: exact|hashed|possible|none,
+addressPhases, ip }`, a `verdict` (`unidentified` > `tracking` >
+  `avoidable` > `expected`), the `rule` that gave it (`verdict.<name>@1`), a
+  one-sentence `reason`, and the `findingIds` about it. Sorted by verdict,
+  domain, class. The verdict table is in the design document and in
+  `verdicts.ts`; `possible` (truncated display form only) counts as no
+  address;
+- added `timeline` (volatile, like `telemetry`; `null` when the capture
+  recorded no times): `origin: "navigation-start"`, `milestones` (≤ 20),
+  `recipients` (same keys and order as `recipients[]`, `firstContactMs`,
+  `firstAddressMs`), `requestsPerSecond` (dense 1 s buckets, ≤ 600, first vs
+  third party). All times are integer ms ≥ 0; the bundle never holds times;
+- `migratedFrom` accepts `1.x.y` and `2.x.y`.
+
+Integrity (`verifyReportIntegrity`): 3.0.0 pairs with `igris.evidence.v3`;
+ledger checks apply to 2.x only; for 3.0.0 every `recipients[].findingIds`
+entry must exist, every recipient must appear in `contacts` or in a
+canary-match item a finding references, and the timeline's recipient keys
+must equal the report's.
+
+Migration `migrateReportV2toV3(report, bundle)` refuses an invalid or
+unverifiable input, drops score / ledger / the score flag, computes
+`recipients` with the engine's rules, sets `timeline: null`, re-labels the
+bundle `igris.evidence.v3` (items and their ids unchanged; `evidence.sha256`
+updated because the hash covers the label) and sets `migratedFrom` to the
+original version (a 1.x report keeps its 1.x origin). v1 reports reach
+3.0.0 through 2.2.0 (`migrateReportV1toV3`); `migrateToCurrent(report,
+bundle?)` reads any version and returns a verified 3.0.0 result.
+
+`summarise(report, bundle)` replaces `assess()`: a descriptive `state`
+(`not-observed`, `address-to-trackers`, `address-to-services`,
+`no-address-observed`), a headline and points, with no level and no score.
+
+Nothing in a 3.0.0 report is scored. The scoring code (`scoring-v2.ts`,
+`weights.ts`) is still used internally: to cross-check 1.x → 2.x migrations,
+and by the detector API, where a draft's `countsTowardPrivacyScore` sets a
+canary leak's severity (and must name a weight rule). The flag never reaches
+a 3.0.0 report.
+
 ## Detector API v1
 
 ```ts
@@ -298,15 +354,15 @@ are in `packages/core/test-fixtures/v1/`; their provenance is in its README.
 
 ## Scanner identity
 
-- **`igris scanner init --name <n>`** generates a key at
+- **`pnpm scanner:init <name>`** (the backend operator's one-time setup) generates a key at
   `$IGRIS_HOME/scanners/<address>/key` (mode 0600, directory 0700) and
   writes the profile `igris.scanner.v1`
   `{ address, name, nodeId, createdAt, origin }`.
 - **`igris.node.v1` `{ nodeId }`** identifies the machine. A profile whose
   `nodeId` is not this node's is refused for signing: a copied `~/.igris`
   is not an independent scanner.
-- **`igris scanner import`** refuses a key that any local profile already
-  claims.
+- **Importing a key** (`importScanner` in `packages/registry/src/identity.ts`)
+  refuses a key that any local profile already claims.
 - **Keys are never read from environment variables and never printed.**
   Group- or world-readable key files are refused.
 - **Stated limitation:** two machines that each import the same key by hand

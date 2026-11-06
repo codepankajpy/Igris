@@ -32,12 +32,23 @@ import {
   TELEMETRY_KEYS,
 } from './report-v2.js';
 import {
+  FINDING_V3_KEYS,
+  RECIPIENT_KEYS,
+  RECIPIENT_LEARNED_KEYS,
+  REPORT_SCHEMA_3_0_0,
+  REPORT_V3_KEYS,
+  REPORT_V3_REQUIRED,
+  TIMELINE_KEYS,
+  TIMELINE_RECIPIENT_KEYS,
+} from './report-v3.js';
+import {
   SchemaValidationError,
   validateEvidenceBundle,
   validateEvidenceItem,
+  validateReport,
   validateReportV2,
 } from './validate.js';
-import { sampleResult } from '../test-helpers.js';
+import { req, sampleCapture, sampleResult, sampleResultV2 } from '../test-helpers.js';
 import { canonicalize } from './canonical.js';
 import { contentHash } from './hash.js';
 import { verifyReportIntegrity } from './verify.js';
@@ -69,6 +80,28 @@ describe('key lists == JSON Schema properties == required', () => {
     ],
     ['scan meta (2.0.0, frozen)', SCAN_META_KEYS_2_0_0, REPORT_SCHEMA_2_0_0.properties.scan],
     ['telemetry', TELEMETRY_KEYS, REPORT_V2_SCHEMA.properties.telemetry.anyOf[1]],
+    [
+      'finding 3.0.0 (privacy)',
+      FINDING_V3_KEYS,
+      REPORT_SCHEMA_3_0_0.properties.privacy.properties.findings.items,
+    ],
+    [
+      'finding 3.0.0 (security)',
+      FINDING_V3_KEYS,
+      REPORT_SCHEMA_3_0_0.properties.security.properties.observations.items,
+    ],
+    ['recipient', RECIPIENT_KEYS, REPORT_SCHEMA_3_0_0.properties.recipients.items],
+    [
+      'recipient.learned',
+      RECIPIENT_LEARNED_KEYS,
+      REPORT_SCHEMA_3_0_0.properties.recipients.items.properties.learned,
+    ],
+    ['timeline', TIMELINE_KEYS, REPORT_SCHEMA_3_0_0.properties.timeline.anyOf[1]],
+    [
+      'timeline.recipients',
+      TIMELINE_RECIPIENT_KEYS,
+      REPORT_SCHEMA_3_0_0.properties.timeline.anyOf[1].properties.recipients.items,
+    ],
   ];
   for (const [name, keys, schema] of cases) {
     it(name, () => {
@@ -86,6 +119,10 @@ describe('key lists == JSON Schema properties == required', () => {
     expect(props(REPORT_V2_SCHEMA)).toEqual(sorted(REPORT_V2_KEYS));
     expect(sorted(REPORT_V2_SCHEMA.required)).toEqual(sorted(REPORT_V2_REQUIRED));
   });
+  it('report 3.0.0', () => {
+    expect(props(REPORT_SCHEMA_3_0_0)).toEqual(sorted(REPORT_V3_KEYS));
+    expect(sorted(REPORT_SCHEMA_3_0_0.required)).toEqual(sorted(REPORT_V3_REQUIRED));
+  });
   it('every object schema forbids unknown properties', () => {
     const walk = (node: unknown, path: string): string[] => {
       if (!node || typeof node !== 'object') return [];
@@ -95,6 +132,7 @@ describe('key lists == JSON Schema properties == required', () => {
       return [...bad, ...Object.entries(n).flatMap(([k, v]) => walk(v, `${path}/${k}`))];
     };
     expect([
+      ...walk(REPORT_SCHEMA_3_0_0, '#'),
       ...walk(REPORT_V2_SCHEMA, '#'),
       ...walk(EVIDENCE_ITEM_SCHEMA, '#'),
       ...walk(EVIDENCE_BUNDLE_SCHEMA, '#'),
@@ -106,10 +144,14 @@ describe('key lists == JSON Schema properties == required', () => {
 });
 
 describe('schema validation of real and hostile documents', () => {
-  it('a real engine result validates', () => {
+  it('a real engine result (3.0.0) and its 2.2.0 counterpart validate', () => {
     const { report, bundle } = sampleResult();
-    expect(() => validateReportV2(report)).not.toThrow();
+    expect(report.reportVersion).toBe('3.0.0');
+    expect(() => validateReport(report)).not.toThrow();
     expect(() => validateEvidenceBundle(bundle)).not.toThrow();
+    expect(() => validateReport(sampleResultV2().report)).not.toThrow();
+    // The deprecated name keeps working, for every version.
+    expect(validateReportV2).toBe(validateReport);
   });
 
   const reportMutations: Array<[string, (r: Record<string, any>) => void]> = [
@@ -124,10 +166,59 @@ describe('schema validation of real and hostile documents', () => {
       (r) => r.security.observations.push(r.privacy.findings[0]),
     ],
     [
-      'security observation that counts toward the score',
-      (r) => (r.security.observations[0].countsTowardPrivacyScore = true),
+      'a 2.x score flag on a security observation',
+      (r) => (r.security.observations[0].countsTowardPrivacyScore = false),
     ],
-    ['score out of range', (r) => (r.privacy.score = 101)],
+    [
+      'a 2.x score flag on a privacy finding',
+      (r) => (r.privacy.findings[0].countsTowardPrivacyScore = true),
+    ],
+    ['a privacy score', (r) => (r.privacy.score = 80)],
+    ['a null privacy score', (r) => (r.privacy.score = null)],
+    ['a ledger', (r) => (r.privacy.ledger = [])],
+    ['a top-level score', (r) => (r.score = 80)],
+    ['missing recipients', (r) => delete r.recipients],
+    ['missing timeline', (r) => delete r.timeline],
+    ['unknown verdict', (r) => (r.recipients[0].verdict = 'fine')],
+    ['first party as a recipient', (r) => (r.recipients[0].class = 'first-party')],
+    ['recipient without hosts', (r) => (r.recipients[0].hosts = [])],
+    ['unknown address exposure', (r) => (r.recipients[0].learned.address = 'some')],
+    ['rule without version', (r) => (r.recipients[0].rule = 'verdict.analytics')],
+    ['unknown recipient field', (r) => (r.recipients[0].score = 3)],
+    [
+      'timeline with a negative time',
+      (r) => (r.timeline = { ...TIMELINE, milestones: [{ event: 'page-loaded', t: -1 }] }),
+    ],
+    [
+      'timeline with a fractional time',
+      (r) => (r.timeline = { ...TIMELINE, milestones: [{ event: 'page-loaded', t: 1.5 }] }),
+    ],
+    [
+      'timeline with an unknown milestone',
+      (r) => (r.timeline = { ...TIMELINE, milestones: [{ event: 'lunch', t: 1 }] }),
+    ],
+    [
+      'timeline with 601 one-second buckets',
+      (r) =>
+        (r.timeline = {
+          ...TIMELINE,
+          requestsPerSecond: Array.from({ length: 601 }, (_, i) => ({
+            t: i * 1000,
+            firstParty: 0,
+            thirdParty: 0,
+          })),
+        }),
+    ],
+    [
+      'timeline with 21 milestones',
+      (r) =>
+        (r.timeline = {
+          ...TIMELINE,
+          milestones: Array.from({ length: 21 }, () => ({ event: 'page-loaded', t: 0 })),
+        }),
+    ],
+    ['timeline with another origin', (r) => (r.timeline = { ...TIMELINE, origin: 'epoch' })],
+    ['migratedFrom 3.x', (r) => (r.migratedFrom = '3.0.0')],
     ['bad evidence hash', (r) => (r.evidence.sha256 = 'abc')],
     ['missing findingSet', (r) => delete r.findingSet],
     ['wrong report version', (r) => (r.reportVersion = '1.1.0')],
@@ -137,9 +228,19 @@ describe('schema validation of real and hostile documents', () => {
     it(`report rejects: ${name}`, () => {
       const r = structuredClone(sampleResult().report) as unknown as Record<string, any>;
       mutate(r);
-      expect(() => validateReportV2(r)).toThrow(SchemaValidationError);
+      expect(() => validateReport(r)).toThrow(SchemaValidationError);
     });
   }
+
+  it('2.2.0 still rejects a security observation that counts and an out-of-range score', () => {
+    const base = sampleResultV2().report;
+    const counted = structuredClone(base) as unknown as Record<string, any>;
+    counted.security.observations[0].countsTowardPrivacyScore = true;
+    expect(() => validateReport(counted)).toThrow(SchemaValidationError);
+    const range = structuredClone(base) as unknown as Record<string, any>;
+    range.privacy.score = 101;
+    expect(() => validateReport(range)).toThrow(SchemaValidationError);
+  });
 
   it('evidence items reject unknown types, extra fields and bad enums', () => {
     const base = Object.values(sampleResult().bundle.items).find((i) => i.type === 'canary-match')!;
@@ -243,13 +344,14 @@ describe('P0.5 contracts are frozen; P1 successors are additive and, once approv
     ).toThrow();
   });
 
-  it('a report/bundle version mismatch is an integrity problem', () => {
-    const { report, bundle } = sampleResult();
-    expect(report.reportVersion).toBe('2.2.0');
-    expect(bundle.bundleVersion).toBe('igris.evidence.v3');
-    for (const other of ['igris.evidence.v1', 'igris.evidence.v2'] as const) {
-      const wrong = { ...bundle, bundleVersion: other };
-      expect(verifyReportIntegrity(report, wrong).problems.join(' ')).toMatch(/cannot reference/);
+  it('a report/bundle version mismatch is an integrity problem (2.2.0 and 3.0.0 ↔ v3)', () => {
+    for (const { report, bundle } of [sampleResult(), sampleResultV2()]) {
+      expect(bundle.bundleVersion).toBe('igris.evidence.v3');
+      expect(verifyReportIntegrity(report, bundle)).toMatchObject({ ok: true });
+      for (const other of ['igris.evidence.v1', 'igris.evidence.v2'] as const) {
+        const wrong = { ...bundle, bundleVersion: other };
+        expect(verifyReportIntegrity(report, wrong).problems.join(' ')).toMatch(/cannot reference/);
+      }
     }
   });
 });
@@ -301,7 +403,7 @@ describe('Report 2.2.0 / igris.evidence.v3: the wallet-sdk class (approved 2026-
   });
 
   it('a 2.1.0 report with its v2 bundle still validates and verifies', () => {
-    const { report, bundle } = sampleResult();
+    const { report, bundle } = sampleResultV2();
     const v2 = { ...bundle, bundleVersion: 'igris.evidence.v2' as const };
     const r210 = {
       ...report,
@@ -318,7 +420,7 @@ describe('Report 2.2.0 / igris.evidence.v3: the wallet-sdk class (approved 2026-
   });
 
   it('wallet-sdk is valid in 2.2.0 / v3 and rejected by 2.1.0 / v2', () => {
-    const { report, bundle } = sampleResult();
+    const { report, bundle } = sampleResultV2();
     const contact = { ...report.contacts[0]!, class: 'wallet-sdk' as const };
     expect(() => validateReportV2({ ...report, contacts: [contact] })).not.toThrow();
     expect(() =>
@@ -339,6 +441,134 @@ describe('Report 2.2.0 / igris.evidence.v3: the wallet-sdk class (approved 2026-
     ).toThrow();
   });
 });
+
+describe('Report 3.0.0 (PROPOSED — pending owner approval; docs/design/REPORT-3.0.0.md)', () => {
+  // TODO(report-3.0.0 approval): once the project owner approves
+  // docs/design/REPORT-3.0.0.md, pin contentHash(REPORT_SCHEMA_3_0_0) here,
+  // like the 2.x pins above, and mark it FROZEN in report-v3.ts and
+  // docs/CONTRACTS.md. Until then 3.0.0 may still change.
+
+  it('the frozen 2.x / evidence schemas are untouched by deriving 3.0.0 from them', () => {
+    // report-v3.ts builds on REPORT_SCHEMA_2_2_0; deriving must never mutate it.
+    void REPORT_SCHEMA_3_0_0;
+    expect(contentHash(REPORT_SCHEMA_2_0_0)).toBe(
+      'a6d1eea9638b877e03d4b54b6a934cfb0fa50cd00966f30c0651dd44716ff2b4',
+    );
+    expect(contentHash(REPORT_SCHEMA_2_1_0)).toBe(
+      '9ee25dd09c0769879d2b50d8add238f6cc5b4c48382f84982ab85f5aee5406f1',
+    );
+    expect(contentHash(REPORT_SCHEMA_2_2_0)).toBe(
+      '49a585460635b60d0ff2862057fe532fbbabb08c91022fea03f795d7ba5cced2',
+    );
+    expect(contentHash(EVIDENCE_ITEM_SCHEMA)).toBe(
+      '578bfe794bb8cdfd0f4ecb3f3603a6b6fb3e8b46bc25fdc5070950b725f6b687',
+    );
+    expect(contentHash(EVIDENCE_BUNDLE_SCHEMA)).toBe(
+      'e80f9563020a29a763646c11ab627a280b43ba68627d50b31708ecbbba62a91c',
+    );
+  });
+
+  it('3.0.0 differs from 2.2.0 ONLY by the documented removals and additions', () => {
+    const findings = (c: any) => [
+      c.properties.privacy.properties.findings.items,
+      c.properties.security.properties.observations.items,
+    ];
+    const strip3 = (schema: unknown) => {
+      const c = structuredClone(schema) as any;
+      delete c.$id;
+      delete c.title;
+      delete c.required;
+      delete c.properties.reportVersion;
+      delete c.properties.recipients; // added
+      delete c.properties.timeline; // added
+      delete c.properties.rpc; // added
+      delete c.properties.migratedFrom; // widened to 1.x and 2.x
+      delete c.properties.privacy.required;
+      for (const f of findings(c)) delete f.required;
+      return canonicalize(c);
+    };
+    const strip22 = (schema: unknown) => {
+      const c = structuredClone(schema) as any;
+      delete c.$id;
+      delete c.title;
+      delete c.required;
+      delete c.properties.reportVersion;
+      delete c.properties.migratedFrom;
+      delete c.properties.privacy.required;
+      delete c.properties.privacy.properties.score; // removed
+      delete c.properties.privacy.properties.ledger; // removed
+      for (const f of findings(c)) {
+        delete f.required;
+        delete f.properties.countsTowardPrivacyScore; // removed
+      }
+      return canonicalize(c);
+    };
+    expect(strip3(REPORT_SCHEMA_3_0_0)).toBe(strip22(REPORT_SCHEMA_2_2_0));
+
+    // The stripped parts, exactly:
+    expect(REPORT_SCHEMA_3_0_0.properties.reportVersion).toEqual({ const: '3.0.0' });
+    expect(REPORT_SCHEMA_3_0_0.required).toEqual([
+      ...REPORT_SCHEMA_2_2_0.required,
+      'recipients',
+      'timeline',
+      'rpc',
+    ]);
+    expect(REPORT_SCHEMA_3_0_0.properties.privacy.required).toEqual(['coverage', 'findings']);
+    for (const f of findings(REPORT_SCHEMA_3_0_0)) {
+      expect(f.required).toEqual(FINDING_KEYS.filter((k) => k !== 'countsTowardPrivacyScore'));
+    }
+    expect(REPORT_SCHEMA_3_0_0.properties.migratedFrom).toEqual({
+      type: 'string',
+      pattern: '^[12]\\.\\d+\\.\\d+$',
+    });
+    expect(REPORT_SCHEMA_3_0_0.properties.evidence).toEqual(
+      REPORT_SCHEMA_2_2_0.properties.evidence,
+    );
+  });
+
+  it('requires recipients and timeline; timeline may be null', () => {
+    const { report } = sampleResult();
+    expect(report.timeline).toBeNull();
+    expect(() => validateReport(report)).not.toThrow();
+    expect(() => validateReport({ ...report, timeline: TIMELINE })).not.toThrow();
+    expect(() => validateReport({ ...report, recipients: [] })).not.toThrow();
+    const { recipients: _r, ...noRecipients } = report;
+    const { timeline: _t, ...noTimeline } = report;
+    expect(() => validateReport(noRecipients)).toThrow(/recipients/);
+    expect(() => validateReport(noTimeline)).toThrow(/timeline/);
+  });
+
+  it('a 3.0.0 report with a score is rejected, wherever the score is put', () => {
+    const { report } = sampleResult();
+    expect(() => validateReport({ ...report, privacy: { ...report.privacy, score: 90 } })).toThrow(
+      SchemaValidationError,
+    );
+    expect(() =>
+      validateReport({ ...report, privacy: { ...report.privacy, score: 90, ledger: [] } }),
+    ).toThrow(SchemaValidationError);
+    expect(() => validateReport({ ...report, score: 90 })).toThrow(SchemaValidationError);
+  });
+
+  it('a 2.2.0 document cannot claim 3.0.0, and a 3.0.0 document cannot claim 2.2.0', () => {
+    const v2 = sampleResultV2().report;
+    const v3 = sampleResult().report;
+    expect(() => validateReport({ ...v2, reportVersion: '3.0.0' })).toThrow(SchemaValidationError);
+    expect(() => validateReport({ ...v3, reportVersion: '2.2.0' })).toThrow(SchemaValidationError);
+  });
+});
+
+const TIMELINE = {
+  origin: 'navigation-start',
+  milestones: [
+    { event: 'page-loaded', t: 1200 },
+    { event: 'connect-started', t: 1500 },
+  ],
+  recipients: [],
+  requestsPerSecond: [
+    { t: 0, firstParty: 3, thirdParty: 1 },
+    { t: 1000, firstParty: 0, thirdParty: 4 },
+  ],
+};
 
 const CLASSIFICATION = {
   type: 'contact-classification',
@@ -386,5 +616,34 @@ describe('contact-classification evidence (v2)', () => {
         },
       }),
     ).not.toThrow();
+  });
+});
+
+describe('3.0.0 integrity recomputes recipients (review findings)', () => {
+  it('an edited verdict, a dropped or a duplicated recipient fails integrity', () => {
+    const { report, bundle } = sampleResult();
+    expect(verifyReportIntegrity(report, bundle).ok).toBe(true);
+    const r0 = report.recipients[0]!;
+    const edited = {
+      ...report,
+      recipients: [
+        { ...r0, verdict: 'expected' as const, rule: 'verdict.cdn@1' },
+        ...report.recipients.slice(1),
+      ],
+    };
+    expect(verifyReportIntegrity(edited, bundle).problems.join(' ')).toMatch(/recomputed/);
+    expect(
+      verifyReportIntegrity({ ...report, recipients: report.recipients.slice(1) }, bundle).ok,
+    ).toBe(false);
+    expect(
+      verifyReportIntegrity({ ...report, recipients: [...report.recipients, r0] }, bundle).ok,
+    ).toBe(false);
+  });
+
+  it('a page with very many hosts still produces a valid report (no size caps)', () => {
+    const c = sampleCapture();
+    for (let i = 0; i < 1100; i++)
+      c.requests.push(req({ url: `https://h${i}.tracker-example.com/p`, resourceType: 'image' }));
+    expect(() => sampleResult({ capture: c })).not.toThrow();
   });
 });

@@ -12,14 +12,18 @@ import {
   evidenceId,
   type EvidenceBundleV1,
 } from './evidence.js';
-import type { FindingSetDigest, FindingV2, ReportV2 } from './report-v2.js';
+import type { FindingSetDigest } from './report-v2.js';
+import { isReportV3, type FindingV3, type ReportAny } from './report-v3.js';
 import { contentHash } from './hash.js';
+import { canonicalize } from './canonical.js';
+import { computeRecipients } from '../verdicts.js';
 
 /** Which bundle version each report version must reference. */
 const BUNDLE_FOR_REPORT: Record<string, string> = {
   '2.0.0': EVIDENCE_BUNDLE_VERSION_V1,
   '2.1.0': EVIDENCE_BUNDLE_VERSION_V2,
   '2.2.0': EVIDENCE_BUNDLE_VERSION,
+  '3.0.0': EVIDENCE_BUNDLE_VERSION,
 };
 
 export interface IntegrityResult {
@@ -31,15 +35,18 @@ export interface IntegrityResult {
 
 /** The finding-set digest of a list of findings (order-independent). */
 export function findingSetDigest(
-  findings: readonly Pick<FindingV2, 'fingerprint'>[],
+  findings: readonly Pick<FindingV3, 'fingerprint'>[],
 ): FindingSetDigest {
   const fps = findings.map((f) => f.fingerprint).sort();
   return { sha256: contentHash(fps), count: fps.length };
 }
 
-export function verifyReportIntegrity(report: ReportV2, bundle: EvidenceBundleV1): IntegrityResult {
+export function verifyReportIntegrity(
+  report: ReportAny,
+  bundle: EvidenceBundleV1,
+): IntegrityResult {
   const problems: string[] = [];
-  // Version pairing: report 2.0.0 ↔ bundle v1, 2.1.0 ↔ v2, 2.2.0 ↔ v3.
+  // Version pairing: report 2.0.0 ↔ bundle v1, 2.1.0 ↔ v2, 2.2.0 and 3.0.0 ↔ v3.
   const expected = BUNDLE_FOR_REPORT[report.reportVersion];
   if (expected !== bundle.bundleVersion) {
     problems.push(
@@ -63,7 +70,7 @@ export function verifyReportIntegrity(report: ReportV2, bundle: EvidenceBundleV1
     const item = bundle.items[id]!;
     if (evidenceId(item) !== id) problems.push(`item ${id} does not match its content id`);
   }
-  const all = [...report.privacy.findings, ...report.security.observations];
+  const all: FindingV3[] = [...report.privacy.findings, ...report.security.observations];
   for (const f of all) {
     if (f.evidence.length === 0) problems.push(`${f.id} has no evidence`);
     for (const ref of f.evidence) {
@@ -80,14 +87,52 @@ export function verifyReportIntegrity(report: ReportV2, bundle: EvidenceBundleV1
     );
   }
   const findingIds = new Set(all.map((f) => f.id));
-  for (const line of report.privacy.ledger) {
-    for (const id of line.findingIds) {
-      if (!findingIds.has(id)) problems.push(`ledger ${line.id} references unknown finding ${id}`);
+  if (isReportV3(report)) {
+    // Every recipient must stand on something the report or bundle shows:
+    // a contact, or a canary match a finding points to.
+    const contactKeys = new Set(report.contacts.map((c) => `${c.registrableDomain}|${c.class}`));
+    const matchKeys = new Set<string>();
+    for (const f of all) {
+      for (const ref of f.evidence) {
+        const item = bundle.items[ref.id];
+        if (item?.type === 'canary-match')
+          matchKeys.add(`${item.registrableDomain}|${item.recipientClass}`);
+      }
     }
-  }
-  for (const o of report.security.observations) {
-    if (o.countsTowardPrivacyScore)
-      problems.push(`security observation ${o.id} counts toward the privacy score`);
+    // Recipients and verdicts are a pure function of contacts, findings and
+    // evidence: recompute them, so an edited verdict or a dropped recipient
+    // cannot pass.
+    const expected = computeRecipients({ contacts: report.contacts, findings: all, bundle });
+    if (canonicalize(expected) !== canonicalize(report.recipients))
+      problems.push(
+        'recipients do not match those recomputed from contacts, findings and evidence',
+      );
+    for (const r of report.recipients) {
+      const key = `${r.registrableDomain}|${r.class}`;
+      if (!contactKeys.has(key) && !matchKeys.has(key))
+        problems.push(`recipient ${r.registrableDomain} (${r.class}) is in no contact or evidence`);
+      for (const id of r.findingIds) {
+        if (!findingIds.has(id))
+          problems.push(`recipient ${r.registrableDomain} references unknown finding ${id}`);
+      }
+    }
+    if (report.timeline) {
+      const keys = (xs: ReadonlyArray<{ registrableDomain: string; class: string }>) =>
+        xs.map((x) => `${x.registrableDomain}|${x.class}`).join(',');
+      if (keys(report.timeline.recipients) !== keys(report.recipients))
+        problems.push('timeline recipients do not match report recipients');
+    }
+  } else {
+    for (const line of report.privacy.ledger) {
+      for (const id of line.findingIds) {
+        if (!findingIds.has(id))
+          problems.push(`ledger ${line.id} references unknown finding ${id}`);
+      }
+    }
+    for (const o of report.security.observations) {
+      if (o.countsTowardPrivacyScore)
+        problems.push(`security observation ${o.id} counts toward the privacy score`);
+    }
   }
   return { ok: problems.length === 0, problems, bundleSha256: recomputed };
 }
