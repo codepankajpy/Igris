@@ -2,7 +2,7 @@
 
 ## What a scan is
 
-`igris scan <url>` loads the page in headless Chromium with a mock wallet
+A scan (started from the website: search a site, then Scan or Retest) loads the page in headless Chromium with a mock wallet
 ("Igris Canary Wallet") injected before any page script runs. The wallet
 exposes a **canary**: a fresh throwaway address generated for this scan only
 (its private key lives in the scanner process, signs `personal_sign`/typed
@@ -22,17 +22,17 @@ way the destination could know that string.
   tagged with its phase; "third parties contacted" is reported per phase even
   when no address is seen.
 
-## When a scan is (not) scored
+## When a scan is (not) published
+
+There is no score (Report 3.0.0). What changes is what was observed:
 
 - **Page never loaded** (network error, timeout, an HTTP ≥ 400 main
   document such as a 404 or a bot wall, or an aborted scan): status
-  `page-load-failed`, coverage `none`, **score `null`**, empty ledger. The
-  CLI exits 2 and `igris publish` refuses the report. Before report 1.1.0
-  such scans scored 100 — a claim about a page nobody saw.
+  `page-load-failed`, coverage `none`, no recipients. Nothing is published;
+  the website shows the reason and offers a retry.
 - **Wallet never connected**: status `wallet-connect-failed`, coverage
-  `pre-connect-only`. The score is real but covers only phase A; post-connect
-  address leaks were **not tested**, and every surface says so.
-- **Both phases ran**: status `completed`, coverage `full`.
+  `pre-connect-only`. Published, and every surface says that address leaks
+  after connecting were **not tested**.
 
 ## Security headers
 

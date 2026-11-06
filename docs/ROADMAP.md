@@ -85,6 +85,22 @@ P1 corpus harness ────────────────────�
 
 ---
 
+## One flow — product simplification (2026-11-06, supersedes the MVP section's page list)
+
+Owner direction: delete everything outside one flow; no CLI; no scores;
+every report on Arkiv with version history. Spec: [design/FLOW.md](./design/FLOW.md),
+[design/REPORT-3.0.0.md](./design/REPORT-3.0.0.md).
+
+| ID  | Acceptance criterion                                                                                   | Status                                            |
+| --- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| F-1 | Search a site → latest report + history + Retest, or "Scan this site"                                  | PASS (live, app.uniswap.org)                      |
+| F-2 | Scan runs every check; report has verdicts, timeline, traffic, address flow, RPC calls — no score      | PASS (Report 3.0.0, 377 core tests; live reports) |
+| F-3 | Every completed scan is published on Arkiv (scan + evidence + flows, one atomic batch)                 | PASS (tx 0xce45a381…, 0xad0435ac…)                |
+| F-4 | A retest publishes version n+1 whose `previous` is version n; history and changes shown                | PASS (uniswap v1 → v2 → v3, 'same finding set')   |
+| F-5 | Reads re-verify every report against its Arkiv entity (hashes, schema, integrity, recomputed verdicts) | PASS                                              |
+| F-6 | Website makes zero third-party requests                                                                | PASS (e2e, 143 requests over every route)         |
+| F-7 | Report 3.0.0 and the Arkiv entity schemas approved and hash-pinned                                     | BLOCKED(owner approval)                           |
+
 ## MVP web application — priority override (2026-11-06)
 
 The project owner changed direction: before continuing P1, build a working

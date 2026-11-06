@@ -1,245 +1,172 @@
-# Igris
+# IGRIS
 
-**Lighthouse for dapp privacy: scan, explain, fix, publish.**
+**Open privacy reports for dApps — who learns your wallet address, and when.**
 
-Igris shows what a dApp leaks about its users: which third parties learn a
-user's **wallet address**, which learn their **IP before they click
-anything**, and which **RPC providers** can link the two — with evidence for
-every claim.
+Search a site. If it has been scanned, IGRIS shows its latest report and its
+version history; if not, one click scans it. A scan opens the site in an
+isolated browser, connects a throwaway wallet the way a user would, and
+records every request. The report shows — with charts and evidence, never a
+score:
 
-- **Provable, not vibes**: the scanner opens the dApp in an isolated browser
-  with a throwaway _canary_ wallet (EIP-1193/EIP-6963) that never existed
-  before the scan, connects it the way a user would (RainbowKit, ConnectKit,
-  Reown AppKit, Privy, Dynamic and custom modals), and records every request.
-  Any request carrying the canary address (14+ encodings, hashed forms
-  flagged separately) is a leak with content-addressed evidence attached.
-- **Readable by anyone**: a local web app turns each scan into a plain
-  report — _who learned what_, findings with evidence, the score ledger and
-  an in-browser re-check of the evidence hashes. The app itself makes zero
-  third-party requests (enforced by an e2e test).
-- **Fixable, not just gradable**: `igris fix` rewrites viem/ethers/wagmi RPC
-  setups to route reads through the Ethereum Foundation's
-  [Anon-RPC](https://ethereum.github.io/anon-rpc/), and a rescan proves the
-  before/after.
-- **A registry nobody operates** (built, not yet live): results become Arkiv
-  entities signed by the scanner node that measured them, with mandatory
-  expiry. **No entities have been published yet** — see
-  [Registry](#registry-arkiv).
+- **who received the wallet address** (in any of 14+ encodings, hashed forms
+  flagged separately) and when;
+- **who learned the visitor's IP** before and after connecting;
+- **which RPC endpoints were called**, with every JSON-RPC method and count,
+  and whether the address travelled with the calls;
+- **trackers, cookies, storage and security headers** of the page;
+- a **verdict for every third party** — _expected_ (the app needs it),
+  _avoidable_ (the app works without it), _tracking_ (not needed, profiles
+  visitors) or _unidentified_ — each with its rule and reason, each backed by
+  content-addressed evidence.
 
-Project status and acceptance criteria: [docs/ROADMAP.md](docs/ROADMAP.md) ·
-engineering log: [docs/ENGINEERING_LOG.md](docs/ENGINEERING_LOG.md).
+Every report is **published on Arkiv**. A retest publishes the next version,
+linked to the previous one, so a site's privacy history lives on Arkiv — not
+on our server.
 
-## Quickstart
+## Run it
+
+Requirements: Node ≥ 20, pnpm 9.
 
 ```bash
 pnpm install
 pnpm exec playwright install chromium chromium-headless-shell
-pnpm demo        # offline end-to-end story in ~1 minute (see below)
 ```
 
-Run the web app (scanner API + UI, both on your machine):
+To publish on Arkiv (Rabdi testnet), once per machine:
 
 ```bash
-pnpm -s exec tsx apps/api/src/index.ts   # scanner API on :3001 (egress public-only)
-pnpm --filter @igris/app dev             # web app on http://localhost:5180
+pnpm scanner:init primary        # creates this node's publishing key in ~/.igris (0600)
 ```
 
-Scan a real dapp from the command line:
+Fund the printed address at https://hub.arkiv.network/faucet, and put your
+Arkiv access key in a file `.env.arkiv` (gitignored):
+
+```
+ARKIV_ACCESS_KEY=<your key from hub.arkiv.network>
+```
+
+Then start the backend and the website:
 
 ```bash
-pnpm igris scan https://app.example.org --fail-under 80
+pnpm --filter @igris/api dev     # scanner + Arkiv publisher on :3001
+pnpm --filter @igris/app dev     # website on http://localhost:5180
 ```
 
-Outputs to `igris-out/`: `report.json` (Report v2), `evidence.json` (the
-evidence bundle as canonical bytes, so `shasum -a 256 evidence.json` matches
-the hash in the report) and a self-contained `report.html`. Exit codes are
-0 / 1 (below threshold) / 2 (scan error) / 3 (bad args), for CI. Formats and
-hashing: [docs/CONTRACTS.md](docs/CONTRACTS.md).
+Without a scanner key the backend uses a local registry file
+(`.igris-data/registry.json`) with the same behaviour, so everything works
+offline. Tests: `pnpm test` (unit) and `pnpm test:e2e` (browser, offline
+fixtures).
+
+## How it works
+
+```
+website (apps/app) ──► backend (apps/api) ──► scanner (packages/scanner)  isolated Chromium,
+        │                     │                                          canary wallet, egress
+        │                     │                                          public-only
+        │                     ├──► core (packages/core)    detectors, verdicts, timeline,
+        │                     │                            RPC inventory, Report 3.0.0
+        │                     └──► registry (packages/registry) ──► Arkiv: igris.scan.v2,
+        │                                                            igris.evidence.v1,
+        └── same-origin only; never talks to Arkiv or any third party   igris.flow.v1
+```
+
+Formats: [docs/CONTRACTS.md](docs/CONTRACTS.md) ·
+[docs/design/REPORT-3.0.0.md](docs/design/REPORT-3.0.0.md) ·
+[docs/design/FLOW.md](docs/design/FLOW.md) · method:
+[docs/METHODOLOGY.md](docs/METHODOLOGY.md) · Arkiv: [arkiv/](arkiv/).
+
+## Where the blockchain is used
+
+- **Ethereum, inside every scan.** The throwaway wallet is a real
+  EIP-1193 / EIP-6963 provider backed by a fresh secp256k1 key. dApps
+  discover it like MetaMask, request its accounts, read chain state through
+  it (answered by a local stub, so the scanner itself leaks nothing) and ask
+  it to sign sign-in messages. Every request is searched for that address;
+  JSON-RPC traffic is inventoried per endpoint; hosts that only answer
+  Ethereum JSON-RPC are recognised as RPC providers by their traffic; Anon-RPC
+  usage is detected.
+- **Arkiv, as the registry nobody operates.** Each completed scan is
+  published as one atomic batch signed by the scanner's key: the full report
+  (`igris.scan.v2`, with `version` and a `previous` pointer to the prior
+  version), the evidence bundle (`igris.evidence.v1`) and one entity per
+  third party (`igris.flow.v1`). Any IGRIS instance can render and re-verify
+  any report from Arkiv alone, and flows answer "which other sites send data
+  to this tracker?".
+
+### Live on Arkiv (Rabdi, chain 7794095)
+
+- Publishing scanner: **`0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe`**
+- `app.uniswap.org` v1 → v2 → v3, each `previous` pointing to the version
+  before: transactions `0xce45a3811bc4eeb47600ec69d44299df96f358a8443cdf456c0b18b250e21343`,
+  `0x96198c7a1cefd357713ca4ae65d6a07430d46c603b9ab464d662f5f39d6d9f79`,
+  `0x2d68c4ec115958d491fd42cb3ec04d8173efe3d2478fc078d9e1480edc819919`.
+
+A query anyone can run (an access key from hub.arkiv.network is needed; the
+anonymous budget is small) — every version of a site:
 
 ```bash
-pnpm igris verify igris-out/report.json   # schemas, evidence hash, references
+curl -s "https://rpc.rabdi.db-chain.testnet.arkiv.network/$ARKIV_ACCESS_KEY" \
+  -H 'content-type: application/json' --data \
+  '{"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":["arkiv.schema = str('"'"'igris.scan.v2'"'"') AND hostname = str('"'"'app.uniswap.org'"'"') AND $owner = addr(0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe)",{"select":{"key":true,"owner":true,"attributes":true},"limit":"0x10"}]}'
 ```
-
-Patch a repo:
-
-```bash
-pnpm igris fix path/to/dapp            # dry run: unified diff + manual notes
-pnpm igris fix path/to/dapp --write    # apply (running twice is a no-op)
-```
-
-Publish and query (local file or Arkiv testnet):
-
-```bash
-pnpm igris publish igris-out/report.json --registry local
-pnpm igris query --registry local --min-score 50 --class analytics
-pnpm igris snapshot --registry local --out snapshot.json
-```
-
-Publishing to Arkiv (Rabdi testnet) is signed by this machine's own scanner
-key. Keys are never read from environment variables:
-
-```bash
-pnpm igris scanner init --name my-scanner   # new key in ~/.igris, bound to this machine
-# fund the printed address at https://hub.arkiv.network/faucet, then:
-pnpm igris publish igris-out/report.json
-```
-
-`pnpm demo` runs: scan the deliberately leaky fixture → `igris fix` diff →
-scan the fixed fixture → publish both to a local registry → query it back →
-snapshot → scan **our own registry viewer** — and prints the before/after:
-
-| dapp                           | score | RPC leaks | usesAnonRpc |
-| ------------------------------ | ----- | --------- | ----------- |
-| leaky-dapp (before)            | 0     | 1         | false       |
-| leaky-dapp (after `igris fix`) | 17    | 0         | **true**    |
-
-(The remaining 17-score leaks are the planted analytics/error-monitor/pixel
-leaks — `igris fix` honestly fixes only RPC reads.)
-
-## Architecture
-
-```mermaid
-flowchart LR
-  subgraph scan [igris scan]
-    W[Canary wallet<br/>EIP-1193/6963] --> S[Playwright<br/>two-phase capture]
-    S --> C["@igris/core<br/>detect / classify / score"]
-  end
-  C --> R[report.json + evidence.json + report.html]
-  R --> P[igris publish]
-  subgraph fixcmd [igris fix]
-    F["ts-morph codemod<br/>viem / ethers / wagmi"] --> A[Anon-RPC shim<br/>hash-pinned worker]
-  end
-  P --> K[(Arkiv<br/>igris.scan.v1<br/>30-day expiry)]
-  K --> V[Static viewer<br/>filters + detail +<br/>pinned scanners]
-  K --> X[Extension stub<br/>local snapshot match]
-```
-
-Details: [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) (Complete plain-English guide & deployment),
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
-[docs/METHODOLOGY.md](docs/METHODOLOGY.md),
-[docs/SCORING.md](docs/SCORING.md),
-[docs/ANON_RPC_NOTES.md](docs/ANON_RPC_NOTES.md),
-[arkiv/](arkiv/). Judges: [docs/JUDGES.md](docs/JUDGES.md) verifies every
-claim in under 5 minutes.
 
 ## CROPS
 
 Lead property: **Privacy** — IGRIS exists to show, with evidence, what a
-dApp leaks about its users (wallet address, IP, RPC exposure) and to remove
-the RPC leak. Each line below was checked against the code on branch
-`mvp-web-app` (2026-11-06); open gaps are named.
+dApp leaks about its users. Each line was checked against the code on branch
+`mvp-web-app`.
 
-- **C — Censorship resistance.** IGRIS is software you run, not a service
-  you depend on: the CLI and the web app run the same scanner on your own
-  machine, with no account, server or API key of ours. The only things we
-  could control are (1) an _optional_ hosted scanner API — not deployed
-  (local/Docker only; a public deployment is gated on running Chromium with
-  its own sandbox, ROADMAP P4-6) — whose absence changes nothing, because
-  `pnpm igris scan` and the local web app are the same code; and (2) the
-  default Arkiv endpoint in the viewer, which is a user setting. Registry
-  entries are Arkiv entities owned by whichever scanner keys publish them:
-  nobody needs our permission to publish or read, and the viewer's snapshot
-  mode and the CLI keep working if the Arkiv testnet is down or reset. The
-  third-party database is a file in this repo (`data/third-parties.json`),
-  every entry with a cited source.
-- **O — Open source.** MIT ([LICENSE](LICENSE)). Everything builds and runs
-  from this repository alone with no secrets: `pnpm install`,
-  `pnpm exec playwright install chromium` (the browser binary is downloaded
-  from Playwright's CDN), then `pnpm demo` runs fully offline.
+- **C — Censorship resistance.** Reports live on Arkiv, signed by the
+  scanner that measured them, not on a server we run. Anyone can run this
+  repository (website + backend) and read every published report and its
+  history; if our instance disappears or refuses a site, another instance
+  shows the same data and can scan and publish under its own key. Readers
+  choose which publishers to trust (`IGRIS_TRUSTED_SCANNERS`). Arkiv's
+  testnet itself is outside our control: if it is down or reset, the local
+  registry mode keeps the flow working offline.
+- **O — Open source.** MIT ([LICENSE](LICENSE)). Builds and runs from this
+  repository alone (`pnpm install`, plus a Chromium download from
+  Playwright's CDN); no secrets are needed to run it locally.
 - **P — Privacy.** What each party learns:
-  - _the scanned dApp and its third parties_: a throwaway canary address
-    (never a real user's), plus the **scanning machine's IP address** and a
-    headless-Chromium fingerprint. Scanning is a visit; run it behind a VPN
-    if your IP matters. Scans from the web app/API are egress-filtered to
-    public addresses; CLI scans are not filtered;
-  - _RPC providers_: nothing from the scanner itself — wallet reads are
-    answered locally by a stub (`--live-reads` is an explicit opt-in);
-  - _the IGRIS web app_: makes **zero third-party requests** — fonts are
-    self-hosted, there are no trackers or analytics, and
-    `apps/app/e2e/no-third-party.e2e.ts` fails the build if any page loads
-    anything from another origin;
-  - _the scanner API (your machine)_: stores a **scan history** (submitted
-    URLs, reports, evidence) in `.igris-data/` on that machine; nothing is
-    published. It has **no authentication**: anyone who can reach the port
-    can list and read those scans, which is why it is meant for local use.
-    It logs no client IPs; rate-limit keys are salted hashes kept in memory;
-  - _the Arkiv RPC_: a publisher's IP on writes; a viewer's IP and query
-    filters on reads (configurable endpoint; snapshot mode makes zero
-    requests, e2e-tested);
-  - _Anon-RPC relay/exit_ (dApps patched by `igris fix`): the RPC requests,
-    instead of the RPC provider seeing the user —
-    [docs/ANON_RPC_NOTES.md](docs/ANON_RPC_NOTES.md).
-- **S — Security.** The canary key is generated in memory for each scan,
-  never funded and discarded afterwards. The canary wallet **signs**
-  `personal_sign` and `eth_signTypedData_v4` requests (so sign-in flows
-  complete and their traffic is observed; the connect engine clicks an
-  in-dialog "Sign" confirmation once) and **rejects** `eth_sendTransaction`,
-  `eth_signTransaction`, `eth_sendRawTransaction` and `eth_sign`. A scanner's
-  publishing key is created by `igris scanner init` in `~/.igris` (mode 0600,
-  bound to that machine) and is never read from environment variables.
-  Registry data is treated as hostile: every row is schema-validated and
-  every rendered value escaped. Every finding carries content-addressed
-  evidence; reports and evidence bundles verify by hash in the CLI
-  (`igris verify`), in the API on every read, and again in your browser.
-  Trust assumptions: a registry entity is an _attestation by its owner
-  address_, not a fact — you choose which scanners to pin; a score covers
-  only what a browser can observe (server-side sharing is invisible).
-  Open gaps: the evidence bundle is not yet published to Arkiv, so a
-  registry entity's hashes cannot yet be checked by a third party (ROADMAP
-  P2-3); Chromium runs without its own sandbox in the API container
-  (ROADMAP P4-6); the scanner API has no authentication (local use only).
+  - _the website's visitor_ talks only to the backend that served the page:
+    the website makes **zero third-party requests** (self-hosted fonts, no
+    analytics), enforced by `apps/app/e2e/no-third-party.e2e.ts`;
+  - _the backend_ learns which sites a visitor searches and scans (and their
+    IP); it stores scan jobs and a cache of reports in `.igris-data/`, logs
+    no client IPs, and keeps rate-limit keys as salted hashes in memory;
+  - _the scanned site and its third parties_ learn a throwaway address
+    (never a real user's), the backend machine's IP and a headless-Chromium
+    fingerprint — scanning is a visit;
+  - _RPC providers_ learn nothing from the scanner: wallet reads are
+    answered locally;
+  - _Arkiv_ learns the backend's IP on reads and writes, and everything
+    published is public by design: reports (with the scan's throwaway
+    address), redacted evidence (the canary is never in it) and flows.
+- **S — Security.** The canary key is generated per scan, never funded and
+  discarded; the canary wallet signs `personal_sign` / typed-data requests
+  (so sign-in flows complete) and rejects every transaction and `eth_sign`.
+  The publishing key lives only in `~/.igris` on the backend machine (0600,
+  node-bound, never read from environment variables); the Arkiv access key
+  lives in the gitignored `.env.arkiv`. Scans are egress-filtered to public
+  addresses (no SSRF into the operator's network), one scan per site at a
+  time, rate-limited. Every report and evidence bundle is re-verified on
+  every read (hashes against the Arkiv entity, schema, integrity — verdicts
+  are recomputed), and once more in the visitor's browser. Trust
+  assumptions: a published report is an attestation by its publisher's
+  address; a report covers what a browser can observe (server-side sharing
+  is invisible). Open gaps: Chromium runs without its own sandbox in the
+  container image (ROADMAP P4-6), and the backend has no authentication
+  (anyone who can reach it can start scans, within its rate limits).
 
-## Where the blockchain is used
+## Limitations
 
-- **Ethereum, inside every scan.** The canary wallet is a real EIP-1193 /
-  EIP-6963 provider backed by a fresh secp256k1 key (viem). dApps discover it
-  like MetaMask or Rabby, request its accounts, read chain state through it
-  (answered by a local stub, so the scanner itself leaks nothing) and ask it
-  to sign sign-in messages. Leak detection then searches every request for
-  that address in 14+ encodings (checksummed, lowercase, ABI-padded inside
-  `eth_call` data, keccak/sha256-hashed, …). Unknown hosts that receive only
-  Ethereum JSON-RPC are recognised as RPC providers by their traffic.
-- **Anon-RPC.** IGRIS detects whether a dApp routes reads through
-  [Anon-RPC](https://ethereum.github.io/anon-rpc/) (whose worker is pinned by
-  an on-chain specifier contract) and `igris fix` patches a dApp's
-  viem/ethers/wagmi setup to do so.
-- **Arkiv (registry).** Each scanner node has its own key (`igris scanner
-init`). `igris publish` writes a signed, expiring `igris.scan.v1` entity
-  to Arkiv's Rabdi testnet (chain 7794095): hostname, score, leak classes,
-  the canonical report hash and the evidence hash. Anyone can query it
-  without us; consumers decide which scanner addresses they trust. Writing
-  requires a funded key — not done yet (see below).
-
-## Registry (Arkiv)
-
-- Schema `igris.scan.v1` on Arkiv's Rabdi testnet (chain 7794095) — see
-  [arkiv/schema.md](arkiv/schema.md). Schema v2 (immutable entities,
-  published evidence, history) is ROADMAP P2.
-- **Published entities: none yet.** Writing requires a funded scanner key
-  (one per scanner node, never shared) — ROADMAP P2-1, BLOCKED on a human
-  funding step. No scanner address is listed here until it has actually
-  written entities.
-- The read path works today against the live testnet (it returns zero rows):
-
-```bash
-pnpm igris query --min-score 0 --limit 10
-# or raw JSON-RPC from anywhere:
-curl -s https://rpc.rabdi.db-chain.testnet.arkiv.network --json \
-  '{"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":["arkiv.schema = str('\''igris.scan.v1'\'') ORDER BY $key ASC",{"select":{"key":true,"owner":true,"attributes":true},"limit":"0xa"}]}'
-```
-
-## Limitations (honest ones)
-
-A scan whose page never loaded (or returned an HTTP error) has **no
-score** and cannot be published. A scan whose wallet never connected is
-labelled **partial**: its score covers only the pre-connect phase.
-A score of 100 means "nothing detectable", not "nothing wrong": server-side
-forwarding, obfuscated/encrypted exfiltration, WalletConnect-relayed flows
-and deep interaction paths are out of scope — the full list with reasoning is
-in [docs/METHODOLOGY.md](docs/METHODOLOGY.md). Scoring is a documented
-heuristic ([docs/SCORING.md](docs/SCORING.md)), not an audit. A real funded
-Arkiv publish (BLOCKED), a real-browser extension run and a live Anon-RPC
-round-trip are still **UNVERIFIED** — see [STATUS.md](STATUS.md).
+A site whose page never loads is not published (nothing was observed). A
+scan whose wallet never connected is labelled partial: address leaks after
+connecting were not tested. "No address leak observed" means nothing
+detectable, not nothing wrong: server-side forwarding, encrypted
+exfiltration, WalletConnect-relayed flows and deep interaction paths are out
+of scope ([docs/METHODOLOGY.md](docs/METHODOLOGY.md)). Arkiv entities expire
+after 180 days; a site's history older than that disappears unless retested.
 
 ## License
 

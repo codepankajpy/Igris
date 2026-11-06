@@ -385,3 +385,57 @@ traffic is now observed; the leaks were checked by hand against evidence.
   (owner approval).
 - Kit-specific local fixture tests and a full-corpus connect rate (P1-2)
   are still pending; the 9/9 is a live result on the MVP set.
+
+## 2026-11-06 — One flow: no CLI, no scores, reports and history on Arkiv
+
+Owner direction: delete everything outside one flow (search → scan or
+retest → visual report → published on Arkiv with version history); no CLI;
+no scores.
+
+### What changed
+
+- **Removed:** `packages/cli`, `packages/patcher`, `apps/web`, `extension/`,
+  `scripts/`, `corpus/`, `examples/`, `recipes/`, the fixed-dApp fixture and
+  stale docs; the scanner's recipe-file connect path and legacy heuristic.
+  Git history keeps all of it.
+- **Report 3.0.0** (`packages/core`, proposed): no score/ledger;
+  `recipients[]` with deterministic verdicts (expected / avoidable /
+  tracking / unidentified, rule + reason); `timeline` (milestones, first
+  contact / first address per recipient, requests per second, from capture
+  timestamps); `rpc` (per endpoint: JSON-RPC methods and counts, address
+  seen). Migration from 2.x. Verified by an independent agent against the
+  spec; four defects fixed (size caps could crash a scan; integrity did not
+  recompute verdicts; Anon-RPC counted as exposure; contradictory reasons).
+- **Registry** (`packages/registry`): `SiteRegistry` with Arkiv and local
+  backends — `igris.scan.v2` (full gzip report, version, previous),
+  `igris.evidence.v1` (gzip bundle), `igris.flow.v1` (per recipient); one
+  atomic `executeBatch` per scan; strict row validation; owner trust;
+  idempotent per scanId; never publishes history backwards.
+- **API** (`apps/api`): only the flow's routes; auto-publish after a scan;
+  verified reads with a cache fallback; changes vs the verified previous
+  version (followed by `previous` key); duplicate-version protection on
+  retries and restarts.
+- **Website** (`apps/app`): search, site page with version history and
+  Retest, live scan, report with SVG timeline / traffic / address-flow / RPC
+  charts, evidence explorer, publish status; zero third-party requests.
+
+### Live verification (Arkiv Rabdi, scanner 0x36Df…5Bbe)
+
+- `app.uniswap.org` v1 (tx 0xce45a381…), v2 (0x96198c7a…), v3 (0x2d68c4ec…,
+  started with the Retest button; the page moved to v3 by itself); each
+  `previous` points to the version before; v2 and v3 'same finding set'.
+- `swap.cow.fi` v1 (0xad0435ac…, 32 flows): address to spindl.link,
+  google.com, sentry.io (tracking/unidentified), alchemy.com and the
+  WalletConnect RPC (avoidable).
+- Raw `arkiv_query` (outside our code) returned the scan entity with owner,
+  version, previous and expiry (≈180 days).
+- Arkiv's anonymous query budget is small (`ANON_COST_LIMITED` after the
+  agents' read-only checks): the organisers' query needs an access key.
+
+### Process
+
+Built by parallel agents on disjoint packages against shared specs, each
+followed by an independent verifier; confirmed defects fixed with regression
+tests (duplicate versions on retry, history running backwards, IPv6
+recipients blocking publish, unverified previous version in diffs, flowsTo
+query explosion, cache label, red used for non-leak errors).
