@@ -1,4 +1,12 @@
-export { scan, SCANNER_VERSION, type ScanOptions, type EgressPolicy } from './scan.js';
+export {
+  scan,
+  SCANNER_VERSION,
+  SCAN_STAGES,
+  type ScanOptions,
+  type EgressPolicy,
+  type ScanStage,
+  type ScanProgressEvent,
+} from './scan.js';
 export { TrafficRecorder, BODY_CAP_BYTES, type Capture } from './capture.js';
 export type { ScanResult } from '@igris/core';
 export { WalletReadHandler } from './stub-rpc.js';

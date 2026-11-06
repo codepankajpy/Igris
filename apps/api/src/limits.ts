@@ -43,6 +43,11 @@ export class JobQueue {
     return { running: this.running, queued: this.waiting.length };
   }
 
+  /** Would run() accept a job right now? (synchronous capacity check) */
+  canAccept(): boolean {
+    return this.running < this.concurrency || this.waiting.length < this.maxQueued;
+  }
+
   run<T>(job: Job<T>): Promise<T> {
     if (this.running >= this.concurrency && this.waiting.length >= this.maxQueued) {
       return Promise.reject(new QueueFullError());

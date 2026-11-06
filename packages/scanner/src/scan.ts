@@ -46,6 +46,29 @@ export const SCANNER_VERSION = '0.2.0'; // 0.2.0: emits Report v2 + evidence bun
 export type EgressPolicy =
   { mode: 'unrestricted' } | ({ mode: 'public-only' } & EgressProxyOptions);
 
+/** Scan stages, in execution order. Emitted only when the work really happens. */
+export const SCAN_STAGES = [
+  'browser',
+  'navigation',
+  'observe-pre-connect',
+  'wallet',
+  'observe-post-connect',
+  'detection',
+  'evidence',
+  'report',
+] as const;
+export type ScanStage = (typeof SCAN_STAGES)[number];
+
+/** A progress event from a running scan (scanner API, not a published contract). */
+export interface ScanProgressEvent {
+  stage: ScanStage;
+  status: 'started' | 'completed' | 'failed' | 'skipped' | 'update';
+  at: string;
+  detail?: string;
+  /** Live capture counters, read from the recorder (never estimated). */
+  counters?: { requests: number; hosts: number; wsConnections: number };
+}
+
 export interface ScanOptions {
   url: string;
   chainId?: number;
@@ -66,6 +89,8 @@ export interface ScanOptions {
   now?: () => Date;
   /** Default { mode: 'unrestricted' }. Hosted scanners MUST pass public-only. */
   egress?: EgressPolicy;
+  /** Called at real execution points (see ScanProgressEvent). Errors in it are ignored. */
+  onProgress?: (event: ScanProgressEvent) => void;
   /**
    * Abort the scan (e.g. a hard timeout). The browser is closed immediately;
    * the returned report has status page-load-failed and no score.
@@ -100,6 +125,50 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
 
   const readHandler = new WalletReadHandler(options.liveReadsUrl);
   const recorder = new TrafficRecorder();
+  const counters = () => {
+    const hosts = new Set<string>();
+    for (const r of recorder.capture.requests) {
+      try {
+        hosts.add(new URL(r.url).hostname);
+      } catch {
+        /* data:, blob: */
+      }
+    }
+    return {
+      requests: recorder.capture.requests.length,
+      hosts: hosts.size,
+      wsConnections: recorder.capture.wsConnections,
+    };
+  };
+  const emit = (
+    stage: ScanStage,
+    status: ScanProgressEvent['status'],
+    detail?: string,
+    withCounters = false,
+  ) => {
+    try {
+      options.onProgress?.({
+        stage,
+        status,
+        at: new Date().toISOString(),
+        ...(detail ? { detail } : {}),
+        ...(withCounters ? { counters: counters() } : {}),
+      });
+    } catch {
+      /* a listener must never break a scan */
+    }
+  };
+  /** Settle while streaming live counters once per second. */
+  const observe = async (stage: ScanStage, page: import('playwright').Page) => {
+    emit(stage, 'started', undefined, true);
+    const timer = setInterval(() => emit(stage, 'update', undefined, true), 1000);
+    try {
+      await settle(page, dwellMs);
+    } finally {
+      clearInterval(timer);
+    }
+    emit(stage, 'completed', undefined, true);
+  };
 
   const launchOptions: LaunchOptions = { headless: options.headless ?? true };
   const args: string[] = [];
@@ -123,6 +192,11 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       args.push(...egressChromiumArgs(egressProxy.url));
     }
     if (args.length) launchOptions.args = args;
+    emit(
+      'browser',
+      'started',
+      `isolated Chromium, egress ${options.egress?.mode ?? 'unrestricted'}${egressProxy ? ' (filtering proxy)' : ''}`,
+    );
     browser = await chromium.launch(launchOptions);
     if (aborted) throw new Error('scan aborted');
     const context = await browser.newContext({
@@ -160,11 +234,13 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
 
     const page = await context.newPage();
     recorder.attachPage(page);
+    emit('browser', 'completed', `canary wallet injected (EIP-1193/6963), service workers blocked`);
 
     // --- Phase A: pre-connect ---
     recorder.setPhase('pre-connect');
     let response: import('playwright').Response | null = null;
     let navError: string | undefined;
+    emit('navigation', 'started', options.url);
     try {
       response = await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     } catch (err) {
@@ -179,14 +255,20 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       status = 'page-load-failed';
       failure = { category: verdict.category!, detail: verdict.detail ?? '' };
       errors.push(`page load failed: ${verdict.detail ?? verdict.category}`);
+      emit('navigation', 'failed', `${verdict.category}: ${verdict.detail ?? ''}`);
+      for (const st of ['observe-pre-connect', 'wallet', 'observe-post-connect'] as const)
+        emit(st, 'skipped', 'page did not load');
+    } else {
+      emit('navigation', 'completed', `HTTP ${response?.status() ?? '?'} · ${page.url()}`, true);
     }
     if (status === 'completed') {
-      await settle(page, dwellMs);
+      await observe('observe-pre-connect', page);
       await recorder.snapshotState(context, page);
 
       // --- Phase B: post-connect ---
       recorder.setPhase('post-connect');
       const connectLog: string[] = [];
+      emit('wallet', 'started', 'looking for a connect control and wallet option');
       const t0 = Date.now();
       const startUrl = page.url();
       try {
@@ -224,10 +306,16 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       if (!connected) {
         status = 'wallet-connect-failed';
         errors.push(`could not connect wallet (${connectLog.join('; ') || 'no steps ran'})`);
+        emit('wallet', 'failed', connection.failure?.category ?? 'not connected');
       } else {
         errors.push(...connectLog.map((l) => `connect: ${l}`));
+        emit(
+          'wallet',
+          'completed',
+          `connected (eth_requestAccounts ×${requestAccountsCalls})${connection.kit.id !== 'none' ? ` · ${connection.kit.id}` : ''}`,
+        );
       }
-      await settle(page, dwellMs);
+      await observe('observe-post-connect', page);
       // One scroll to trigger lazy loads.
       try {
         await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -265,19 +353,43 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       errors.push(`egress blocked: ${egressProxy.blocked.length - shown.length} more`);
   }
 
-  return buildReportFromScan({
-    options,
-    canaryAddress,
-    chainId,
-    spoofMetaMask,
-    status,
-    errors,
-    recorder,
-    readHandler,
-    ...(egressProxy ? { egressBlockedHosts: egressProxy.blockedHosts } : {}),
-    ...(connection ? { connection } : {}),
-    ...(failure ? { failure } : {}),
-  });
+  emit('detection', 'started', 'canary-leak, ip-exposure, security-headers');
+  let built: ScanResult;
+  try {
+    built = buildReportFromScan({
+      options,
+      canaryAddress,
+      chainId,
+      spoofMetaMask,
+      status,
+      errors,
+      recorder,
+      readHandler,
+      ...(egressProxy ? { egressBlockedHosts: egressProxy.blockedHosts } : {}),
+      ...(connection ? { connection } : {}),
+      ...(failure ? { failure } : {}),
+    });
+  } catch (err) {
+    emit('detection', 'failed', String(err).slice(0, 200));
+    throw err;
+  }
+  const r = built.report;
+  emit(
+    'detection',
+    'completed',
+    `${r.privacy.findings.length} privacy findings, ${r.security.observations.length} security observations`,
+  );
+  emit(
+    'evidence',
+    'completed',
+    `${r.evidence.itemCount} items · sha256 ${r.evidence.sha256.slice(0, 16)}…`,
+  );
+  emit(
+    'report',
+    'completed',
+    r.privacy.score === null ? 'not scored' : `privacy score ${r.privacy.score}/100`,
+  );
+  return built;
 }
 
 /**

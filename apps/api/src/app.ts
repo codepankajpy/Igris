@@ -23,6 +23,7 @@ import type { ScanRecord } from '@igris/registry';
 import type { ApiConfig } from './config.js';
 import { JobQueue, JobTimeoutError, QueueFullError, RateLimiter } from './limits.js';
 import { RepoRejectedError, cloneRepo, enforceRepoLimits, validateRepoUrl } from './repo.js';
+import { ScanQueueFull, type ScanMeta, type ScanService } from './scans.js';
 
 export interface FixResultLike {
   diff: string;
@@ -39,6 +40,52 @@ export interface ApiDeps {
   /** Clone step (default: hardened git clone). */
   clone?: typeof cloneRepo;
   log?: (msg: string) => void;
+  /** Scan jobs + persistence for the web application (optional). */
+  scans?: ScanService;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Dashboard aggregates — computed only from stored scan summaries. */
+export function aggregateStats(metas: ScanMeta[]) {
+  const done = metas.filter((m) => m.state === 'completed' && m.summary);
+  const scored = done.filter((m) => m.summary!.score !== null);
+  const severity = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+  const thirdParties = new Map<string, number>();
+  const leakDomains = new Map<string, number>();
+  const kits = new Map<string, number>();
+  for (const m of done) {
+    const s = m.summary!;
+    for (const k of Object.keys(severity) as Array<keyof typeof severity>)
+      severity[k] += s.findings.bySeverity[k];
+    for (const d of s.thirdPartyDomains) thirdParties.set(d, (thirdParties.get(d) ?? 0) + 1);
+    for (const d of s.leakDomains) leakDomains.set(d, (leakDomains.get(d) ?? 0) + 1);
+    if (s.kit) kits.set(s.kit.id, (kits.get(s.kit.id) ?? 0) + 1);
+  }
+  const top = (m: Map<string, number>) =>
+    [...m.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 8)
+      .map(([domain, scans]) => ({ domain, scans }));
+  return {
+    totals: {
+      scans: metas.length,
+      completed: done.length,
+      failed: metas.filter((m) => m.state === 'failed').length,
+      inProgress: metas.filter((m) => m.state === 'queued' || m.state === 'running').length,
+      scored: scored.length,
+      notScored: done.length - scored.length,
+      dapps: new Set(done.map((m) => m.hostname)).size,
+    },
+    averageScore: scored.length
+      ? Math.round(scored.reduce((a, m) => a + m.summary!.score!, 0) / scored.length)
+      : null,
+    severity,
+    addressLeaks: done.reduce((a, m) => a + m.summary!.addressLeaks, 0),
+    topThirdParties: top(thirdParties),
+    topLeakDomains: top(leakDomains),
+    kits: Object.fromEntries(kits),
+  };
 }
 
 export class BadRequest extends Error {}
@@ -200,6 +247,117 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
       sendJobError(res, err, log);
     }
   });
+
+  // ---------------- web application: scan jobs ----------------
+  const scans = deps.scans;
+  if (scans) {
+    app.post('/api/scans', rateLimited, (req, res) => {
+      let url: string;
+      try {
+        url = validateScanUrl(req.body?.url, config.allowedPorts, deps.isPublicAddress);
+      } catch (err) {
+        res
+          .status(400)
+          .json({ error: err instanceof BadRequest ? err.message : 'invalid request' });
+        return;
+      }
+      const dwellMs =
+        typeof req.body?.dwellMs === 'number'
+          ? Math.min(Math.max(Math.round(req.body.dwellMs), 1000), 20000)
+          : 4000;
+      try {
+        const meta = scans.submit(url, dwellMs);
+        res.status(202).json({ id: meta.id, state: meta.state });
+      } catch (err) {
+        if (err instanceof ScanQueueFull) {
+          res.status(503).json({ error: 'scanner busy; try again in a minute' });
+          return;
+        }
+        throw err;
+      }
+    });
+
+    app.get('/api/scans', (_req, res) => {
+      res.json({ scans: scans.list() });
+    });
+
+    app.get('/api/stats', (_req, res) => {
+      res.json(aggregateStats(scans.list()));
+    });
+
+    app.get('/api/scans/:id', (req, res) => {
+      const meta = UUID_RE.test(req.params.id) ? scans.get(req.params.id) : undefined;
+      if (!meta) {
+        res.status(404).json({ error: 'scan not found' });
+        return;
+      }
+      res.json({ scan: meta });
+    });
+
+    app.get('/api/scans/:id/report', (req, res) => {
+      const meta = UUID_RE.test(req.params.id) ? scans.get(req.params.id) : undefined;
+      if (!meta) {
+        res.status(404).json({ error: 'scan not found' });
+        return;
+      }
+      if (meta.state !== 'completed') {
+        res.status(409).json({ error: `scan is ${meta.state}` });
+        return;
+      }
+      try {
+        const a = scans.artifacts(meta.id)!;
+        res.json({ report: a.report, evidence: a.bundle, verification: a.verification });
+      } catch (err) {
+        log(`stored artifacts for ${meta.id} failed verification: ${String(err).slice(0, 200)}`);
+        res
+          .status(500)
+          .json({ error: 'stored report failed verification', detail: String(err).slice(0, 300) });
+      }
+    });
+
+    // Server-sent events: replay what already happened, then stream live.
+    app.get('/api/scans/:id/events', (req, res) => {
+      const meta = UUID_RE.test(req.params.id) ? scans.get(req.params.id) : undefined;
+      if (!meta) {
+        res.status(404).json({ error: 'scan not found' });
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+        connection: 'keep-alive',
+        'x-accel-buffering': 'no',
+      });
+      const send = (event: string, data: unknown) =>
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      let lastState = meta.state;
+      send('state', { state: meta.state });
+      for (const e of meta.events) send('progress', e);
+      if (meta.state === 'completed' || meta.state === 'failed') {
+        send('done', { state: meta.state, error: meta.error ?? null });
+        res.end();
+        return;
+      }
+      const unsubscribe = scans.subscribe(meta.id, (e) => {
+        if ('done' in e) {
+          send('done', { state: e.done.state, error: e.done.error ?? null });
+          unsubscribe();
+          res.end();
+        } else {
+          if (meta.state !== lastState) {
+            lastState = meta.state;
+            send('state', { state: meta.state }); // only on transitions
+          }
+          send('progress', e);
+        }
+      });
+      const keepAlive = setInterval(() => res.write(': keep-alive\n\n'), 15_000);
+      req.on('close', () => {
+        clearInterval(keepAlive);
+        unsubscribe();
+      });
+    });
+  }
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'not found' });
