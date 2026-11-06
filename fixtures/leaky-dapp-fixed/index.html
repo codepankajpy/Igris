@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Leaky Dapp FIXED (Igris fixture)</title>
+    <style>
+      /* System font stack only — the fixture's third-party contacts are the
+         two script tags below, planted deliberately for phase-A baselines. */
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        max-width: 40rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+      }
+      button {
+        font-size: 1.1rem;
+        padding: 0.6rem 1.2rem;
+        cursor: pointer;
+      }
+      #status {
+        margin-top: 1rem;
+        color: #444;
+      }
+    </style>
+    <!-- Deliberate pre-connect third-party contacts (IP exposure baseline). -->
+    <script src="http://assets.igris-cdn.test:38545/lib.js" defer></script>
+    <script src="http://widget.igris-chat.test:38545/widget.js" defer></script>
+  </head>
+  <body>
+    <h1>Leaky Dapp</h1>
+    <p>
+      A deliberately leaky fixture: on connect it ships the wallet address to a
+      public RPC, an analytics beacon, an error monitor and a tracking pixel.
+    </p>
+    <button id="connect">Connect Wallet</button>
+    <div id="status">not connected</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
