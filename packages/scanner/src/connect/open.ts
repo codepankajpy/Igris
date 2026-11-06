@@ -31,6 +31,11 @@ export interface OpenOptions {
   pollMs?: number;
   /** Hosts contacted so far (weak network signals). */
   hosts?: () => Iterable<string>;
+  /**
+   * Extra open condition for dApps with their own (non-kit) modal, e.g. "a
+   * dialog shows our EIP-6963 wallet" (Uniswap). Checked with the kit modal.
+   */
+  opened?: () => Promise<boolean>;
 }
 
 async function candidateHandle(page: Page, index: number): Promise<ElementHandle | null> {
@@ -64,7 +69,9 @@ export async function openConnectUi(page: Page, opts: OpenOptions = {}): Promise
   let documentLoads = 0;
   const onNav = (frame: import('playwright').Frame) => {
     if (frame !== page.mainFrame()) return;
-    if (frame.url() !== (urlChanges.at(-1) ?? startUrl)) urlChanges.push(frame.url());
+    // Cut to stay within the Report 2.1.0 limit (urlChanges items ≤ 500 chars).
+    const u = frame.url().slice(0, 480);
+    if (u !== (urlChanges.at(-1) ?? startUrl.slice(0, 480))) urlChanges.push(u);
   };
   const onLoad = () => (documentLoads += 1);
   page.on('framenavigated', onNav);
@@ -88,7 +95,9 @@ export async function openConnectUi(page: Page, opts: OpenOptions = {}): Promise
       detail: 'no eligible connect control (strict scoring)',
     });
   }
-  const handle = await candidateHandle(page, best.index);
+  // The page can navigate between the two evaluations ("execution context
+  // was destroyed"): that is a failed click, not a scanner crash.
+  const handle = await candidateHandle(page, best.index).catch(() => null);
   if (!handle) {
     return done({
       outcome: 'click-failed',
@@ -132,6 +141,15 @@ export async function openConnectUi(page: Page, opts: OpenOptions = {}): Promise
         candidates,
         fingerprint: fp,
         detail: `modal: ${fp.id}`,
+      });
+    }
+    if (opts.opened && (await opts.opened().catch(() => false))) {
+      return done({
+        outcome: 'modal-opened',
+        clicked: best,
+        candidates,
+        fingerprint: fp,
+        detail: 'dApp dialog listing our wallet (no known kit)',
       });
     }
     if (Date.now() >= deadline) break;

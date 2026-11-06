@@ -199,3 +199,113 @@ export const walletOptionAncestryProbe = (
   }
   return chain;
 })()`;
+
+/**
+ * Roots a wallet choice may come from: visible dialogs and known kit modal
+ * containers (deep). Nothing outside them is ever considered.
+ */
+export const DIALOG_ROOT_SELECTOR =
+  '[role="dialog"], [aria-modal="true"], dialog[open], #privy-modal-content, [data-testid="dynamic-auth-modal"], #__CONNECTKIT__, w3m-modal, appkit-modal, [data-testid="wallet-modal"]';
+
+/** Elements a click on a wallet entry should land on. */
+const CHOICE_TARGET =
+  'button, [role="button"], [role="option"], [role="menuitem"], [role="listitem"], li, w3m-list-wallet, wui-list-wallet, wui-list-select-wallet';
+
+export type ChoiceKind = 'canary' | 'hop' | 'fallback' | 'sign';
+
+export interface ChoiceDescription {
+  kind: ChoiceKind;
+  name: string;
+  testid: string | null;
+  tag: string;
+  rank: number;
+}
+
+/**
+ * Find the best wallet choice of `kind` inside the open dialog(s).
+ * mode "describe" returns a ChoiceDescription (or null); mode "element"
+ * returns the element itself (for evaluateHandle). Both run the same
+ * deterministic search so they agree. Read-only.
+ */
+export const walletChoiceProbe = (
+  kind: ChoiceKind,
+  mode: 'describe' | 'element',
+  rules: {
+    canaryRdns: string;
+    canaryName: string;
+    lists: Record<'hop' | 'fallback' | 'sign', string[]>;
+  },
+): string => `(() => {
+  ${HELPERS}
+  const KIND = ${JSON.stringify(kind)};
+  // Dialogs already visible before the connect click (cookie/consent
+  // banners) are searched only for our wallet's exact entry, never for
+  // hop/fallback/sign controls.
+  const pre = window.__igrisPreDialogs;
+  const roots = deepAll(document, ${JSON.stringify(DIALOG_ROOT_SELECTOR)})
+    .filter(isVisible)
+    .filter((r) => KIND === 'canary' || !(pre && pre.has(r)));
+  if (!roots.length) return null;
+  const up = (n) => { const p = n.parentNode; return p && p.nodeType === 11 ? p.host : n.parentElement; };
+  const rootOf = (el) => { for (let n = el; n; n = up(n)) if (roots.includes(n)) return n; return null; };
+  const navLink = (el) => el.tagName === 'A' && (() => { const h = (el.getAttribute('href') || '').trim().toLowerCase(); return !(h === '' || h === '#' || h.startsWith('javascript:')); })();
+  const target = (el, root) => {
+    for (let n = el; n && n !== root; n = up(n)) {
+      if (n.matches && n.matches(${JSON.stringify(CHOICE_TARGET)})) return n;
+    }
+    return el;
+  };
+  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+  const describe = (el, rank) => ({ kind: KIND, name: norm(accName(el)).slice(0, 80), testid: el.getAttribute('data-testid'), tag: el.tagName.toLowerCase(), rank });
+  let best = null;
+  const consider = (el, rank) => {
+    if (!el || !isVisible(el) || navLink(el)) return;
+    if (!best || rank < best.rank) best = { el, rank };
+  };
+  if (KIND === 'canary') {
+    const rdns = ${JSON.stringify(rules.canaryRdns)};
+    const nameRe = new RegExp(${JSON.stringify(rules.canaryName)}, 'i');
+    for (const el of deepAll(document, '[data-testid]')) {
+      const root = rootOf(el);
+      if (root && (el.getAttribute('data-testid') || '').includes(rdns)) consider(el, 0);
+    }
+    for (const el of deepAll(document, '*')) {
+      if (el.children.length !== 0) continue;
+      const root = rootOf(el);
+      if (root && nameRe.test(norm(el.textContent))) consider(target(el, root), 1);
+    }
+    for (const el of deepAll(document, ${JSON.stringify(CHOICE_TARGET)})) {
+      const root = rootOf(el);
+      if (root && nameRe.test(norm(accName(el)))) consider(el, 1);
+    }
+  } else {
+    const lists = ${JSON.stringify(rules.lists)};
+    const res = (lists[KIND] || []).map((s) => new RegExp(s, 'i'));
+    for (const el of deepAll(document, ${JSON.stringify(CHOICE_TARGET)})) {
+      if (!rootOf(el)) continue;
+      const n = norm(accName(el));
+      if (!n || n.length > 40) continue;
+      const r = res.findIndex((re) => re.test(n));
+      if (r >= 0) consider(el, r);
+    }
+  }
+  if (!best) return null;
+  return ${JSON.stringify(mode)} === 'element' ? best.el : describe(best.el, best.rank);
+})()`;
+
+/** Is a dialog visible that was NOT already visible before the connect click? */
+export const DIALOG_OPEN_PROBE = `(() => {
+  ${HELPERS}
+  const pre = window.__igrisPreDialogs;
+  return deepAll(document, ${JSON.stringify(DIALOG_ROOT_SELECTOR)}).some((r) => isVisible(r) && !(pre && pre.has(r)));
+})()`;
+
+/**
+ * Remember which dialogs are visible BEFORE the connect click (in a
+ * WeakSet on window: no DOM change, invisible to the page's markup).
+ */
+export const DIALOG_SNAPSHOT_PROBE = `(() => {
+  ${HELPERS}
+  window.__igrisPreDialogs = new WeakSet(deepAll(document, ${JSON.stringify(DIALOG_ROOT_SELECTOR)}).filter(isVisible));
+  return true;
+})()`;

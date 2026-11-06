@@ -8,6 +8,7 @@ import { isNavigatingLink, scoreCandidates } from './candidates.js';
 import { identifyKit, type KitSignal } from './fingerprint.js';
 import type { RawCandidate } from './page-probes.js';
 import { classifyLoad, cleanNavError } from '../load-state.js';
+import { FALLBACK_NAMES, HOP_NAMES, SIGN_NAMES, isCanaryChoice, rankIn } from './choice.js';
 import { isUnexpectedNavigation } from './open.js';
 
 let n = 0;
@@ -241,5 +242,41 @@ describe('navigation guard', () => {
     expect(isUnexpectedNavigation('https://app.x.org/', 'https://evil.example/')).toBe(true);
     expect(isUnexpectedNavigation('https://app.x.org/', 'https://x.org/')).toBe(true);
     expect(isUnexpectedNavigation('https://app.x.org/', 'https://app.x.org/connect')).toBe(false);
+  });
+});
+
+describe('wallet choice inside the dialog (whole names only)', () => {
+  it('our EIP-6963 wallet by rdns testid or exact name (+ status word)', () => {
+    expect(isCanaryChoice('', 'rk-wallet-option-network.igris.canary')).toBe(true);
+    expect(isCanaryChoice('', 'wallet-selector-network.igris.canary')).toBe(true);
+    expect(isCanaryChoice('Igris Canary Wallet', null)).toBe(true);
+    expect(isCanaryChoice('Igris Canary Wallet INSTALLED', null)).toBe(true);
+    expect(isCanaryChoice('Igris  Canary Wallet Detected', null)).toBe(true);
+    expect(isCanaryChoice('Learn about Igris Canary Wallet security', null)).toBe(false);
+  });
+  it('marketing prose that mentions a wallet is never a choice (relay.link regression)', () => {
+    const prose = '$20B+ settled across 85+ chains, powering Phantom, MetaMask,';
+    expect(isCanaryChoice(prose, null)).toBe(false);
+    expect(rankIn(FALLBACK_NAMES, prose)).toBe(-1);
+    expect(rankIn(HOP_NAMES, prose)).toBe(-1);
+  });
+  it('fallbacks are generic injected entries, best first', () => {
+    expect(rankIn(FALLBACK_NAMES, 'Browser Wallet')).toBe(0);
+    expect(rankIn(FALLBACK_NAMES, 'Injected')).toBe(1);
+    expect(rankIn(FALLBACK_NAMES, 'MetaMask Detected')).toBe(2);
+    expect(rankIn(FALLBACK_NAMES, 'MetaMask Portfolio')).toBe(-1);
+    expect(rankIn(FALLBACK_NAMES, 'Coinbase Wallet')).toBe(-1);
+  });
+  it('hops reveal a wallet list (Dynamic: "Continue with a wallet")', () => {
+    expect(rankIn(HOP_NAMES, 'Continue with a wallet')).toBe(0);
+    expect(rankIn(HOP_NAMES, 'Other Wallets')).toBe(2);
+    expect(rankIn(HOP_NAMES, 'Continue with Google')).toBe(-1);
+    expect(rankIn(HOP_NAMES, 'Continue')).toBe(-1);
+  });
+  it('sign-in confirmations are exact (never "Sign up" or "Sign out")', () => {
+    expect(rankIn(SIGN_NAMES, 'Sign message')).toBe(0);
+    expect(rankIn(SIGN_NAMES, 'Verify wallet')).toBe(1);
+    expect(rankIn(SIGN_NAMES, 'Sign up')).toBe(-1);
+    expect(rankIn(SIGN_NAMES, 'Sign out')).toBe(-1);
   });
 });

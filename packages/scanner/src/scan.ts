@@ -21,6 +21,7 @@ import {
 } from '@igris/core';
 import { classifyLoad, observeLoad } from './load-state.js';
 import { collectKitSignals, identifyKit } from './connect/fingerprint.js';
+import { connectWithEngine } from './connect/engine.js';
 import { TrafficRecorder } from './capture.js';
 import { connectWallet, isWalletConnected, type Recipe } from './connect.js';
 import { WalletReadHandler } from './stub-rpc.js';
@@ -32,7 +33,7 @@ import {
   type EgressProxyOptions,
 } from './egress/proxy.js';
 
-export const SCANNER_VERSION = '0.2.0'; // 0.2.0: emits Report v2 + evidence bundle
+export const SCANNER_VERSION = '0.3.0'; // 0.3.0: connect engine (dialog-scoped wallet choice), RPC by behaviour; 0.2.0: Report v2 + evidence bundle
 
 /**
  * Network egress policy for the scanned page.
@@ -224,8 +225,16 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       throw new Error(`unsupported sign kind ${kind}`);
     });
 
-    await context.exposeFunction('__igrisWalletEvent', (event: string) => {
-      if (event === 'eth_requestAccounts') requestAccountsCalls += 1;
+    // Only the dApp's own main frame counts as "the dApp asked for accounts";
+    // a third-party iframe or popup with its own provider does not.
+    let mainPage: import('playwright').Page | null = null;
+    await context.exposeBinding('__igrisWalletEvent', (source, event: string) => {
+      if (
+        event === 'eth_requestAccounts' &&
+        source.page === mainPage &&
+        source.frame === source.page.mainFrame()
+      )
+        requestAccountsCalls += 1;
     });
 
     await context.addInitScript(
@@ -233,6 +242,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     );
 
     const page = await context.newPage();
+    mainPage = page;
     recorder.attachPage(page);
     emit('browser', 'completed', `canary wallet injected (EIP-1193/6963), service workers blocked`);
 
@@ -273,52 +283,83 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
 
       // --- Phase B: post-connect ---
       recorder.setPhase('post-connect');
-      const connectLog: string[] = [];
-      emit('wallet', 'started', 'looking for a connect control and wallet option');
+      emit('wallet', 'started', 'opening the connect UI and choosing the canary wallet');
       const t0 = Date.now();
       const startUrl = page.url();
-      try {
-        await connectWallet(page, options.recipe, connectLog);
-      } catch (err) {
-        connectLog.push(`connect error: ${String(err).slice(0, 200)}`);
-      }
-      let connected = await isWalletConnected(page);
-      if (!connected) {
-        for (let poll = 0; poll < 6; poll++) {
+      const hostsSeen = () =>
+        new Set(
+          recorder.capture.requests.map((r) => {
+            try {
+              return new URL(r.url).hostname;
+            } catch {
+              return '';
+            }
+          }),
+        );
+      let connected: boolean;
+      if (options.recipe) {
+        // A user-supplied recipe file: explicit clicks, legacy diagnostics.
+        const connectLog: string[] = [];
+        try {
+          await connectWallet(page, options.recipe, connectLog);
+        } catch (err) {
+          connectLog.push(`connect error: ${String(err).slice(0, 200)}`);
+        }
+        connected = await isWalletConnected(page);
+        for (let poll = 0; !connected && poll < 6; poll++) {
           await page.waitForTimeout(500);
           connected = await isWalletConnected(page);
-          if (connected) break;
         }
+        connection = legacyDiagnostics({
+          connected,
+          log: connectLog,
+          recipeFile: true,
+          requestAccountsCalls,
+          fingerprint: identifyKit(await collectKitSignals(page, hostsSeen())),
+          startUrl,
+          endUrl: page.url(),
+          ms: Date.now() - t0,
+        });
+      } else {
+        try {
+          connection = await connectWithEngine(page, {
+            requestAccounts: () => requestAccountsCalls,
+            hosts: hostsSeen,
+          });
+        } catch (err) {
+          // An engine crash must not discard a page that loaded: the scan
+          // stays scored as pre-connect-only, with the reason recorded.
+          connection = {
+            kit: { id: 'none', confidence: 'none', signals: [] },
+            strategy: 'generic',
+            recipe: 'generic@1',
+            outcome: 'failed',
+            failure: {
+              category: 'scanner-error',
+              step: 'connect-engine',
+              detail: String(err).slice(0, 480),
+            },
+            steps: [],
+            navigation: { urlChanges: [], aborted: false },
+            requestAccountsCalls,
+          };
+        }
+        connected = connection.outcome === 'connected';
       }
-      const hosts = new Set(
-        recorder.capture.requests.map((r) => {
-          try {
-            return new URL(r.url).hostname;
-          } catch {
-            return '';
-          }
-        }),
-      );
-      connection = legacyDiagnostics({
-        connected,
-        log: connectLog,
-        recipeFile: Boolean(options.recipe),
-        requestAccountsCalls,
-        fingerprint: identifyKit(await collectKitSignals(page, hosts)),
-        startUrl,
-        endUrl: page.url(),
-        ms: Date.now() - t0,
-      });
+      const stepLog = connection.steps.map((st) => `${st.step} ${st.result}: ${st.detail}`);
       if (!connected) {
         status = 'wallet-connect-failed';
-        errors.push(`could not connect wallet (${connectLog.join('; ') || 'no steps ran'})`);
-        emit('wallet', 'failed', connection.failure?.category ?? 'not connected');
+        const f = connection.failure;
+        errors.push(
+          `could not connect wallet (${f ? `${f.category} at ${f.step}: ${f.detail}` : 'not connected'})`,
+        );
+        emit('wallet', 'failed', f ? `${f.category}: ${f.detail}` : 'not connected');
       } else {
-        errors.push(...connectLog.map((l) => `connect: ${l}`));
+        errors.push(...stepLog.map((l) => `connect: ${l}`));
         emit(
           'wallet',
           'completed',
-          `connected (eth_requestAccounts ×${requestAccountsCalls})${connection.kit.id !== 'none' ? ` · ${connection.kit.id}` : ''}`,
+          `connected (eth_requestAccounts ×${requestAccountsCalls})${connection.kit.id !== 'none' ? ` · ${connection.kit.id}` : ''} · ${connection.recipe}`,
         );
       }
       await observe('observe-post-connect', page);
