@@ -18,7 +18,8 @@
     "@igris/core": "workspace:*",
     "@igris/patcher": "workspace:*",
     "@igris/registry": "workspace:*",
-    "@igris/scanner": "workspace:*"
+    "@igris/scanner": "workspace:*",
+    "viem": "2.57.16"
   },
   "devDependencies": {
     "vitest": "5.1.0"
