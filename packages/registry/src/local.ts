@@ -261,6 +261,7 @@ export class LocalSiteRegistry implements SiteRegistry {
     const entity = (key: string, attributes: WireEntity['attributes']): WireEntity => ({
       key,
       owner,
+      creator: owner,
       expiresAt: null,
       attributes,
     });

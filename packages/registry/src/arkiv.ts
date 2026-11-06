@@ -115,9 +115,13 @@ export function buildQuery(
   return order ? `${q} ORDER BY ${order.name}:${order.type} ${order.dir}` : q;
 }
 
-/** `$owner` is one of `owners` (lower-case or checksummed addresses). */
+/**
+ * `$creator` is one of `owners` (lower-case or checksummed addresses).
+ * The creator, not `$owner`: ownership can be transferred to any address
+ * without its consent, so `$owner` would let anyone forge a trusted scan.
+ */
 export function ownersFilter(owners: readonly string[]): Expression {
-  return or(owners.map((o) => eq('$owner', addr(o.toLowerCase()))));
+  return or(owners.map((o) => eq('$creator', addr(o.toLowerCase()))));
 }
 
 const listSelect = (schema: IgrisSchema, columns: readonly string[]): RpcSelect =>
@@ -125,6 +129,7 @@ const listSelect = (schema: IgrisSchema, columns: readonly string[]): RpcSelect 
     Object.fromEntries([
       ['$key', true],
       ['$owner', true],
+      ['$creator', true],
       ['$expiresAt', true],
       ...columns.map((c) => [c, true]),
     ]),
@@ -446,17 +451,22 @@ export class ArkivSiteRegistry implements SiteRegistry {
   /** The batch one version writes (exported shape for tests and docs). */
   batchFor(v: VersionedPublication): ExecuteBatchParameters {
     const expiration = ExpirationTime.fromDays(this.expiryDays);
+    // Published history is immutable: no attribute can ever be patched, not
+    // even by the publisher (expiry can still be extended).
+    const flags = { readonly: true };
     const creates = [
       {
         schema: ScanSchema,
         values: { ...v.scan, scannedAt: u64(BigInt(v.scan.scannedAt)) },
         expiration,
+        flags,
       },
-      { schema: EvidenceSchema, values: v.evidence, expiration },
+      { schema: EvidenceSchema, values: v.evidence, expiration, flags },
       ...v.flows.map((f) => ({
         schema: FlowSchema,
         values: { ...f, scannedAt: u64(BigInt(f.scannedAt)) },
         expiration,
+        flags,
       })),
     ];
     return { creates } as unknown as ExecuteBatchParameters;

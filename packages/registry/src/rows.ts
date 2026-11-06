@@ -128,9 +128,13 @@ function meta(
   format: RowFormat,
 ): { key: string; owner: string; expiresAtBlock: number | null; attrs: Attrs } {
   if (typeof entity !== 'object' || entity === null) bad('entity');
-  const e = entity as { key?: unknown; owner?: unknown; expiresAt?: unknown };
+  const e = entity as { key?: unknown; owner?: unknown; creator?: unknown; expiresAt?: unknown };
   if (typeof e.key !== 'string' || !format.key.test(e.key)) bad('key');
-  if (typeof e.owner !== 'string' || !format.owner.test(e.owner)) bad('owner');
+  // Trust is decided by the CREATOR, which never changes. The current owner
+  // does not count: on Arkiv anyone can transfer an entity they created to
+  // any address (no acceptance), so `$owner` can be forged into a trusted
+  // address. The decoded `owner` field below therefore holds the creator.
+  if (typeof e.creator !== 'string' || !format.owner.test(e.creator)) bad('creator');
   let expiresAtBlock: number | null = null;
   if (e.expiresAt !== undefined && e.expiresAt !== null) {
     expiresAtBlock = integerish(e.expiresAt);
@@ -139,7 +143,7 @@ function meta(
   const attrs = attrsOf(entity);
   const tag = attrs.get(SCHEMA_ATTRIBUTE);
   if (!tag || tag.type !== 'str' || tag.value !== schemaName) bad('schema tag');
-  return { key: e.key as string, owner: e.owner as string, expiresAtBlock, attrs };
+  return { key: e.key as string, owner: e.creator as string, expiresAtBlock, attrs };
 }
 
 function guard<T>(fn: () => T): T | null {

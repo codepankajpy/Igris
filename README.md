@@ -107,7 +107,7 @@ anonymous budget is small) — every version of a site:
 ```bash
 curl -s "https://rpc.rabdi.db-chain.testnet.arkiv.network/$ARKIV_ACCESS_KEY" \
   -H 'content-type: application/json' --data \
-  '{"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":["arkiv.schema = str('"'"'igris.scan.v2'"'"') AND hostname = str('"'"'app.uniswap.org'"'"') AND $owner = addr(0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe)",{"select":{"key":true,"owner":true,"attributes":true},"limit":"0x10"}]}'
+  '{"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":["arkiv.schema = str('"'"'igris.scan.v2'"'"') AND hostname = str('"'"'app.uniswap.org'"'"') AND $creator = addr(0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe)",{"select":{"key":true,"owner":true,"attributes":true},"limit":"0x10"}]}'
 ```
 
 ## CROPS
@@ -152,8 +152,9 @@ dApp leaks about its users. Each line was checked against the code on branch
   time, rate-limited. Every report and evidence bundle is re-verified on
   every read (hashes against the Arkiv entity, schema, integrity — verdicts
   are recomputed), and once more in the visitor's browser. Trust
-  assumptions: a published report is an attestation by its publisher's
-  address; a report covers what a browser can observe (server-side sharing
+  assumptions: a published report is an attestation by the address that
+  created it (`$creator`, which never changes — not `$owner`, which anyone
+  can set to any address by transferring an entity they created); a report covers what a browser can observe (server-side sharing
   is invisible). Open gaps: Chromium runs without its own sandbox in the
   container image (ROADMAP P4-6), and the backend has no authentication
   (anyone who can reach it can start scans, within its rate limits).

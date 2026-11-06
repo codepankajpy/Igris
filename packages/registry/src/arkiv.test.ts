@@ -59,13 +59,13 @@ class FakeNode {
     query: async (q, options) => {
       this.queries.push(q);
       const [where = '', order] = q.split(' ORDER BY ');
-      const owners = new Set<string>();
+      const creators = new Set<string>();
       const terms: Array<{ name: string; value: string | number }> = [];
       for (const m of where.matchAll(
         /(\$?[A-Za-z][\w.]*) = (?:str\('((?:[^']|'')*)'\)|i32\((-?\d+)\)|addr\((0x[0-9a-fA-F]{40})\)|key\((0x[0-9a-fA-F]{64})\))/g,
       )) {
         const [, name, s, n, a, k] = m;
-        if (name === '$owner') owners.add(a!.toLowerCase());
+        if (name === '$creator') creators.add(a!.toLowerCase());
         else
           terms.push({
             name: name!,
@@ -90,7 +90,7 @@ class FakeNode {
       for (const t of terms) groups.set(t.name, [...(groups.get(t.name) ?? []), t]);
       let rows = this.entities.filter(
         (e) =>
-          (this.ignoreOwnerFilter || owners.has(e.owner.toLowerCase())) &&
+          (this.ignoreOwnerFilter || creators.has(e.creator.toLowerCase())) &&
           [...groups.values()].every((g) => g.some((t) => match(e, t))),
       );
       if (order) {
@@ -111,6 +111,7 @@ class FakeNode {
         data: rows.map((e) => ({
           key: e.key,
           owner: e.owner,
+          creator: e.creator,
           expiresAt: e.expiresAt,
           attributes:
             sel === true
@@ -145,6 +146,7 @@ class FakeNode {
         this.entities.push({
           key,
           owner: this.owner.toLowerCase(),
+          creator: this.owner.toLowerCase(),
           expiresAt: '0x77d0a0',
           attributes,
         });
@@ -222,7 +224,7 @@ describe('ArkivSiteRegistry publish', () => {
 
     // the version lookup before the batch read only trusted owners
     expect(node.queries[0]).toBe(
-      `arkiv.schema = str('igris.scan.v2') AND hostname = str('app.example.org') AND $owner = addr(${getAddress(s.address)}) ORDER BY version:i32 DESC`,
+      `arkiv.schema = str('igris.scan.v2') AND hostname = str('app.example.org') AND $creator = addr(${getAddress(s.address)}) ORDER BY version:i32 DESC`,
     );
   });
 
@@ -316,10 +318,18 @@ describe('ArkivSiteRegistry reads trust only trustedOwners', () => {
     const attr = (e: WireEntity, name: string) => e.attributes.find((x) => x.name === name)!;
     node.entities.push(
       forge((e) => {
-        e.owner = mallory; // a perfectly valid row by an untrusted owner, claiming v5
+        e.owner = mallory; // a perfectly valid row by an untrusted creator, claiming v5
+        e.creator = mallory;
         attr(e, 'version').value = 5;
         attr(e, 'previous').value = genuine.key;
       }, 1),
+      // The forgery the creator rule exists for: created by mallory, then
+      // transferred to the trusted publisher (Arkiv needs no consent).
+      forge((e) => {
+        e.creator = mallory;
+        e.owner = s.address.toLowerCase();
+        attr(e, 'version').value = 6;
+      }, 6),
       forge((e) => (attr(e, 'version').value = 'x'), 2),
       forge((e) => (attr(e, 'scannedAt').value = '0x' + 'f'.repeat(40)), 3),
       forge((e) => (e.attributes = e.attributes.filter((x) => x.name !== 'coverage')), 4),
@@ -344,11 +354,11 @@ describe('ArkivSiteRegistry reads trust only trustedOwners', () => {
     const res = await reg.publish(a.report, a.bundle);
     // version lookup on publish covers trusted owners AND the publisher
     expect(node.queries[0]).toContain(
-      `($owner = addr(${getAddress(other)}) OR $owner = addr(${getAddress(s.address)}))`,
+      `($creator = addr(${getAddress(other)}) OR $creator = addr(${getAddress(s.address)}))`,
     );
     // reads trust only `other`, so our own publish is invisible to this reader
     expect(await reg.versions('app.example.org')).toEqual([]);
-    expect(node.queries.at(-1)).toContain(`$owner = addr(${getAddress(other)})`);
+    expect(node.queries.at(-1)).toContain(`$creator = addr(${getAddress(other)})`);
     expect(node.queries.at(-1)).not.toContain(getAddress(s.address));
     await expect(reg.load(res.scan)).rejects.toThrow(/not owned by a trusted owner/);
   });

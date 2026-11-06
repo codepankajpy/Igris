@@ -286,6 +286,8 @@ export interface WireAttribute {
 export interface WireEntity {
   key: string;
   owner: string;
+  /** Immutable signer of the create (Arkiv `$creator`); the trust identity. */
+  creator: string;
   expiresAt: string | null;
   attributes: WireAttribute[];
 }

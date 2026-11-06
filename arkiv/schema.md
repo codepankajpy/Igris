@@ -110,10 +110,14 @@ long as the chain allows. Valid range 1–182.
 
 ## Trust and verification on read
 
+Every IGRIS entity is created with the `readonly` flag: once published, no
+attribute can be patched — not even by the publisher.
+
 Anyone can write entities tagged with these names. An entity is an
-**attestation by its owner**, not a fact. Reads filter on `$owner` against
-`trustedOwners` (default: the publisher) **server-side and again
-client-side**, and every row is decoded strictly (types, hostname / sha /
+**attestation by its creator**, not a fact. Reads filter on `$creator`
+(immutable — never `$owner`, which anyone can set to any address by
+transferring an entity they created) against `trustedOwners` (default: the
+publisher) **server-side and again client-side**, and every row is decoded strictly (types, hostname / sha /
 key formats, string sizes, `previous` consistent with `version`). A row that
 fails is skipped, never thrown.
 
@@ -133,7 +137,7 @@ limited).
 curl -s https://rpc.rabdi.db-chain.testnet.arkiv.network \
   -H 'content-type: application/json' --data @- <<'EOF'
 {"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":[
-  "arkiv.schema = str('igris.flow.v1') AND recipient = str('segment.io') AND $owner = addr(0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe) ORDER BY scannedAt:u64 DESC",
+  "arkiv.schema = str('igris.flow.v1') AND recipient = str('segment.io') AND $creator = addr(0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe) ORDER BY scannedAt:u64 DESC",
   {"select":{"key":true,"owner":true,"expiresAt":true,"attributes":true},"limit":"0x64"}]}
 EOF
 ```

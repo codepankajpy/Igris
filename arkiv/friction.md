@@ -107,7 +107,7 @@ matches locally against a snapshot instead of querying per visited site.
 
 - **Expected**: `ownedBy([a, b])`.
 - **Happened**: `ownedBy` takes one address. Several trusted scanners need
-  `or(eq('$owner', addr(a)), eq('$owner', addr(b)))` in `where`. Works
+  `or(eq('$creator', addr(a)), eq('$creator', addr(b)))` in `where` (we filter on `$creator`; see #13). Works
   (verified live), just undocumented.
 
 ## 12. Batch gas for large payloads is unverified
@@ -116,3 +116,16 @@ matches locally against a snapshot instead of querying per visited site.
   evidence) plus N flow entities in one transaction, and one transaction is
   capped at 2^24 gas (`MAX_TRANSACTION_GAS`). We have not measured a
   maximal batch on Rabdi; the first live publishes should log gas used.
+
+## 13. `$owner` is not an identity: transfers need no consent
+
+- **Expected**: filtering on `$owner` identifies who published an entity.
+- **Happened**: `changeOwnership({ entityKey, newOwner })` takes effect
+  without the new owner's consent. Anyone can create an `igris.scan.v2`
+  for any site and transfer it to a trusted scanner's address; a reader
+  that filters on `$owner` then shows the forgery as trusted. Found in a
+  review of our own reader (2026-11-07).
+- **Fix**: trust `$creator` (immutable): server-side filter
+  `$creator = addr(…)`, select `creator` and re-check it client-side.
+  Verified live on Rabdi. Every IGRIS entity is also created `readonly`
+  so published history cannot be patched later.

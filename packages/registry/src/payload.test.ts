@@ -124,7 +124,13 @@ describe('buildPublication', () => {
       'bundle',
     ]);
     const scan = parseScanRow(
-      { key: `local:${'b'.repeat(64)}`, owner: 'me', expiresAt: null, attributes: scanAttrs },
+      {
+        key: `local:${'b'.repeat(64)}`,
+        owner: 'me',
+        creator: 'me',
+        expiresAt: null,
+        attributes: scanAttrs,
+      },
       LOCAL_FORMAT,
     );
     expect(scan).toMatchObject({ version: 2, previous: `local:${'a'.repeat(64)}`, recipients: 4 });
@@ -132,6 +138,7 @@ describe('buildPublication', () => {
       {
         key: `local:${'c'.repeat(64)}`,
         owner: 'me',
+        creator: 'me',
         expiresAt: null,
         attributes: toWireAttributes(FlowSchema, v.flows[0]!),
       },

@@ -273,19 +273,25 @@ describe('LocalSiteRegistry refusals and hostile data', () => {
       clone((e) => (attr(e, 'recipients').value = -1), k('6')),
       clone((e) => (attr(e, 'arkiv.schema').value = 'igris.scan.v1'), k('7')),
       clone((e) => (attr(e, 'version').value = 2), k('8')), // v2 with previous "" is invalid
-      clone((e) => (e.owner = 'mallory'), k('9')), // valid row, untrusted owner
+      clone((e) => ((e.owner = 'mallory'), (e.creator = 'mallory')), k('9')), // valid row, untrusted creator
+      // created by mallory, ownership then transferred to the trusted publisher: still untrusted
+      clone((e) => ((e.creator = 'mallory'), (e.owner = 'igris-test')), k('a')),
     ]);
     expect((await reg.versions('app.example.org')).map((s) => s.key)).toEqual([res.scan.key]);
     expect((await reg.recentSites()).map((s) => s.key)).toEqual([res.scan.key]);
 
-    // A registry trusting mallory sees only mallory's row; publishing as igris-test
-    // still numbers after every trusted-or-own version.
+    // A registry trusting mallory sees only mallory-CREATED rows (including the
+    // one mallory transferred away); publishing as igris-test still numbers after
+    // every trusted-or-own version.
     const both = new LocalSiteRegistry({
       file,
       publisher: 'igris-test',
       trustedOwners: ['mallory'],
     });
-    expect((await both.versions('app.example.org')).map((s) => s.owner)).toEqual(['mallory']);
+    expect((await both.versions('app.example.org')).map((s) => s.owner)).toEqual([
+      'mallory',
+      'mallory',
+    ]);
     const b = fixedSegment();
     expect((await both.publish(b.report, b.bundle)).scan.version).toBe(2);
   });
