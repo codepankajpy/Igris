@@ -37,8 +37,6 @@ function findAll(haystack: string, needle: string): number[] {
   return out;
 }
 
-const HEX_CHAR = /[0-9a-fA-F]/;
-
 /**
  * Refine the generic `hex-core` label by looking at the actual matched text
  * and its 0x prefix, so the report can say *which* case form leaked.
@@ -126,17 +124,22 @@ export function findCanary(text: string, forms: CanaryForms): CanaryMatch[] {
  * never re-leak the address it reports.
  */
 export function redactSnippet(text: string, match: CanaryMatch, forms: CanaryForms): string {
-  const start = Math.max(0, match.index - SNIPPET_CONTEXT);
-  const end = Math.min(text.length, match.index + match.length + SNIPPET_CONTEXT);
-  const before = text.slice(start, match.index);
-  const after = text.slice(match.index + match.length, end);
-  let snippet =
-    (start > 0 ? '…' : '') + before + '<CANARY>' + after + (end < text.length ? '…' : '');
-  // Belt and braces: redact any residual occurrences within the context, one
-  // at a time (indices shift after each replacement).
-  for (let m = findCanary(snippet, forms)[0]; m; m = findCanary(snippet, forms)[0]) {
-    snippet = snippet.slice(0, m.index) + '<CANARY>' + snippet.slice(m.index + m.length);
+  // Redact EVERY occurrence in the full text first, then slice the context
+  // window. Slicing first could cut a neighbouring occurrence mid-address and
+  // leave most of its hex chars visible — a snippet must never re-leak the
+  // address it reports.
+  const all = findCanary(text, forms);
+  let redacted = text;
+  let targetIndex = match.index;
+  for (const m of [...all].sort((a, b) => b.index - a.index)) {
+    redacted = redacted.slice(0, m.index) + '<CANARY>' + redacted.slice(m.index + m.length);
+    if (m.index < targetIndex) targetIndex += '<CANARY>'.length - m.length;
   }
+  const tagLen = '<CANARY>'.length;
+  const start = Math.max(0, targetIndex - SNIPPET_CONTEXT);
+  const end = Math.min(redacted.length, targetIndex + tagLen + SNIPPET_CONTEXT);
+  const snippet =
+    (start > 0 ? '…' : '') + redacted.slice(start, end) + (end < redacted.length ? '…' : '');
   // Normalize control characters so snippets stay single-line in reports.
   return snippet.replace(/[\r\n\t]+/g, ' ');
 }
