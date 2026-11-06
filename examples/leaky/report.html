@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Igris scan — leaky-dapp.test</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 72rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  h1 { margin-bottom: 0; } h1 code { font-size: 0.8em; }
+  .meta { color: #666; margin-top: 0.25rem; }
+  .score { font-size: 3.5rem; font-weight: 700; }
+  .cards { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 1.5rem 0; }
+  .card { border: 1px solid #8884; border-radius: 8px; padding: 1rem 1.5rem; min-width: 10rem; }
+  .card .n { font-size: 2rem; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9rem; }
+  th, td { border: 1px solid #8884; padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+  th { background: #8881; }
+  .badge { color: #fff; border-radius: 999px; padding: 0.1rem 0.6rem; font-size: 0.78rem; white-space: nowrap; }
+  code.snippet { font-size: 0.78rem; word-break: break-all; }
+  .ledger td.pts { text-align: right; font-variant-numeric: tabular-nums; }
+  details { margin: 0.5rem 0; }
+  footer { margin: 3rem 0 1rem; color: #666; font-size: 0.85rem; border-top: 1px solid #8884; padding-top: 1rem; }
+</style>
+</head>
+<body>
+<h1>Igris scan: <code>leaky-dapp.test</code></h1>
+<p class="meta">http://leaky-dapp.test:38546/ · scanned 2026-11-06T00:59:14.996Z · scanner v0.1.0 · report v1.0.0 · chain 1 · status: <strong>completed</strong></p>
+
+<div class="cards">
+  <div class="card"><div class="n score" style="color:#cf222e">0</div>privacy score / 100</div>
+  <div class="card"><div class="n">5</div>exact address leaks</div>
+  <div class="card"><div class="n">0</div>hashed (still linkable)</div>
+  <div class="card"><div class="n">0</div>partial (unscored)</div>
+  <div class="card"><div class="n">6</div>third parties contacted</div>
+  <div class="card"><div class="n">no</div>uses Anon-RPC</div>
+</div>
+
+<h2>Score ledger</h2>
+<p>Start at 100; every deduction below is traceable to finding IDs. This is a <em>heuristic</em>, not an audit — see docs/SCORING.md.</p>
+<table class="ledger">
+<tr><th>#</th><th>penalty</th><th>rule</th><th>findings</th><th>points</th></tr>
+<tr><td>p1</td><td>address reached igris-analytics.test (analytics)</td><td><code>leak.analytics</code></td><td>f1, f2</td><td class="pts">−25</td></tr>
+<tr><td>p2</td><td>address reached igris-cdn.test (cdn)</td><td><code>leak.cdn</code></td><td>f5</td><td class="pts">−20</td></tr>
+<tr><td>p3</td><td>address reached igris-errors.test (error-monitoring)</td><td><code>leak.error-monitoring</code></td><td>f3</td><td class="pts">−25</td></tr>
+<tr><td>p4</td><td>address reached igris-rpc.test (rpc-provider)</td><td><code>leak.rpc-provider</code></td><td>f4</td><td class="pts">−15</td></tr>
+<tr><td>p5</td><td>2 third parties contacted before connect (IP exposure): igris-cdn.test, igris-chat.test</td><td><code>contact.perDomainPreConnect</code></td><td>—</td><td class="pts">−4</td></tr>
+<tr><td>p6</td><td>4 third parties contacted after connect (IP exposure): igris-analytics.test, igris-cdn.test, igris-errors.test, igris-rpc.test</td><td><code>contact.perDomainPostConnect</code></td><td>—</td><td class="pts">−12</td></tr>
+<tr><th colspan="4">score</th><th class="pts">0</th></tr>
+</table>
+
+<h2>Findings (5)</h2>
+<p>The canary address is always shown as <code>&lt;CANARY&gt;</code>. “counted” = participates in the score.</p>
+<table>
+<tr><th>id</th><th>class</th><th>destination</th><th>where</th><th>encoding</th><th>phase</th><th>counted</th><th>snippet</th></tr>
+<tr>
+    <td><code>f1</code></td>
+    <td><span class="badge" style="background:#cf222e">analytics</span></td>
+    <td>ingest.igris-analytics.test</td>
+    <td>request-body</td>
+    <td><code>base64(checksummed)</code></td>
+    <td>post-connect</td>
+    <td>yes</td>
+    <td><code class="snippet">…t_connected&quot;,&quot;wallet&quot;:&quot;&lt;CANARY&gt;&quot;,&quot;uid&quot;:&quot;&lt;CANARY&gt;&quot;}</code></td>
+  </tr>
+<tr>
+    <td><code>f2</code></td>
+    <td><span class="badge" style="background:#cf222e">analytics</span></td>
+    <td>ingest.igris-analytics.test</td>
+    <td>request-body</td>
+    <td><code>checksummed</code></td>
+    <td>post-connect</td>
+    <td>yes</td>
+    <td><code class="snippet">{&quot;event&quot;:&quot;wallet_connected&quot;,&quot;wallet&quot;:&quot;&lt;CANARY&gt;&quot;,&quot;uid&quot;:&quot;&lt;CANARY&gt;&quot;}</code></td>
+  </tr>
+<tr>
+    <td><code>f3</code></td>
+    <td><span class="badge" style="background:#bc4c00">error-monitoring</span></td>
+    <td>o1.igris-errors.test</td>
+    <td>request-body</td>
+    <td><code>checksummed</code></td>
+    <td>post-connect</td>
+    <td>yes</td>
+    <td><code class="snippet">…&quot;:[{&quot;category&quot;:&quot;wallet&quot;,&quot;message&quot;:&quot;user &lt;CANARY&gt; connected&quot;,&quot;level&quot;:&quot;info&quot;}]}</code></td>
+  </tr>
+<tr>
+    <td><code>f4</code></td>
+    <td><span class="badge" style="background:#0969da">rpc-provider</span></td>
+    <td>rpc.igris-rpc.test</td>
+    <td>request-body</td>
+    <td><code>checksummed</code></td>
+    <td>post-connect</td>
+    <td>yes</td>
+    <td><code class="snippet">…:0,&quot;method&quot;:&quot;eth_getBalance&quot;,&quot;params&quot;:[&quot;&lt;CANARY&gt;&quot;,&quot;latest&quot;]}</code></td>
+  </tr>
+<tr>
+    <td><code>f5</code></td>
+    <td><span class="badge" style="background:#57606a">cdn</span></td>
+    <td>img.igris-cdn.test</td>
+    <td>url</td>
+    <td><code>checksummed</code></td>
+    <td>post-connect</td>
+    <td>yes</td>
+    <td><code class="snippet">…tp://img.igris-cdn.test:38545/pixel?ref=&lt;CANARY&gt;&amp;t=fixture</code></td>
+  </tr>
+</table>
+
+<h2>Third parties contacted (IP exposure)</h2>
+<p>Every one of these learns the visitor's IP address — before any wallet interaction when the phase includes <em>pre-connect</em>.</p>
+<table>
+<tr><th>host</th><th>class</th><th>phases</th><th>requests</th></tr>
+<tr><td>assets.igris-cdn.test</td><td><span class="badge" style="background:#57606a">cdn</span></td><td>pre-connect</td><td>1</td></tr>
+<tr><td>img.igris-cdn.test</td><td><span class="badge" style="background:#57606a">cdn</span></td><td>post-connect</td><td>1</td></tr>
+<tr><td>ingest.igris-analytics.test</td><td><span class="badge" style="background:#cf222e">analytics</span></td><td>post-connect</td><td>1</td></tr>
+<tr><td>o1.igris-errors.test</td><td><span class="badge" style="background:#bc4c00">error-monitoring</span></td><td>post-connect</td><td>1</td></tr>
+<tr><td>rpc.igris-rpc.test</td><td><span class="badge" style="background:#0969da">rpc-provider</span></td><td>post-connect</td><td>1</td></tr>
+<tr><td>widget.igris-chat.test</td><td><span class="badge" style="background:#8250df">support-chat</span></td><td>pre-connect</td><td>1</td></tr>
+</table>
+
+<h2>Reads routed through the wallet (no penalty)</h2>
+<p>The best case: the dapp let the wallet choose the RPC endpoint. The scan answered these from a local stub (none seen).</p>
+
+
+<details>
+<summary>Scan notes (1)</summary>
+<ul><li><code>connect: clicked connect button: &quot;Connect Wallet&quot;</code></li></ul>
+</details>
+
+<footer>
+  Generated by <strong>Igris</strong> — Lighthouse for dapp privacy. Canary address of this scan:
+  <code>0xDf10cf0499D765BB0880AEf048CE3Caa84a76855</code> (throwaway, generated for this scan only).
+  This file is self-contained and makes no network requests.
+</footer>
+</body>
+</html>

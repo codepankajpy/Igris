@@ -20,6 +20,11 @@
     "demo": "tsx scripts/demo.ts"
   },
   "devDependencies": {
+    "@igris/cli": "workspace:*",
+    "@igris/core": "workspace:*",
+    "@igris/patcher": "workspace:*",
+    "@igris/registry": "workspace:*",
+    "@igris/scanner": "workspace:*",
     "@types/node": "26.6.6",
     "eslint": "10.14.0",
     "prettier": "3.9.10",

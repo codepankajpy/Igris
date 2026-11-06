@@ -1,0 +1,279 @@
+{
+  "version": 1,
+  "records": [
+    {
+      "hostname": "leaky-dapp.test",
+      "score": 0,
+      "scannedAt": 1793926754,
+      "scannerVersion": "0.1.0",
+      "reportVersion": "1.0.0",
+      "chainId": 1,
+      "thirdPartyCount": 6,
+      "leakCount": 5,
+      "leakClasses": "analytics,cdn,error-monitoring,rpc-provider",
+      "usesAnonRpc": false,
+      "reportSha256": "52cad091bf39a72b9f0827942c6976b5c1812c8b5fbf3022e43599e9d6b957b1",
+      "summary": {
+        "v": 1,
+        "status": "completed",
+        "spoofMetaMask": true,
+        "canaryAddress": "0xDf10cf0499D765BB0880AEf048CE3Caa84a76855",
+        "findings": [
+          {
+            "class": "analytics",
+            "location": "request-body",
+            "encoding": "base64(checksummed)",
+            "category": "exact",
+            "host": "ingest.igris-analytics.test",
+            "phase": "post-connect",
+            "counted": true
+          },
+          {
+            "class": "analytics",
+            "location": "request-body",
+            "encoding": "checksummed",
+            "category": "exact",
+            "host": "ingest.igris-analytics.test",
+            "phase": "post-connect",
+            "counted": true
+          },
+          {
+            "class": "error-monitoring",
+            "location": "request-body",
+            "encoding": "checksummed",
+            "category": "exact",
+            "host": "o1.igris-errors.test",
+            "phase": "post-connect",
+            "counted": true
+          },
+          {
+            "class": "rpc-provider",
+            "location": "request-body",
+            "encoding": "checksummed",
+            "category": "exact",
+            "host": "rpc.igris-rpc.test",
+            "phase": "post-connect",
+            "counted": true
+          },
+          {
+            "class": "cdn",
+            "location": "url",
+            "encoding": "checksummed",
+            "category": "exact",
+            "host": "img.igris-cdn.test",
+            "phase": "post-connect",
+            "counted": true
+          }
+        ],
+        "thirdParties": [
+          {
+            "host": "assets.igris-cdn.test",
+            "class": "cdn",
+            "phases": [
+              "pre-connect"
+            ]
+          },
+          {
+            "host": "img.igris-cdn.test",
+            "class": "cdn",
+            "phases": [
+              "post-connect"
+            ]
+          },
+          {
+            "host": "ingest.igris-analytics.test",
+            "class": "analytics",
+            "phases": [
+              "post-connect"
+            ]
+          },
+          {
+            "host": "o1.igris-errors.test",
+            "class": "error-monitoring",
+            "phases": [
+              "post-connect"
+            ]
+          },
+          {
+            "host": "rpc.igris-rpc.test",
+            "class": "rpc-provider",
+            "phases": [
+              "post-connect"
+            ]
+          },
+          {
+            "host": "widget.igris-chat.test",
+            "class": "support-chat",
+            "phases": [
+              "pre-connect"
+            ]
+          }
+        ],
+        "ledger": [
+          {
+            "rule": "leak.analytics",
+            "points": 25,
+            "label": "address reached igris-analytics.test (analytics)"
+          },
+          {
+            "rule": "leak.cdn",
+            "points": 20,
+            "label": "address reached igris-cdn.test (cdn)"
+          },
+          {
+            "rule": "leak.error-monitoring",
+            "points": 25,
+            "label": "address reached igris-errors.test (error-monitoring)"
+          },
+          {
+            "rule": "leak.rpc-provider",
+            "points": 15,
+            "label": "address reached igris-rpc.test (rpc-provider)"
+          },
+          {
+            "rule": "contact.perDomainPreConnect",
+            "points": 4,
+            "label": "2 third parties contacted before connect (IP exposure): igris-cdn.test, igris-chat.test"
+          },
+          {
+            "rule": "contact.perDomainPostConnect",
+            "points": 12,
+            "label": "4 third parties contacted after connect (IP exposure): igris-analytics.test, igris-cdn.test, igris-errors.test, igris-rpc.test"
+          }
+        ],
+        "readsViaWallet": []
+      },
+      "id": "local-leaky-dapp.test-1793926754-1",
+      "scanner": "local"
+    },
+    {
+      "hostname": "leaky-dapp.test",
+      "score": 17,
+      "scannedAt": 1793926761,
+      "scannerVersion": "0.1.0",
+      "reportVersion": "1.0.0",
+      "chainId": 1,
+      "thirdPartyCount": 5,
+      "leakCount": 4,
+      "leakClasses": "analytics,cdn,error-monitoring",
+      "usesAnonRpc": true,
+      "reportSha256": "57e8cb8e326582505b455208d02b6a543a615c6e634e4ec1109cc57f276c6a9e",
+      "summary": {
+        "v": 1,
+        "status": "completed",
+        "spoofMetaMask": true,
+        "canaryAddress": "0x1B6eBc15e2B51c8E72C79e4c51808c0E56f18cc0",
+        "findings": [
+          {
+            "class": "analytics",
+            "location": "request-body",
+            "encoding": "base64(checksummed)",
+            "category": "exact",
+            "host": "ingest.igris-analytics.test",
+            "phase": "post-connect",
+            "counted": true
+          },
+          {
+            "class": "analytics",
+            "location": "request-body",
+            "encoding": "checksummed",
+            "category": "exact",
+            "host": "ingest.igris-analytics.test",
+            "phase": "post-connect",
+            "counted": true
+          },
+          {
+            "class": "error-monitoring",
+            "location": "request-body",
+            "encoding": "checksummed",
+            "category": "exact",
+            "host": "o1.igris-errors.test",
+            "phase": "post-connect",
+            "counted": true
+          },
+          {
+            "class": "cdn",
+            "location": "url",
+            "encoding": "checksummed",
+            "category": "exact",
+            "host": "img.igris-cdn.test",
+            "phase": "post-connect",
+            "counted": true
+          }
+        ],
+        "thirdParties": [
+          {
+            "host": "assets.igris-cdn.test",
+            "class": "cdn",
+            "phases": [
+              "pre-connect"
+            ]
+          },
+          {
+            "host": "img.igris-cdn.test",
+            "class": "cdn",
+            "phases": [
+              "post-connect"
+            ]
+          },
+          {
+            "host": "ingest.igris-analytics.test",
+            "class": "analytics",
+            "phases": [
+              "post-connect"
+            ]
+          },
+          {
+            "host": "o1.igris-errors.test",
+            "class": "error-monitoring",
+            "phases": [
+              "post-connect"
+            ]
+          },
+          {
+            "host": "widget.igris-chat.test",
+            "class": "support-chat",
+            "phases": [
+              "pre-connect"
+            ]
+          }
+        ],
+        "ledger": [
+          {
+            "rule": "leak.analytics",
+            "points": 25,
+            "label": "address reached igris-analytics.test (analytics)"
+          },
+          {
+            "rule": "leak.cdn",
+            "points": 20,
+            "label": "address reached igris-cdn.test (cdn)"
+          },
+          {
+            "rule": "leak.error-monitoring",
+            "points": 25,
+            "label": "address reached igris-errors.test (error-monitoring)"
+          },
+          {
+            "rule": "contact.perDomainPreConnect",
+            "points": 4,
+            "label": "2 third parties contacted before connect (IP exposure): igris-cdn.test, igris-chat.test"
+          },
+          {
+            "rule": "contact.perDomainPostConnect",
+            "points": 9,
+            "label": "3 third parties contacted after connect (IP exposure): igris-analytics.test, igris-cdn.test, igris-errors.test"
+          }
+        ],
+        "readsViaWallet": [
+          {
+            "method": "eth_call",
+            "count": 2
+          }
+        ]
+      },
+      "id": "local-leaky-dapp.test-1793926761-2",
+      "scanner": "local"
+    }
+  ]
+}

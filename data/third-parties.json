@@ -280,6 +280,12 @@
       "source": "https://techdocs.akamai.com/"
     },
     {
+      "name": "Arkiv testnet RPC",
+      "class": "rpc-provider",
+      "domains": ["arkiv.network"],
+      "source": "https://docs.arkiv.network/networks/rabdi/"
+    },
+    {
       "name": "Igris fixture: sink RPC provider",
       "class": "rpc-provider",
       "domains": ["igris-rpc.test"],

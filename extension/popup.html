@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: system-ui, sans-serif; width: 280px; padding: 10px 12px; margin: 0; }
+      h1 { font-size: 0.95rem; margin: 0 0 6px; }
+      .score { font-size: 2rem; font-weight: 700; }
+      .good { color: #1a7f37; } .warn { color: #9a6700; } .bad { color: #cf222e; }
+      .muted { color: #666; font-size: 0.8rem; }
+      ul { padding-left: 1.1rem; margin: 6px 0; font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Igris privacy registry</h1>
+    <div id="out" class="muted">loading…</div>
+    <p class="muted">Matched locally against a bundled snapshot — this
+      extension never queries anything per visited site, so your browsing
+      history stays on this machine.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>

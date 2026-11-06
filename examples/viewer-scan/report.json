@@ -1,0 +1,38 @@
+{
+  "reportVersion": "1.0.0",
+  "scannerVersion": "0.1.0",
+  "target": "http://igris-viewer.test:38550/",
+  "hostname": "igris-viewer.test",
+  "scannedAt": "2026-11-06T00:59:27.600Z",
+  "chainId": 1,
+  "status": "wallet-connect-failed",
+  "canaryAddress": "0xeDE9e5946040002faDE6A0da8B101De34307349f",
+  "spoofMetaMask": true,
+  "findings": [],
+  "thirdParties": [
+    {
+      "host": "rpc.rabdi.db-chain.testnet.arkiv.network",
+      "registrableDomain": "arkiv.network",
+      "class": "unknown-third-party",
+      "phases": [
+        "pre-connect"
+      ],
+      "requestCount": 1
+    }
+  ],
+  "readsViaWallet": [],
+  "usesAnonRpc": false,
+  "score": 98,
+  "ledger": [
+    {
+      "id": "p1",
+      "label": "1 third party contacted before connect (IP exposure): arkiv.network",
+      "points": 2,
+      "rule": "contact.perDomainPreConnect",
+      "findingIds": []
+    }
+  ],
+  "errors": [
+    "could not connect wallet (no connect button found by heuristic)"
+  ]
+}
