@@ -1,5 +1,9 @@
 # Igris — plan
 
+> Historical: the original build plan (M0–M7). Superseded by
+> [ROADMAP.md](./ROADMAP.md); the hosted scanner API added later is optional
+> and local-only (see README → CROPS).
+
 One line: **Lighthouse for dapp privacy: scan, explain, fix, publish.**
 
 Igris tells dapp developers and users which third parties learn a user's wallet address, and

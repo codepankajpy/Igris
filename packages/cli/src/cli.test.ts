@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderTable } from './table.js';
 import { runScan } from './commands/scan.js';
-import { renderHtmlReport } from './html-report.js';
+import { coverageNote, renderHtmlReport, scoreLabel } from './html-report.js';
 import { EXIT } from './exit-codes.js';
 import type { Report } from '@igris/core';
 
@@ -111,5 +111,56 @@ describe('renderHtmlReport', () => {
     const html = renderHtmlReport(report);
     expect(html).toContain('75');
     expect(html).toContain('leak.analytics');
+  });
+});
+
+describe('coverage and unscored reports render truthfully (P0-1, P0-2)', () => {
+  const base: Report = {
+    reportVersion: '1.1.0',
+    scannerVersion: '0.1.0',
+    target: 'http://example.test/',
+    hostname: 'example.test',
+    scannedAt: '2026-11-06T00:00:00.000Z',
+    chainId: 1,
+    status: 'completed',
+    coverage: 'full',
+    canaryAddress: '0x8ba1f109551bd432803012645ac136ddd64dba72',
+    spoofMetaMask: true,
+    findings: [],
+    thirdParties: [],
+    readsViaWallet: [],
+    usesAnonRpc: false,
+    score: 90,
+    ledger: [],
+    errors: [],
+  };
+
+  it('full coverage: plain score, no note', () => {
+    expect(scoreLabel(base)).toBe('90/100');
+    expect(coverageNote(base)).toBeNull();
+    expect(renderHtmlReport(base)).not.toContain('PARTIAL');
+  });
+
+  it('wallet never connected: score labelled pre-connect only, PARTIAL note in HTML', () => {
+    const r: Report = { ...base, status: 'wallet-connect-failed', coverage: 'pre-connect-only' };
+    expect(scoreLabel(r)).toBe('90/100 (pre-connect only)');
+    const html = renderHtmlReport(r);
+    expect(html).toContain('PARTIAL');
+    expect(html).toContain('post-connect address leaks were NOT tested');
+  });
+
+  it('page never loaded: "not scored", no number shown as a score', () => {
+    const r: Report = { ...base, status: 'page-load-failed', coverage: 'none', score: null };
+    expect(scoreLabel(r)).toBe('not scored');
+    const html = renderHtmlReport(r);
+    expect(html).toContain('NOT SCORED');
+    expect(html).toContain('>not scored<');
+    expect(html).not.toMatch(/class="n score"[^>]*>100</);
+  });
+
+  it('legacy 1.0.0 report without coverage: derived from status', () => {
+    const r = { ...base, status: 'wallet-connect-failed' } as Report;
+    delete (r as Partial<Report>).coverage;
+    expect(scoreLabel(r)).toBe('90/100 (pre-connect only)');
   });
 });

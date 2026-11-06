@@ -15,25 +15,30 @@ command (see docs/JUDGES.md for the one-command versions).
 
 ## Arkiv "Build on Arkiv (from scratch)"
 
-| Requirement                           | Evidence                                                                                                   | Status                                                              |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Built from scratch at the event       | git history (small commits, one per sub-feature)                                                           | ✅                                                                  |
-| SDK used for writes                   | packages/registry/src/arkiv.ts → `createEntity(ScanSchema, …)`                                             | ✅ code; 🟡 live publish needs a funded key (STATUS.md TODO(human)) |
-| Reads drive a visible feature         | viewer list/filters/detail run `select().from(ScanSchema).where(…)`; CLI `igris query`; e2e: viewer.e2e.ts | ✅ (live read path verified against Rabdi on 2026-11-06)            |
-| Schema + expiry justified             | arkiv/schema.md (30-day expiry rationale, trust model, owners)                                             | ✅                                                                  |
-| Friction log kept while working       | arkiv/friction.md (7 real entries)                                                                         | ✅                                                                  |
-| why-arkiv / how-you-use-arkiv / reach | arkiv/*.md                                                                                                 | ✅                                                                  |
-| Works when the testnet is down        | LocalRegistry + snapshot mode; `pnpm demo` is fully offline                                                | ✅                                                                  |
+| Requirement                           | Evidence                                                                                                   | Status                                                               |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Built from scratch at the event       | git history (small commits, one per sub-feature)                                                           | ✅                                                                   |
+| SDK used for writes                   | packages/registry/src/arkiv.ts → `createEntity(ScanSchema, …)`                                             | ✅ code; ❌ no live entities yet (BLOCKED: funded key, ROADMAP P2-1) |
+| Reads drive a visible feature         | viewer list/filters/detail run `select().from(ScanSchema).where(…)`; CLI `igris query`; e2e: viewer.e2e.ts | ✅ (live read path verified against Rabdi on 2026-11-06)             |
+| Schema + expiry justified             | arkiv/schema.md (30-day expiry rationale, trust model, owners)                                             | ✅                                                                   |
+| Friction log kept while working       | arkiv/friction.md (7 real entries)                                                                         | ✅                                                                   |
+| why-arkiv / how-you-use-arkiv / reach | arkiv/*.md                                                                                                 | ✅                                                                   |
+| Works when the testnet is down        | LocalRegistry + snapshot mode; `pnpm demo` is fully offline                                                | ✅                                                                   |
 
 ## General quality
 
 | Item                                                              | Evidence                                                                                                    | Status         |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------- |
 | MIT, clone-to-running < 10 min, no secrets                        | LICENSE, README quickstart, .env.example                                                                    | ✅             |
-| No backend we operate; no trackers/fonts/CDN in shipped clients   | static viewer (zero-network e2e), system fonts everywhere                                                   | ✅             |
+| No trackers/fonts/CDN in shipped clients; scanner API optional    | static viewer (zero-network e2e), system fonts; API is local-only and unattributed (README → CROPS)         | ✅             |
 | Tests never touch the internet                                    | e2e uses `MAP *.test 127.0.0.1`; the only network use is the optional live Arkiv query path, never in tests | ✅             |
 | CI                                                                | .github/workflows/ci.yml (lint, format, unit, e2e) — runs on GitHub, not yet observed green there           | 🟡             |
 | Scanner privacy-safe by default                                   | stubbed wallet reads (packages/scanner/src/stub-rpc.ts), METHODOLOGY.md                                     | ✅             |
 | Determinism                                                       | leaky-dapp.e2e.ts scans twice, equal finding sets                                                           | ✅             |
 | Real examples, never hand-edited                                  | examples/ regenerated by `pnpm demo`                                                                        | ✅             |
 | Demo video / live URL / funded scanner address / headline numbers | —                                                                                                           | ❌ TODO(human) |
+
+## Integrity (ROADMAP P0)
+
+Per-criterion status lives in [docs/ROADMAP.md](docs/ROADMAP.md) → P0. This
+checklist does not duplicate it, so the two cannot drift apart.

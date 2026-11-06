@@ -13,9 +13,13 @@ wallet address — and which learn their IP even without an address.
   setups to route reads through the Ethereum Foundation's
   [Anon-RPC](https://ethereum.github.io/anon-rpc/), and a rescan proves the
   before/after.
-- **A registry nobody operates**: results are signed Arkiv entities with
-  mandatory expiry; a static viewer queries them with filters. No server, no
-  database, no API keys of ours.
+- **A registry nobody operates** (designed, not yet live): results become
+  Arkiv entities signed by the scanner that measured them, with mandatory
+  expiry; a static viewer queries them with filters. **No entities have been
+  published yet** — see [Registry](#registry-arkiv).
+
+Project status and acceptance criteria: [docs/ROADMAP.md](docs/ROADMAP.md) ·
+engineering log: [docs/ENGINEERING_LOG.md](docs/ENGINEERING_LOG.md).
 
 ## Quickstart
 
@@ -88,45 +92,57 @@ claim in under 5 minutes.
 
 ## CROPS
 
-How Igris holds up against the EF Mandate's non-negotiables
-(["censorship resistant, open source, private, and secure"](https://blog.ethereum.org/2026/03/13/ef-mandate)):
+Lead property: **Privacy** — IGRIS exists to show, with evidence, who learns
+a dapp user's address and IP, and to remove the RPC leak. Checked against the
+code on branch `p0-integrity`; open gaps are named, not hidden.
 
-- **C — Censorship Resistance.** We control nothing users depend on: the CLI
-  runs locally, the viewer is a static build anyone can host, and the
-  registry is Arkiv entities owned by whoever publishes them. If we and our
-  infra disappear, everything keeps working from a clone of this repo; other
-  scanners publish to the same schema without asking anyone.
-- **O — Open Source and Free.** MIT, no black boxes: a user can clone, build,
-  test and run everything from this repo alone, offline, with no secrets, in
-  under 10 minutes (`pnpm install && pnpm demo`). Forkable by design.
-- **P — Privacy.** What each party learns: a _scanned dapp's_ third parties
-  receive only a worthless throwaway canary. The _scanner_ sends nothing
-  anywhere by default (wallet reads are stubbed; `--live-reads` is an
-  explicit opt-in). The _Arkiv RPC_ learns the publisher's IP on writes and a
-  viewer-user's IP on reads — so the endpoint is user-configurable and a
-  fully offline snapshot mode exists. The _Anon-RPC relay/exit_ of a patched
-  dapp sees the RPC requests instead of the RPC provider seeing the user —
-  trade-offs stated in [docs/ANON_RPC_NOTES.md](docs/ANON_RPC_NOTES.md). The
-  extension stub never queries per visited site.
-- **S — Security.** The canary wallet rejects `eth_sendTransaction`/`eth_sign`
-  (code 4001) and its throwaway key never leaves the scanner process. No
-  funds, no custody, no secrets in entities. Trust assumptions are explicit:
-  a registry entity is an attestation by its scanner address, verified
-  against pinned scanners and bound to its exact report by sha256. Minimal
-  dependencies (stdlib argv parsing, hand-rolled diff verified against
-  `git apply`), everything pinned exactly.
+- **C — Censorship resistance.** What we control that users depend on: (1)
+  the _optional_ scanner API — local/Docker-only today; if it disappears or
+  refuses you, `pnpm igris scan` runs the identical scanner on your machine;
+  (2) the viewer's default Arkiv endpoint, which is a user setting. The
+  registry is Arkiv entities owned by whichever scanner keys publish them;
+  nobody needs our permission to publish under the same schema. Arkiv's
+  testnet itself is outside our control: if it is down or reset, the viewer's
+  snapshot mode and the CLI keep working.
+- **O — Open source.** MIT ([LICENSE](LICENSE)). Everything builds and runs
+  from this repo alone, offline, with no secrets: `pnpm install && pnpm demo`.
+- **P — Privacy.** What each party learns:
+  - _the scanned dapp's third parties_: a throwaway canary address, never a
+    real user;
+  - _the scanner (CLI)_: sends nothing by default — wallet reads are answered
+    locally (`--live-reads` is an explicit opt-in);
+  - _the optional scanner API_: the URL you submit and your IP address. It
+    stores no results and logs no client IPs; rate-limit keys are salted
+    hashes held in memory only;
+  - _the Arkiv RPC_: a publisher's IP on writes; a viewer's IP and query
+    filters on reads — the endpoint is configurable, and snapshot mode makes
+    zero requests (e2e-tested);
+  - _Anon-RPC relay/exit_ (dapps patched by `igris fix`): the RPC requests,
+    instead of the RPC provider seeing the user —
+    [docs/ANON_RPC_NOTES.md](docs/ANON_RPC_NOTES.md).
+    The client has no trackers or analytics.
+- **S — Security.** The canary wallet rejects `eth_sendTransaction` /
+  `eth_sign` and its key never leaves the scanner process. A scanner's
+  publishing key stays on the operator's machine (`.env`, gitignored,
+  excluded from Docker builds). Registry data is treated as hostile: every
+  row is schema-validated and every rendered value escaped. Hosted scans are
+  egress-filtered (public addresses, ports 80/443, DNS checked once,
+  rebinding-safe). Trust assumptions: an entity is an _attestation by its
+  owner address_, not a fact — you choose which scanners to pin. Open gaps:
+  the report a `reportSha256` points to is not yet published, so the hash
+  cannot be checked independently (ROADMAP P2-3); Chromium runs without its
+  own sandbox in the API container (ENGINEERING_LOG).
 
 ## Registry (Arkiv)
 
-- Schema `igris.scan.v1` on the Rabdi testnet (chain 7794095) — see
-  [arkiv/schema.md](arkiv/schema.md) for attributes, expiry rationale and the
-  trust model.
-- Scanner address that wrote the public entities: **TODO(human)** — fund a
-  key ([.env.example](.env.example), faucet: https://hub.arkiv.network/faucet)
-  and run `pnpm igris publish examples/leaky/report.json`, then paste the
-  address printed as `scanner:` here and pin it in the viewer's default list
-  (`DEFAULT_PINNED` in apps/web/src/main.ts).
-- A runnable query (works once entities exist; read path verified live):
+- Schema `igris.scan.v1` on Arkiv's Rabdi testnet (chain 7794095) — see
+  [arkiv/schema.md](arkiv/schema.md). Schema v2 (immutable entities,
+  published evidence, history) is ROADMAP P2.
+- **Published entities: none yet.** Writing requires a funded scanner key
+  (one per scanner node, never shared) — ROADMAP P2-1, BLOCKED on a human
+  funding step. No scanner address is listed here until it has actually
+  written entities.
+- The read path works today against the live testnet (it returns zero rows):
 
 ```bash
 pnpm igris query --min-score 0 --limit 10
@@ -137,13 +153,16 @@ curl -s https://rpc.rabdi.db-chain.testnet.arkiv.network --json \
 
 ## Limitations (honest ones)
 
+A scan whose page never loaded (or returned an HTTP error) has **no
+score** and cannot be published. A scan whose wallet never connected is
+labelled **partial**: its score covers only the pre-connect phase.
 A score of 100 means "nothing detectable", not "nothing wrong": server-side
 forwarding, obfuscated/encrypted exfiltration, WalletConnect-relayed flows
 and deep interaction paths are out of scope — the full list with reasoning is
 in [docs/METHODOLOGY.md](docs/METHODOLOGY.md). Scoring is a documented
 heuristic ([docs/SCORING.md](docs/SCORING.md)), not an audit. A real funded
-Arkiv publish and a real-browser extension run are still
-**UNVERIFIED** — see [STATUS.md](STATUS.md) for exact repro steps.
+Arkiv publish (BLOCKED), a real-browser extension run and a live Anon-RPC
+round-trip are still **UNVERIFIED** — see [STATUS.md](STATUS.md).
 
 ## License
 

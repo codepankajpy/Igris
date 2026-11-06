@@ -25,7 +25,7 @@ Igris gives developers and users a way to measure, understand, and eliminate pri
 
 - **Evidence-Based Scanning:** Rather than relying on static code assumptions, Igris runs a real browser, connects a fresh, never-before-seen **Canary wallet address**, and records every outgoing network packet across 14+ data encodings.
 - **Automatic Code Repair:** With `pnpm igris fix`, it uses an automated TypeScript AST codemod to rewrite `viem`, `ethers`, or `wagmi` configurations to route read traffic through the Ethereum Foundation's **Anon-RPC** (which relays queries through privacy mixnets like Nym or Tor).
-- **Decentralized, Expiring Registry (Arkiv):** Scan results are published as verifiable entities onto **Arkiv** (on the Ethereum Rabdi testnet). Audits expire in 30 days so dapps that fix their issues are not permanently penalized.
+- **Decentralized, Expiring Registry (Arkiv):** Scan results can be published as signed entities on **Arkiv** (its Rabdi testnet), attributable to the scanner key that wrote them. (No real entities exist yet — see docs/ROADMAP.md P2.) Audits expire in 30 days so dapps that fix their issues are not permanently penalized.
 - **Zero-Tracking Registry Viewer:** A lightweight web application where users can search dapps, inspect privacy scores, and check which third parties receive their data.
 
 ---
@@ -60,7 +60,7 @@ Igris gives developers and users a way to measure, understand, and eliminate pri
 |             IGRIS FIX              |          |           IGRIS PUBLISH           |
 +------------------------------------+          +-----------------------------------+
 |  * AST codemod (ts-morph)          |          |  * Sign payload with scanner key  |
-|  * Injects Anon-RPC Shim           |          |  * Publish to Arkiv L2 (Rabdi)    |
+|  * Injects Anon-RPC Shim           |          |  * Publish to Arkiv (Rabdi testnet)|
 |  * Reroutes reads via Nym/Tor mix  |          |  * 30-Day TTL (Auto-expiry)       |
 +------------------------------------+          +-----------------------------------+
                                                                   |
@@ -103,19 +103,21 @@ Scoring starts at **100 points** and subtracts penalties based on severity:
 
 ## 3. How Anyone Can Use It
 
-### Option A: The Full-Stack Web Platform (Frontend on Vercel + Backend on Railway/Render)
+### Option A: Web viewer + optional local scanner API
 
-We provide a turnkey cloud setup where anyone can visit a web interface and either **audit a live dapp URL** or **inspect and patch a GitHub repository**:
-
-- **Frontend (`apps/web`):** Deployable with 1-click to **Vercel** or **Netlify**. A modern, responsive dark-mode portal displaying the on-chain Arkiv registry, privacy leaderboards, real-time audit triggers, and penalty breakdowns.
-- **Backend Worker (`apps/api`):** Deployable with 1-click to **Railway** or **Render** using the provided `apps/api/Dockerfile`, `railway.json`, and `render.yaml`. It manages Playwright headless Chromium instances to execute live scans on demand without compromising browser security.
+- **Viewer (`apps/web`):** a static page that reads the registry from Arkiv
+  (endpoint you choose) or from a snapshot file. It can be hosted anywhere.
+- **Scanner API (`apps/api`), optional:** runs the same scanner as the CLI
+  behind a job queue, rate limit and an egress filter (public addresses,
+  ports 80/443 only). It holds no scanner key; its results are
+  **unpublished** and shown as such. **Local / Docker use only** until every
+  P0 criterion in docs/ROADMAP.md passes — do not deploy it publicly yet.
+  Chromium runs without its own sandbox (Playwright's default); see
+  docs/ENGINEERING_LOG.md for that trust boundary.
 
 ```bash
-# Start backend API locally
-pnpm --filter @igris/api dev    # Running on http://localhost:3001
-
-# Start frontend locally
-pnpm --filter @igris/web dev    # Running on http://localhost:5173
+pnpm --filter @igris/api dev    # http://localhost:3001 (egress public-only)
+pnpm --filter @igris/web dev    # http://localhost:5173
 ```
 
 ### Option B: Local Installation & CLI (For Developers & Auditors)
@@ -231,7 +233,7 @@ For hackathon submissions requiring a live link, follow these instructions to de
 
 ### Step 1: Deploy `apps/web` (Takes ~2 minutes)
 
-Because `apps/web` is a static frontend with zero backend dependencies, it can be deployed to any static host:
+`apps/web` is a static frontend. Its registry view needs no backend; only the optional "scan" form calls the scanner API (local-only for now):
 
 #### Deploy to Vercel
 
@@ -251,14 +253,9 @@ _(Or import the repository into the Vercel dashboard: set **Root Directory** to 
 npx netlify deploy --dir=apps/web/dist --prod
 ```
 
-### Step 2: Fund the Scanner Key & Publish Live Attestations
+### Step 2: Publish live attestations (BLOCKED: needs a funded scanner key)
 
-1. Get free Rabdi testnet tokens for the pre-configured scanner address:
-   - **Scanner Address:** `0xDbd0309b80f71E12d45Ac8321DBA637156a4198B`
-   - **Faucet:** [https://hub.arkiv.network/faucet](https://hub.arkiv.network/faucet)
-2. Publish sample audit reports to the live Arkiv blockchain:
-   ```bash
-   pnpm igris publish examples/leaky/report.json
-   pnpm igris publish examples/fixed/report.json
-   ```
-3. Open your deployed live URL. The viewer will automatically query the Arkiv network and display the live published attestations pinned to your scanner key.
+Each scanner node uses its **own** key — never a shared or pre-configured
+one. Key creation and scanner profiles arrive in P0.5 (`igris scanner
+init`); real publishing is roadmap item P2-1. Until then the registry on
+Arkiv is empty, and the README says so.

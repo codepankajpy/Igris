@@ -3,10 +3,10 @@
   "scannerVersion": "0.1.0",
   "target": "http://igris-viewer.test:38550/",
   "hostname": "igris-viewer.test",
-  "scannedAt": "2026-11-06T11:26:12.889Z",
+  "scannedAt": "2026-11-06T11:36:22.766Z",
   "chainId": 1,
   "status": "wallet-connect-failed",
-  "canaryAddress": "0x8e21774111f9C1FE8f726e674A7c04E8423a2763",
+  "canaryAddress": "0x60B3Cd0A7cCe1f8f41036BF61957D44b66180F5F",
   "spoofMetaMask": true,
   "findings": [],
   "thirdParties": [

@@ -303,3 +303,33 @@ describe('registry viewer — untrusted data and provenance (P0-4, P0-8)', () =>
     await context.close();
   });
 });
+
+describe('registry viewer — partial coverage (P0-2)', () => {
+  it('a wallet-connect-failed record is labelled partial in the list and the detail page', async () => {
+    const context = await browser.newContext();
+    await context.addInitScript(() => localStorage.setItem('igris:mode', 'snapshot'));
+    const page = await context.newPage();
+    const partial = {
+      ...SNAPSHOT.records[1]!,
+      summary: {
+        ...SNAPSHOT.records[1]!.summary,
+        status: 'wallet-connect-failed',
+        coverage: 'pre-connect-only',
+      },
+    };
+    await page.route('**/snapshot.json', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ version: 1, records: [partial] }),
+      }),
+    );
+    await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('tbody tr');
+    expect(await page.textContent('tbody')).toContain('partial');
+    await page.click('tbody tr');
+    const body = (await page.textContent('body')) ?? '';
+    expect(body).toContain('Partial scan');
+    expect(body).toContain('not tested');
+    await context.close();
+  });
+});

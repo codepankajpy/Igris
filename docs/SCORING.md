@@ -6,6 +6,11 @@ server-side forwarding, encrypted or obfuscated exfiltration, or anything
 behind a login — see [METHODOLOGY.md](./METHODOLOGY.md) for false-negative
 risks. Treat 100 as "nothing detectable", never "nothing wrong".
 
+**No score at all** when nothing was measured (page never loaded): `score`
+is `null` and the report cannot be published. A scan whose wallet never
+connected is scored but marked `coverage: pre-connect-only` — see
+[METHODOLOGY.md](./METHODOLOGY.md#when-a-scan-is-not-scored).
+
 Every number lives in one file:
 [packages/core/src/weights.ts](../packages/core/src/weights.ts). The engine
 ([scoring.ts](../packages/core/src/scoring.ts)) starts at 100, subtracts the

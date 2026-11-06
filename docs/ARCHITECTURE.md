@@ -51,12 +51,27 @@
   viewer bundle.
 - **@igris/cli** — `igris` with stdlib `util.parseArgs` (no CLI framework),
   exit codes 0/1/2/3, terminal tables, self-contained HTML report.
+- **apps/api** — OPTIONAL scanner node (local/Docker only for now): the same
+  scanner behind a bounded job queue, hard timeouts, per-client rate limit
+  and exact-origin CORS, always with `egress: public-only`. It holds no
+  scanner key, stores nothing, and returns results with
+  `provenance: "unpublished"`. `scan-repo` clones only
+  `https://github.com/<owner>/<repo>` with a hardened git invocation and
+  enforces size limits before the patcher parses anything.
 - **apps/web** — vanilla-TS Vite static page; data via the registry's browser
   entry; endpoint + pinned scanners in localStorage; offline snapshot mode.
 - **fixtures/** — leaky-dapp (three real RPC-library variants), its
   `igris fix --write` output (leaky-dapp-fixed, committed as proof), and the
   third-party sink (one HTTP server playing every third-party role by Host
   header).
+
+## Production module resolution
+
+Workspace packages export their TypeScript sources by default (vitest, tsx
+and Vite consume them directly) and their compiled `dist/` under the custom
+export condition `igris-dist`. Production starts with
+`node --conditions=igris-dist apps/api/dist/index.js`. Before this, the
+compiled API could not start at all.
 
 ## Non-obvious decisions
 

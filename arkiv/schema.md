@@ -30,7 +30,7 @@ scanner address** (`$owner`), not a fact. Every consumer filters or labels by
 owner:
 
 - `igris query --scanner 0x…` filters server-side with `$owner`.
-- The viewer keeps a user-editable pin list of trusted scanner addresses in
+- The viewer keeps a user-editable pin list of scanner addresses in
   its own localStorage, labels unpinned scanners, shows the latest entity per
   (hostname, scanner), and shows "N scanners agree" when several scanners
   attest the same hostname.

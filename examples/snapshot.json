@@ -2,11 +2,11 @@
   "version": 1,
   "records": [
     {
-      "id": "local-leaky-dapp.test-1793964356-1",
+      "id": "local-leaky-dapp.test-1793964966-1",
       "scanner": "local",
       "hostname": "leaky-dapp.test",
       "score": 0,
-      "scannedAt": 1793964356,
+      "scannedAt": 1793964966,
       "scannerVersion": "0.1.0",
       "reportVersion": "1.1.0",
       "chainId": 1,
@@ -14,13 +14,13 @@
       "leakCount": 5,
       "leakClasses": "analytics,cdn,error-monitoring,rpc-provider",
       "usesAnonRpc": false,
-      "reportSha256": "0bf370e392ff43af6ed890f8bbf40b3b7a2edfecd9e6e6ef355d415b3ff35285",
+      "reportSha256": "11f786c0c226ee042cff74847b21366e2af08c567778eeb34d54394fdc56620f",
       "summary": {
         "v": 1,
         "status": "completed",
         "coverage": "full",
         "spoofMetaMask": true,
-        "canaryAddress": "0x4156329D1Aa6B87053F00Ce30C0cb550A9f4064d",
+        "canaryAddress": "0x1c519591249F217bCEf54c824Dfc58791e922562",
         "findings": [
           {
             "class": "analytics",
@@ -189,11 +189,11 @@
       }
     },
     {
-      "id": "local-leaky-dapp.test-1793964364-2",
+      "id": "local-leaky-dapp.test-1793964973-2",
       "scanner": "local",
       "hostname": "leaky-dapp.test",
       "score": 17,
-      "scannedAt": 1793964364,
+      "scannedAt": 1793964973,
       "scannerVersion": "0.1.0",
       "reportVersion": "1.1.0",
       "chainId": 1,
@@ -201,13 +201,13 @@
       "leakCount": 4,
       "leakClasses": "analytics,cdn,error-monitoring",
       "usesAnonRpc": true,
-      "reportSha256": "77e2622d9d2264477d27644b40b15ac3f82d28dc2162ee8b61496525cedfc2b9",
+      "reportSha256": "0ad6a6fa8cf4b094e427477974bd3ffd45ee1f6452d525c1deadcf36c4e21b4b",
       "summary": {
         "v": 1,
         "status": "completed",
         "coverage": "full",
         "spoofMetaMask": true,
-        "canaryAddress": "0x3c260D6A3d6dEa5B9611b6Bb9C64E28B6d9b017e",
+        "canaryAddress": "0xb578fD8b909945cE8Ac9737ef937f844184b13dc",
         "findings": [
           {
             "class": "analytics",

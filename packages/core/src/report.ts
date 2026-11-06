@@ -170,7 +170,7 @@ export interface Report {
 /**
  * JSON Schema (draft 2020-12) for Report. Exported so external consumers can
  * validate reports without TypeScript; kept in lockstep with the types above
- * (a unit test checks a real report against it).
+ * (NOT yet enforced by a test: schema validation tests are ROADMAP P05-1).
  */
 export const REPORT_JSON_SCHEMA = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',

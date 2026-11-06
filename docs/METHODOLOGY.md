@@ -22,6 +22,40 @@ way the destination could know that string.
   tagged with its phase; "third parties contacted" is reported per phase even
   when no address is seen.
 
+## When a scan is (not) scored
+
+- **Page never loaded** (network error, timeout, an HTTP ≥ 400 main
+  document such as a 404 or a bot wall, or an aborted scan): status
+  `page-load-failed`, coverage `none`, **score `null`**, empty ledger. The
+  CLI exits 2 and `igris publish` refuses the report. Before report 1.1.0
+  such scans scored 100 — a claim about a page nobody saw.
+- **Wallet never connected**: status `wallet-connect-failed`, coverage
+  `pre-connect-only`. The score is real but covers only phase A; post-connect
+  address leaks were **not tested**, and every surface says so.
+- **Both phases ran**: status `completed`, coverage `full`.
+
+## Security headers
+
+CSP, CSP-Report-Only, HSTS and X-Frame-Options are read from the **main
+document's final response** (after redirects) during phase A. They are
+response headers; reading them from request headers (as versions before
+1.1.0 did) reported them missing on every site. If no main-document
+response was observed, the report omits them ("unknown"), never "missing".
+They are informational and do not affect the privacy score.
+
+## Network egress (hosted scans)
+
+The local CLI reaches whatever the scanning machine can (needed to scan
+localhost and dev builds). A hosted scanner must not: its scans run with
+`egress: public-only`, which forces **all** Chromium traffic through an
+in-process proxy that resolves each hostname once, refuses non-public
+addresses (loopback, RFC 1918, link-local/cloud metadata, CGNAT, multicast,
+reserved, IPv4-embedded IPv6 forms) and ports other than 80/443, and then
+connects to the checked IP, so there is no DNS-rebinding window. Loopback is
+not bypassed, QUIC is disabled, and WebRTC may not use non-proxied UDP.
+Refused requests never left the scanner, so they are neither leaks nor
+third-party contacts; they are listed in the report's notes.
+
 ## What we capture
 
 All HTTP requests (failed/aborted and `keepalive`/sendBeacon included: URL,

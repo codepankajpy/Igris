@@ -10,16 +10,20 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
+import { createSocket, type Socket as UdpSocket } from 'node:dgram';
 import type { Report } from '@igris/core';
 import { scan } from '../src/index.js';
 import { HOST_RULES, PAGE_PORT } from './helpers.js';
 
 const SECRET_PORT = PAGE_PORT + 20;
 const TARGET_PORT = PAGE_PORT + 21;
+const STUN_PORT = PAGE_PORT + 22;
 
 let secret: Server;
 let target: Server;
 let secretHits: string[] = [];
+let stun: UdpSocket;
+let stunPackets = 0;
 
 const HOSTILE_PAGE = `<!doctype html><title>hostile</title>
 <img src="http://127.0.0.1:${SECRET_PORT}/img">
@@ -32,6 +36,13 @@ const HOSTILE_PAGE = `<!doctype html><title>hostile</title>
   fetch('http://meta.test/latest/meta-data/').catch(() => {});
   try { new WebSocket('ws://127.0.0.1:${SECRET_PORT}/ws'); } catch (e) {}
   try { navigator.sendBeacon('http://127.0.0.1:${SECRET_PORT}/beacon', 'x'); } catch (e) {}
+  // WebRTC: ICE gathering sends STUN binding requests over UDP straight to
+  // the STUN server — a path an HTTP proxy never sees.
+  try {
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:127.0.0.1:${STUN_PORT}' }] });
+    pc.createDataChannel('x');
+    pc.createOffer().then((o) => pc.setLocalDescription(o)).catch(() => {});
+  } catch (e) {}
 </script>`;
 
 /** Resolver used by the proxy: *.test names point at internal addresses. */
@@ -82,16 +93,23 @@ beforeAll(async () => {
     res.end(HOSTILE_PAGE);
   });
   await new Promise<void>((r) => secret.listen(SECRET_PORT, '127.0.0.1', () => r()));
+  stun = createSocket('udp4');
+  stun.on('message', () => {
+    stunPackets += 1;
+  });
+  await new Promise<void>((r) => stun.bind(STUN_PORT, '127.0.0.1', () => r()));
   await new Promise<void>((r) => target.listen(TARGET_PORT, '127.0.0.1', () => r()));
 });
 
 afterAll(async () => {
   await new Promise((r) => secret.close(() => r(undefined)));
   await new Promise((r) => target.close(() => r(undefined)));
+  await new Promise((r) => stun.close(() => r(undefined)));
 });
 
 beforeEach(() => {
   secretHits = [];
+  stunPackets = 0;
 });
 
 describe('egress isolation (public-only)', () => {
@@ -114,11 +132,13 @@ describe('egress isolation (public-only)', () => {
     ]) {
       expect(secretHits, `control route ${route}`).toContain(route);
     }
+    expect(stunPackets, 'control route WebRTC/STUN (UDP)').toBeGreaterThan(0);
   });
 
   it('every route to the internal server is blocked; the target page itself still loads', async () => {
     const report = await publicOnlyScan(`http://target.test:${TARGET_PORT}/`, true);
     expect(secretHits).toEqual([]);
+    expect(stunPackets, 'WebRTC/STUN UDP must not bypass the proxy').toBe(0);
     expect(report.status).not.toBe('page-load-failed');
     const blocked = report.errors.filter((e) => e.startsWith('egress blocked:'));
     expect(blocked.some((e) => e.includes(`127.0.0.1:${SECRET_PORT}`))).toBe(true);
