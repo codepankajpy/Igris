@@ -1,3 +1,0 @@
-# Offline batch-scan targets (served by the demo/e2e fixture servers).
-http://leaky-dapp.test:38546/
-http://leaky-dapp.test:38548/
