@@ -1,65 +1,59 @@
 /**
- * Evidence explorer: every item in the scan's content-addressed evidence
- * bundle, the findings that cite it, and an in-browser check that its id is
- * the hash of its content.
+ * Evidence explorer for one report (a published version, or a completed scan
+ * not published yet): every item of the
+ * content-addressed bundle, the findings and recipients that cite it, and an
+ * in-browser check that its id is the hash of its content.
  */
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import {
   evidenceId,
   type EvidenceItem,
   type EvidenceType,
-  type FindingV2,
+  type FindingV3,
+  type Recipient,
 } from '@igris/core/contracts';
-import { api, type ReportResponse, type ScanMeta } from '../api.js';
-import { go } from '../router.js';
-import { ErrorNote, Loading, Sev, stamp } from '../ui.js';
+import { go, paths, type ReportRef } from '../router.js';
+import { loadReport, type ReportData } from '../report/data.js';
+import { Check, ErrorNote, Loading, VerdictChip, classLabel, stamp } from '../ui.js';
+import { EVIDENCE_TYPE_LABEL, evidenceTitle, locationLabel } from '../report/lookup.js';
+import { Sev } from '../report/Details.js';
 
-const TYPE_LABEL: Record<EvidenceType, string> = {
-  'canary-match': 'Canary match',
-  'third-party-contact': 'Third-party contact',
-  'document-headers': 'Document headers',
-  'contact-classification': 'Classification',
-};
-
-function headline(i: EvidenceItem): string {
-  switch (i.type) {
-    case 'canary-match':
-      return `${i.host} · ${i.location} · ${i.encoding}`;
-    case 'third-party-contact':
-      return `${i.host} · ${i.phases.join(' + ')}`;
-    case 'document-headers':
-      return `${i.documentUrl} · HTTP ${i.status}`;
-    case 'contact-classification':
-      return `${i.host} → ${i.relationship}`;
-  }
-}
-
-export function EvidenceExplorer({ id, item }: { id: string; item?: string | undefined }) {
-  const [data, setData] = useState<(Omit<ReportResponse, 'scan'> & { scan: ScanMeta }) | null>(
-    null,
-  );
+export function EvidencePage({
+  reportRef,
+  item,
+}: {
+  reportRef: ReportRef;
+  item?: string | undefined;
+}) {
+  const [data, setData] = useState<ReportData | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [type, setType] = useState<EvidenceType | 'all'>('all');
   const [q, setQ] = useState('');
 
   useEffect(() => {
-    Promise.all([api.get(id), api.report(id)]).then(
-      ([scan, r]) => setData({ ...r, scan }),
-      setError,
-    );
-  }, [id]);
+    loadReport(reportRef).then(setData, setError);
+  }, [paths.report(reportRef)]);
 
-  const citedBy = useMemo(() => {
-    const m = new Map<string, FindingV2[]>();
-    if (!data) return m;
-    for (const f of [...data.report.privacy.findings, ...data.report.security.observations])
-      for (const ref of f.evidence) m.set(ref.id, [...(m.get(ref.id) ?? []), f]);
-    return m;
+  const cited = useMemo(() => {
+    const findings = new Map<string, FindingV3[]>();
+    const recipients = new Map<string, Recipient[]>();
+    if (!data) return { findings, recipients };
+    const all = [...data.report.privacy.findings, ...data.report.security.observations];
+    const byFinding = new Map(all.map((f) => [f.id, f]));
+    for (const f of all)
+      for (const ref of f.evidence) findings.set(ref.id, [...(findings.get(ref.id) ?? []), f]);
+    for (const r of data.report.recipients)
+      for (const fid of r.findingIds)
+        for (const ref of byFinding.get(fid)?.evidence ?? []) {
+          const rs = recipients.get(ref.id) ?? [];
+          if (!rs.includes(r)) recipients.set(ref.id, [...rs, r]);
+        }
+    return { findings, recipients };
   }, [data]);
 
   if (error)
     return (
-      <div class="page" style={{ paddingTop: 64 }}>
+      <div class="page" style={{ paddingTop: 56 }}>
         <ErrorNote error={error} />
       </div>
     );
@@ -76,27 +70,32 @@ export function EvidenceExplorer({ id, item }: { id: string; item?: string | und
     )
     .sort(
       ([a, x], [b, y]) =>
-        Number(citedBy.has(b)) - Number(citedBy.has(a)) ||
+        Number(cited.findings.has(b)) - Number(cited.findings.has(a)) ||
         x.type.localeCompare(y.type) ||
-        headline(x).localeCompare(headline(y)) ||
+        evidenceTitle(x).localeCompare(evidenceTitle(y)) ||
         a.localeCompare(b),
     );
   const selectedId = item && data.evidence.items[item] ? item : shown[0]?.[0];
   const selected = selectedId ? data.evidence.items[selectedId] : undefined;
+  const report = `#${paths.report(reportRef)}`;
+  const { hostname } = data;
 
   return (
     <div class="page" style={{ paddingTop: 40 }}>
       <div class="spread rise" style={{ flexWrap: 'wrap' }}>
-        <div>
-          <div class="crumbs mono muted">
-            <a href="#/history">Scans</a> / <a href={`#/scans/${id}`}>{data.scan.hostname}</a> /
-            evidence
+        <div style={{ minWidth: 0 }}>
+          <div class="crumbs mono muted small">
+            <a href="#/">IGRIS</a> / <a href={`#${paths.site(hostname)}`}>{hostname}</a> /{' '}
+            <a href={report}>
+              {reportRef.kind === 'version' ? `v${reportRef.version}` : 'unpublished scan'}
+            </a>{' '}
+            / evidence
           </div>
           <h1 class="h1" style={{ marginTop: 10 }}>
-            Evidence explorer
+            Evidence
           </h1>
         </div>
-        <div class="mono muted small" style={{ textAlign: 'right' }}>
+        <div class="mono muted small" style={{ textAlign: 'right', overflowWrap: 'anywhere' }}>
           {data.report.evidence.bundleVersion} · {entries.length} items
           <br />
           sha256 {data.report.evidence.sha256.slice(0, 20)}…
@@ -115,20 +114,24 @@ export function EvidenceExplorer({ id, item }: { id: string; item?: string | und
             />
             <div class="row" style={{ flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
               <button
+                type="button"
                 class={`chip filter ${type === 'all' ? 'solid' : ''}`}
+                aria-pressed={type === 'all'}
                 onClick={() => setType('all')}
               >
                 all {entries.length}
               </button>
-              {(Object.keys(TYPE_LABEL) as EvidenceType[])
+              {(Object.keys(EVIDENCE_TYPE_LABEL) as EvidenceType[])
                 .filter((t) => counts.has(t))
                 .map((t) => (
                   <button
+                    type="button"
                     key={t}
                     class={`chip filter ${type === t ? 'solid' : ''}`}
+                    aria-pressed={type === t}
                     onClick={() => setType(t)}
                   >
-                    {t} {counts.get(t)}
+                    {EVIDENCE_TYPE_LABEL[t].toLowerCase()} {counts.get(t)}
                   </button>
                 ))}
             </div>
@@ -141,19 +144,21 @@ export function EvidenceExplorer({ id, item }: { id: string; item?: string | und
             )}
             {shown.map(([k, i]) => (
               <button
+                type="button"
                 key={k}
                 class={`evidence-item ${k === selectedId ? 'on' : ''}`}
-                onClick={() => go(`/scans/${id}/evidence/${k}`)}
+                aria-current={k === selectedId ? 'true' : undefined}
+                onClick={() => go(paths.evidenceOf(reportRef, k), true)}
               >
                 <div class="spread">
-                  <span class="eyebrow">{TYPE_LABEL[i.type]}</span>
-                  {citedBy.has(k) && (
+                  <span class="eyebrow">{EVIDENCE_TYPE_LABEL[i.type]}</span>
+                  {cited.findings.has(k) && (
                     <span class="mono muted" style={{ fontSize: '0.68rem' }}>
-                      cited ×{citedBy.get(k)!.length}
+                      cited ×{cited.findings.get(k)!.length}
                     </span>
                   )}
                 </div>
-                <div class="evidence-item-title">{headline(i)}</div>
+                <div class="evidence-item-title">{evidenceTitle(i)}</div>
                 <div class="mono muted" style={{ fontSize: '0.68rem' }}>
                   {k}
                 </div>
@@ -162,14 +167,16 @@ export function EvidenceExplorer({ id, item }: { id: string; item?: string | und
           </div>
         </aside>
 
-        <section class="evidence-detail">
+        <section class="evidence-detail" aria-label="Selected evidence item">
           {selected && selectedId ? (
             <Detail
               key={selectedId}
               id={selectedId}
               item={selected}
-              findings={citedBy.get(selectedId) ?? []}
+              findings={cited.findings.get(selectedId) ?? []}
+              recipients={cited.recipients.get(selectedId) ?? []}
               data={data}
+              reportHref={report}
             />
           ) : (
             <div class="panel muted">Select an item.</div>
@@ -184,34 +191,38 @@ function Detail({
   id,
   item,
   findings,
+  recipients,
   data,
+  reportHref,
 }: {
   id: string;
   item: EvidenceItem;
-  findings: FindingV2[];
-  data: Omit<ReportResponse, 'scan'> & { scan: ScanMeta };
+  findings: FindingV3[];
+  recipients: Recipient[];
+  data: ReportData;
+  reportHref: string;
 }) {
   const recomputed = useMemo(() => evidenceId(item), [item]);
   const ok = recomputed === id;
   return (
     <div class="stack" style={{ '--gap': '16px' }}>
       <div class="panel">
-        <div class="spread" style={{ alignItems: 'flex-start' }}>
-          <div>
-            <div class="eyebrow">{TYPE_LABEL[item.type]}</div>
-            <h2
-              class="display"
-              style={{ fontSize: '1.8rem', margin: '8px 0 0', overflowWrap: 'anywhere' }}
-            >
-              {headline(item)}
-            </h2>
-          </div>
-        </div>
-        <div class={`check ${ok ? 'ok' : 'bad'}`} style={{ marginTop: 16 }}>
-          <span class="check-mark">{ok ? '✓' : '×'}</span>
-          {ok
-            ? 'Content id recomputed in this browser: sha256 of the canonical item matches its id'
-            : `Content id mismatch: recomputed ${recomputed}`}
+        <div class="eyebrow">{EVIDENCE_TYPE_LABEL[item.type]}</div>
+        <h2
+          class="display"
+          style={{ fontSize: '1.7rem', margin: '8px 0 0', overflowWrap: 'anywhere' }}
+        >
+          {evidenceTitle(item)}
+        </h2>
+        <div style={{ marginTop: 14 }}>
+          <Check
+            ok={ok}
+            label={
+              ok
+                ? 'Content id recomputed in this browser: sha256 of the canonical item matches its id'
+                : `Content id mismatch: recomputed ${recomputed}`
+            }
+          />
         </div>
         <dl class="kv" style={{ marginTop: 18 }}>
           <Fields item={item} />
@@ -222,21 +233,30 @@ function Detail({
         <div class="eyebrow" style={{ marginBottom: 12 }}>
           Cited by
         </div>
-        {findings.length === 0 ? (
+        {findings.length === 0 && recipients.length === 0 ? (
           <p class="muted small" style={{ margin: 0 }}>
             No finding cites this item directly. It is part of the sealed bundle as supporting
-            context (for example, a contact that did not change the score).
+            context (for example, a contact or how a host was classified).
           </p>
         ) : (
-          findings.map((f) => (
-            <a class="cited" key={f.id} href={`#/scans/${data.scan.id}`}>
-              <Sev s={f.severity} />
-              <span>{f.title}</span>
-              <span class="mono muted" style={{ marginLeft: 'auto', fontSize: '0.72rem' }}>
-                {f.id}
-              </span>
-            </a>
-          ))
+          <>
+            {recipients.map((r) => (
+              <a class="cited" key={`${r.registrableDomain}|${r.class}`} href={reportHref}>
+                <VerdictChip verdict={r.verdict} />
+                <span class="mono">{r.registrableDomain}</span>
+                <span class="muted small">{classLabel(r.class)}</span>
+              </a>
+            ))}
+            {findings.map((f) => (
+              <a class="cited" key={f.id} href={reportHref}>
+                <Sev s={f.severity} />
+                <span>{f.title}</span>
+                <span class="mono muted" style={{ marginLeft: 'auto', fontSize: '0.72rem' }}>
+                  {f.id}
+                </span>
+              </a>
+            ))}
+          </>
         )}
       </div>
 
@@ -256,10 +276,16 @@ function Detail({
             {stamp(data.report.scan.scannedAt)} by igris-scanner {data.report.scan.scannerVersion}{' '}
             (egress {data.report.scan.egress})
           </dd>
-          <dt>Capture</dt>
-          <dd class="muted">
-            Extracted from the browser capture of this scan. The raw capture is not retained; this
-            item is its content-addressed extract.
+          <dt>Published</dt>
+          <dd>
+            {data.scan ? (
+              <>
+                {data.source === 'arkiv' ? 'Arkiv' : 'this server’s store'} · v{data.scan.version} ·
+                entity <span class="mono">{data.scan.key}</span>
+              </>
+            ) : (
+              'not published yet · served from this server’s cache'
+            )}
           </dd>
         </dl>
       </div>
@@ -281,13 +307,14 @@ function Fields({ item }: { item: EvidenceItem }) {
         <>
           <dt>Recipient</dt>
           <dd class="mono">
-            {item.host} ({item.registrableDomain}) · {item.recipientClass}
+            {item.host} ({item.registrableDomain}) · {classLabel(item.recipientClass)}
           </dd>
           <dt>Phase</dt>
           <dd>{item.phase}</dd>
           <dt>Where</dt>
           <dd>
-            {item.location} of a {item.method} request
+            {locationLabel(item.location)}
+            {item.method !== '-' ? ` of a ${item.method} request` : ''}
           </dd>
           <dt>Encoding</dt>
           <dd class="mono">
@@ -309,7 +336,7 @@ function Fields({ item }: { item: EvidenceItem }) {
             {item.host} ({item.registrableDomain})
           </dd>
           <dt>Class</dt>
-          <dd>{item.recipientClass}</dd>
+          <dd>{classLabel(item.recipientClass)}</dd>
           <dt>Phases</dt>
           <dd>{item.phases.join(', ')}</dd>
           <dt>Methods</dt>
@@ -325,12 +352,14 @@ function Fields({ item }: { item: EvidenceItem }) {
           <dd class="mono small">{item.documentUrl}</dd>
           <dt>Status</dt>
           <dd class="mono">{item.status}</dd>
-          {Object.entries(item.headers).map(([k, v]) => (
-            <>
-              <dt class="mono small">{k}</dt>
-              <dd class="mono small">{v ?? <span class="muted">absent</span>}</dd>
-            </>
-          ))}
+          {Object.entries(item.headers).flatMap(([k, v]) => [
+            <dt class="mono small" key={`${k}-k`}>
+              {k}
+            </dt>,
+            <dd class="mono small" key={`${k}-v`}>
+              {v ?? <span class="muted">absent</span>}
+            </dd>,
+          ])}
         </>
       );
     case 'contact-classification':

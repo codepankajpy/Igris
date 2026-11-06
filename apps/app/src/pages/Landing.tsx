@@ -1,104 +1,92 @@
 import { useEffect, useState } from 'preact/hooks';
-import { api, type ScanMeta } from '../api.js';
-import { ScanForm } from '../ScanForm.js';
-import { LevelBadge, ago } from '../ui.js';
-
-const METHOD = [
-  {
-    n: '01',
-    t: 'Isolated browser',
-    d: 'Each scan opens the dApp in a fresh Chromium profile. Egress is filtered to public addresses only.',
-  },
-  {
-    n: '02',
-    t: 'Canary wallet',
-    d: 'A throwaway wallet with a unique address connects like a real user would. It holds nothing.',
-  },
-  {
-    n: '03',
-    t: 'Evidence, not guesses',
-    d: 'Every request is watched for the canary in any encoding. Each finding points to a content-addressed evidence item.',
-  },
-  {
-    n: '04',
-    t: 'Deterministic score',
-    d: 'A published rule set turns findings into a score. Same behaviour, same finding IDs, same number.',
-  },
-];
+import { api, type PublishedScan } from '../api.js';
+import { paths } from '../router.js';
+import { SearchBox } from '../SearchBox.js';
+import { StateChip, ago, plural } from '../ui.js';
 
 export function Landing() {
-  const [recent, setRecent] = useState<ScanMeta[] | null>(null);
+  const [recent, setRecent] = useState<PublishedScan[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    api.list().then(
-      (s) => setRecent(s.filter((m) => m.state === 'completed' && m.summary).slice(0, 4)),
-      () => setRecent([]),
-    );
+    api.sites(12).then(setRecent, (e: unknown) => {
+      setRecent([]);
+      setError(e instanceof Error ? e.message : String(e));
+    });
   }, []);
 
   return (
     <div class="page">
       <section class="hero">
         <div class="hero-glow" aria-hidden="true" />
-        <div class="eyebrow rise">Privacy intelligence for dApps</div>
+        <div class="eyebrow rise">Open privacy reports for dApps</div>
         <h1 class="display hero-title rise d1">
-          See who learns your
+          Who learns your
           <br />
-          <em>wallet address.</em>
+          <em>wallet address?</em>
         </h1>
-        <p class="hero-sub rise d2">
-          Igris loads a dApp in an isolated browser, connects a throwaway wallet, and records every
-          third party that receives it — with the evidence to prove it.
+        <div class="hero-form rise d2">
+          <SearchBox autofocus />
+        </div>
+        <p class="hero-sub rise d3">
+          IGRIS opens a site in an isolated browser, connects a throwaway wallet that holds nothing,
+          and watches every request: where the address goes (in any encoding), who learns the
+          visitor’s IP before and after connecting, which RPC endpoints and methods are called,
+          trackers, cookies and storage, and the security headers of the page. Each third party gets
+          a verdict — expected, avoidable, tracking or unidentified — backed by content-addressed
+          evidence. Every report is published on Arkiv, and every retest adds a new version to the
+          site’s history.
         </p>
-        <div class="hero-form rise d3">
-          <ScanForm autofocus />
-          <div class="muted hero-hint">
-            Runs on your scanner node · about 30–60 seconds · nothing is published
-          </div>
-        </div>
       </section>
 
-      <section class="section">
-        <div class="method">
-          {METHOD.map((m, i) => (
-            <div class={`method-step rise d${Math.min(4, i + 1)}`} key={m.n}>
-              <div class="mono muted">{m.n}</div>
-              <h3 class="h2" style={{ marginTop: 18 }}>
-                {m.t}
-              </h3>
-              <p class="muted" style={{ margin: '8px 0 0', fontSize: '0.88rem' }}>
-                {m.d}
-              </p>
-            </div>
-          ))}
+      <section class="section" aria-labelledby="recent-h">
+        <div class="section-head">
+          <h2 class="h2" id="recent-h">
+            Recently scanned
+          </h2>
+          {recent && recent.length > 0 && (
+            <span class="muted small">latest version of each site</span>
+          )}
         </div>
-      </section>
-
-      {recent && recent.length > 0 && (
-        <section class="section">
-          <div class="section-head">
-            <h2 class="h2">Recent scans on this node</h2>
-            <a href="#/history" class="muted" style={{ fontSize: '0.82rem' }}>
-              All scans →
-            </a>
+        {recent === null ? (
+          <div class="grid g-3">
+            {[0, 1, 2].map((i) => (
+              <div class="panel recent-card skeleton" key={i} aria-hidden="true" />
+            ))}
           </div>
-          <div class="grid g-4">
-            {recent.map((m) => (
-              <a href={`#/scans/${m.id}`} class="panel recent-card" key={m.id}>
+        ) : recent.length === 0 ? (
+          <p class="muted">
+            {error ?? 'No site has been scanned yet. Search for one above to run the first scan.'}
+          </p>
+        ) : (
+          <div class="grid g-3">
+            {recent.map((s) => (
+              <a href={`#${paths.site(s.hostname)}`} class="panel recent-card" key={s.key}>
                 <div class="spread">
-                  <span class="mono" style={{ fontSize: '0.8rem' }}>
-                    {m.hostname}
+                  <span class="mono recent-host">{s.hostname}</span>
+                  <span class="mono muted small">v{s.version}</span>
+                </div>
+                <div style={{ margin: '14px 0 16px' }}>
+                  <StateChip state={s.state} />
+                </div>
+                <div class="recent-counts">
+                  <span>
+                    <b class="num">{s.recipients}</b> third parties
                   </span>
-                  <span class="muted" style={{ fontSize: '0.74rem' }}>
-                    {ago(m.createdAt)}
+                  <span>
+                    <b class="num">{s.addressRecipients}</b> got the address
+                  </span>
+                  <span>
+                    <b class="num">{s.trackingRecipients}</b> tracking or unidentified
                   </span>
                 </div>
-                <div class="recent-score display num">{m.summary!.score ?? '—'}</div>
-                <LevelBadge level={m.summary!.level} />
+                <div class="muted small" style={{ marginTop: 14 }}>
+                  scanned {ago(s.scannedAt)} · {plural(s.version, 'version')}
+                </div>
               </a>
             ))}
           </div>
-        </section>
-      )}
+        )}
+      </section>
     </div>
   );
 }

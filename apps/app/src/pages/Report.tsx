@@ -1,1032 +1,247 @@
 /**
- * The scan report. Every number, verdict and sentence here comes from the
- * backend (report, evidence bundle, assess()). The only computation done in
- * the browser is an independent integrity re-check of the data it received.
+ * One report: a published version, or a completed scan not published yet
+ * (served from the server's cache). Every number, verdict and sentence comes
+ * from the backend (the report, its evidence, summarise(), the registry
+ * entity and its verification). The browser only draws them and re-checks
+ * the hashes of what it received.
  */
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useMemo } from 'preact/hooks';
+import type { Verdict } from '@igris/core/contracts';
+import type { RegistryInfo } from '../api.js';
+import type { ReportData } from '../report/data.js';
+import { onArkiv, proofStatus, provenance } from '../wording.js';
+import { paths } from '../router.js';
+import { AddressFlow } from '../charts/AddressFlow.js';
+import { TrafficChart } from '../charts/TrafficChart.js';
+import { VisitTimeline } from '../charts/VisitTimeline.js';
 import {
-  verifyReportIntegrity,
-  type ContactClassificationEvidence,
-  type FindingV2,
-  type IntegrityResult,
-} from '@igris/core/contracts';
-import { api, type ReportResponse, type ScanMeta } from '../api.js';
-import { go } from '../router.js';
-import {
-  Hash,
-  Kpi,
-  LevelBadge,
-  ScoreDial,
+  NotRecorded,
   Section,
-  Sev,
-  SeverityBar,
-  SEVERITY_ORDER,
-  download,
-  duration,
-  kitWording,
+  StateChip,
+  VERDICT,
+  VERDICT_ORDER,
+  plural,
+  short,
   stamp,
 } from '../ui.js';
+import { buildLookup } from '../report/lookup.js';
+import { RecipientsSection } from '../report/Recipients.js';
+import { RpcSection } from '../report/Rpc.js';
+import {
+  ChangesSection,
+  FindingsSection,
+  IntegritySection,
+  NetworkSection,
+  ScanRunSection,
+  SecuritySection,
+  WalletSection,
+} from '../report/Details.js';
 
-type Data = Omit<ReportResponse, 'scan'>;
+const NAV: Array<[string, string]> = [
+  ['timeline', 'Timeline'],
+  ['traffic', 'Traffic'],
+  ['address', 'Address'],
+  ['rpc', 'RPC'],
+  ['recipients', 'Who learned what'],
+  ['changes', 'Changes'],
+  ['findings', 'Findings'],
+  ['wallet', 'Wallet'],
+  ['network', 'Network'],
+  ['security', 'Security'],
+  ['integrity', 'Integrity'],
+  ['run', 'Scan run'],
+];
 
-const sevRank = (s: string) => SEVERITY_ORDER.indexOf(s as never);
-const byImportance = (a: FindingV2, b: FindingV2) =>
-  sevRank(a.severity) - sevRank(b.severity) ||
-  Number(b.countsTowardPrivacyScore) - Number(a.countsTowardPrivacyScore) ||
-  a.title.localeCompare(b.title);
+/** Scroll to a section without touching the hash (the hash is the route). */
+function jump(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  const h = el.querySelector<HTMLElement>('h2');
+  if (h) {
+    h.tabIndex = -1;
+    h.focus({ preventScroll: true });
+  }
+}
 
-const RECIPIENT_LABEL: Record<string, string> = {
-  'first-party': 'First party',
-  'rpc-provider': 'RPC provider',
-  analytics: 'Analytics',
-  'error-monitoring': 'Error monitoring',
-  'support-chat': 'Support chat',
-  'walletconnect-relay': 'WalletConnect relay',
-  'wallet-sdk': 'Wallet / login SDK',
-  'ipfs-gateway': 'IPFS gateway',
-  cdn: 'CDN',
-  'anon-rpc': 'Anon-RPC',
-  'unknown-third-party': 'Unidentified',
-};
-
-export function Report({ scan, data }: { scan: ScanMeta; data: Data }) {
-  const { report, evidence, assessment, verification } = data;
-  // A page that never loaded has nothing to explore: no empty sections.
-  const observed = report.privacy.coverage !== 'none';
-  const [rescanning, setRescanning] = useState(false);
-
-  const severity = useMemo(() => {
-    const c = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
-    for (const f of report.privacy.findings) c[f.severity] += 1;
+export function ReportView({
+  data,
+  registry,
+}: {
+  data: ReportData;
+  registry: RegistryInfo | null;
+}) {
+  const { report, summary, scan } = data;
+  const lookup = useMemo(() => buildLookup(report, data.evidence), [report, data.evidence]);
+  const counts = useMemo(() => {
+    const c: Record<Verdict, number> = { unidentified: 0, tracking: 0, avoidable: 0, expected: 0 };
+    for (const r of report.recipients) c[r.verdict] += 1;
     return c;
   }, [report]);
-
-  async function rescan() {
-    setRescanning(true);
-    try {
-      const { id } = await api.submit(report.scan.target);
-      go(`/scans/${id}`);
-    } catch {
-      setRescanning(false);
-    }
-  }
+  const evidenceHref = (id: string) => `#${paths.evidenceOf(data.ref, id)}`;
+  const timeline = report.timeline;
+  const alarm = summary.state === 'address-to-trackers';
 
   return (
-    <div class="page">
-      <div class="report-top rise">
-        <div class="crumbs mono muted">
-          <a href="#/history">Scans</a> / {scan.hostname}
-        </div>
-        <div class="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          {report.evidence.itemCount > 0 && (
-            <a class="btn sm" href={`#/scans/${scan.id}/evidence`}>
-              Evidence explorer
-            </a>
-          )}
-          <button
-            class="btn sm"
-            onClick={() =>
-              download(`igris-${scan.hostname}-report.json`, JSON.stringify(report, null, 2))
-            }
-          >
-            report.json
-          </button>
-          <button
-            class="btn sm"
-            onClick={() =>
-              download(`igris-${scan.hostname}-evidence.json`, JSON.stringify(evidence, null, 2))
-            }
-          >
-            evidence.json
-          </button>
-          <button class="btn sm primary" disabled={rescanning} onClick={rescan}>
-            {rescanning ? 'Starting…' : 'Scan again'}
-          </button>
-        </div>
-      </div>
-
-      {/* ---------------------------------------------------------------- hero */}
-      <section class={`report-hero panel rise d1 lvl-${assessment.level}`}>
+    <article class="report">
+      {/* ---------------------------------------------------------- hero */}
+      <header class={`panel report-hero rise ${alarm ? 'alarm' : ''}`}>
         <div class="report-hero-light" aria-hidden="true" />
-        <ScoreDial score={report.privacy.score} level={assessment.level} />
         <div class="report-hero-text">
-          <div class="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-            <LevelBadge level={assessment.level} />
-            <span class="chip">coverage: {report.privacy.coverage}</span>
+          <div class="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <StateChip state={summary.state} />
+            <span class="chip">{scan ? `v${scan.version}` : 'not published'}</span>
+            <span class="chip">{stamp(scan ? scan.scannedAt : report.scan.scannedAt)}</span>
+            {report.privacy.coverage === 'pre-connect-only' && (
+              <span class="chip">before connecting only</span>
+            )}
           </div>
-          <h1 class="display report-headline">{assessment.headline}</h1>
-          <div class="mono muted" style={{ fontSize: '0.8rem' }}>
-            {report.scan.target} · scanned {stamp(report.scan.scannedAt)}
-          </div>
-        </div>
-      </section>
-
-      <div class="grid g-2 rise d2" style={{ marginTop: 16 }}>
-        <div class="panel">
-          <div class="eyebrow">Executive summary</div>
+          <h2 class="display report-headline">{summary.headline}</h2>
           <ul class="points">
-            {assessment.points.map((p) => (
+            {summary.points.map((p) => (
               <li key={p}>{p}</li>
             ))}
           </ul>
-        </div>
-        <div class="panel">
-          <div class="eyebrow">Read this before relying on the score</div>
-          <ul class="points caveats">
-            {assessment.caveats.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
-          {observed && (
-            <>
-              <div class="hairline" style={{ margin: '16px 0' }} />
-              <div class="eyebrow" style={{ marginBottom: 10 }}>
-                Privacy findings by severity
-              </div>
-              <SeverityBar counts={severity} />
-              <div class="row sev-legend">
-                {SEVERITY_ORDER.filter((s) => severity[s]).map((s) => (
-                  <span key={s} class="row" style={{ gap: 6 }}>
-                    <Sev s={s} />
-                    <span class="num">{severity[s]}</span>
-                  </span>
-                ))}
-              </div>
-            </>
+          {summary.caveats.length > 0 && (
+            <ul class="points caveats small">
+              {summary.caveats.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
           )}
         </div>
-      </div>
-
-      {observed && (
-        <>
-          <nav class="report-nav rise d3" aria-label="Report sections">
-            {[
-              ['exposure', 'Who learned what'],
-              ['findings', 'Findings'],
-              ['wallet', 'Wallet'],
-              ['third-parties', 'Third parties'],
-              ['network', 'Network'],
-              ['security', 'Security'],
-              ['integrity', 'Integrity'],
-              ['run', 'Scan run'],
-            ].map(([id, label]) => (
-              <a
-                key={id}
-                href={`#/scans/${scan.id}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  document
-                    .getElementById(id!)
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
-
-          <Exposure data={data} scanId={scan.id} />
-          <Findings data={data} scanId={scan.id} />
-          <Wallet data={data} />
-          <ThirdParties data={data} />
-
-          {/* ------------------------------------------------------------ network */}
-          <Section
-            id="network"
-            title="Network observations"
-            aside="What the isolated browser recorded during the scan"
-          >
-            {report.telemetry ? (
-              <div class="grid g-4">
-                <Kpi
-                  k={report.telemetry.totalRequests}
-                  l="requests"
-                  s={`${report.telemetry.preConnectRequests} before connecting · ${report.telemetry.postConnectRequests} after`}
-                />
-                <Kpi
-                  k={new Set(report.contacts.map((c) => c.registrableDomain)).size}
-                  l="third-party domains"
-                  s={`${report.contacts.length} distinct hosts`}
-                />
-                <Kpi
-                  k={report.telemetry.wsConnections ?? '—'}
-                  l="websockets"
-                  s={
-                    report.telemetry.wsFrames === null
-                      ? 'frames not recorded'
-                      : `${report.telemetry.wsFrames} frames`
-                  }
-                />
-                <Kpi
-                  k={report.telemetry.cookiesCount}
-                  l="cookies set"
-                  s={`${report.telemetry.localStorageCount} localStorage · ${report.telemetry.sessionStorageCount} sessionStorage keys`}
-                />
-              </div>
-            ) : (
-              <p class="muted">This report carries no telemetry.</p>
-            )}
-          </Section>
-
-          {/* ----------------------------------------------------------- security */}
-          <Section
-            id="security"
-            title="Security observations"
-            aside="Main-document headers · reported separately, never part of the privacy score"
-          >
-            {report.security.observations.length === 0 ? (
-              <p class="muted">No security observations were made.</p>
-            ) : (
-              <div class="panel flush">
-                {groupFindings([...report.security.observations].sort(byImportance)).map((g) => (
-                  <FindingRow key={g[0]!.id} group={g} scanId={scan.id} />
-                ))}
-              </div>
-            )}
-          </Section>
-        </>
-      )}
-
-      <Integrity data={data} serverVerified={verification} />
-
-      {/* ---------------------------------------------------------- run log */}
-      <Section id="run" title="Scan run" aside="The scanner's own progress events for this scan">
-        <div class="panel flush">
-          <div class="log" style={{ maxHeight: 360 }}>
-            {scan.events.map((e, i) => (
-              <div class="log-line" key={i}>
-                <span class="muted">
-                  +
-                  {((new Date(e.at).getTime() - new Date(scan.events[0]!.at).getTime()) / 1000)
-                    .toFixed(1)
-                    .padStart(5, ' ')}
-                  s
-                </span>
-                <span class={`log-status ${e.status}`}>{e.status}</span>
-                <span class="log-detail">
-                  <span class="dim">{e.stage}</span>{' '}
-                  {e.detail ??
-                    (e.counters
-                      ? `${e.counters.requests} requests · ${e.counters.hosts} hosts · ${e.counters.wsConnections} ws`
-                      : '')}
-                </span>
+        <div class="counters" role="list" aria-label="Third parties by verdict">
+          {VERDICT_ORDER.slice()
+            .reverse()
+            .map((v) => (
+              <div class={`counter v-${v}`} role="listitem" key={v}>
+                <div class="counter-k num">{counts[v]}</div>
+                <div class="counter-l">
+                  <span class="v-mark" aria-hidden="true" />
+                  {VERDICT[v].label}
+                </div>
+                <div class="counter-s">{VERDICT[v].meaning}</div>
               </div>
             ))}
-          </div>
         </div>
-        <dl class="kv" style={{ marginTop: 16 }}>
-          <dt>Scanner</dt>
-          <dd class="mono">
-            igris-scanner {report.scan.scannerVersion} · report {report.reportVersion}
-          </dd>
-          <dt>Detectors</dt>
-          <dd class="mono">{report.detectors.map((d) => `${d.id}@${d.version}`).join(' · ')}</dd>
-          <dt>Egress policy</dt>
-          <dd class="mono">{report.scan.egress}</dd>
-          <dt>Chain</dt>
-          <dd class="mono">{report.scan.chainId}</dd>
-          <dt>Canary address</dt>
-          <dd class="mono">
-            {report.scan.canaryAddress.slice(0, 8)}…{report.scan.canaryAddress.slice(-6)}{' '}
-            <span class="muted">(throwaway, generated for this scan)</span>
-          </dd>
-          {scan.startedAt && scan.finishedAt && (
-            <>
-              <dt>Duration</dt>
-              <dd class="mono">
-                {duration(new Date(scan.finishedAt).getTime() - new Date(scan.startedAt).getTime())}
-              </dd>
-            </>
-          )}
-          {report.scan.notes.length > 0 && (
-            <>
-              <dt>Notes</dt>
-              <dd>
-                {report.scan.notes.map((n) => (
-                  <div key={n}>{n}</div>
-                ))}
-              </dd>
-            </>
-          )}
-        </dl>
+        <ProofChip data={data} registry={registry} />
+      </header>
+
+      <nav class="report-nav" aria-label="Report sections">
+        {NAV.map(([id, label]) => (
+          <button type="button" key={id} onClick={() => jump(id)}>
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {/* ---------------------------------------------------------- charts */}
+      <Section
+        id="timeline"
+        title="Timeline of the visit"
+        aside={timeline ? `${plural(timeline.milestones.length, 'milestone')}` : undefined}
+        lede="When each third party was first contacted, and when it first received the wallet address, from the moment the page started loading."
+      >
+        {timeline ? (
+          <VisitTimeline report={report} timeline={timeline} />
+        ) : (
+          <NotRecorded what="This version’s report has no timing data (it was produced before the timeline was recorded), so the visit cannot be drawn over time." />
+        )}
       </Section>
-    </div>
+
+      <Section
+        id="traffic"
+        title="Traffic"
+        lede="Requests per second to the site itself and to third parties, with the moments the wallet was connected."
+      >
+        {timeline ? (
+          <TrafficChart timeline={timeline} />
+        ) : (
+          <NotRecorded what="Requests per second were not recorded for this version." />
+        )}
+      </Section>
+
+      <Section
+        id="address"
+        title="Where the address went"
+        aside={plural(
+          report.recipients.filter(
+            (r) => r.learned.address === 'exact' || r.learned.address === 'hashed',
+          ).length,
+          'recipient',
+        )}
+      >
+        <AddressFlow report={report} hostname={data.hostname} lookup={lookup} />
+      </Section>
+
+      <RpcSection report={report} />
+      <RecipientsSection
+        report={report}
+        hostname={data.hostname}
+        evidenceHref={evidenceHref}
+        lookup={lookup}
+      />
+      <ChangesSection changes={data.changes} version={scan ? scan.version : null} />
+      <FindingsSection
+        findings={report.privacy.findings}
+        evidenceHref={evidenceHref}
+        title="Privacy findings"
+      />
+      <WalletSection data={data} />
+      <NetworkSection data={data} />
+      <SecuritySection data={data} evidenceHref={evidenceHref} />
+      <IntegritySection data={data} />
+      <ScanRunSection data={data} />
+    </article>
   );
 }
 
-// ---------------------------------------------------------------------------
-
-/** Findings with the same title, severity and kind shown as one row (display grouping only). */
-function groupFindings(fs: FindingV2[]): FindingV2[][] {
-  const m = new Map<string, FindingV2[]>();
-  for (const f of fs) {
-    const k = `${f.severity}|${f.kind}|${f.title}`;
-    m.set(k, [...(m.get(k) ?? []), f]);
-  }
-  return [...m.values()];
-}
-
-function FindingRow({
-  group,
-  scanId,
-  points,
-  open: initiallyOpen = false,
-}: {
-  group: FindingV2[];
-  scanId: string;
-  points?: number;
-  open?: boolean;
-}) {
-  const [open, setOpen] = useState(initiallyOpen);
-  const f = group[0]!;
+/**
+ * Where the report came from and whether the backend verified it. Problems
+ * are always counted and listed — never folded into a check mark.
+ */
+function ProofChip({ data, registry }: { data: ReportData; registry: RegistryInfo | null }) {
+  const { scan, problems } = data;
+  const where = provenance(data, registry?.mode);
+  const status = proofStatus(data);
+  const entity = scan
+    ? `owner ${short(scan.owner, 6, 4)} · entity ${short(scan.key, 8, 6)} · v${scan.version}`
+    : 'no registry entity yet';
   return (
-    <div class={`finding ${open ? 'open' : ''} sev-${f.severity}`}>
-      <button class="finding-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <Sev s={f.severity} />
-        <span class="finding-title">
-          {f.title}
-          {group.length > 1 && <span class="mono muted"> ×{group.length}</span>}
+    <>
+      <button
+        type="button"
+        class={`proof ${status.ok ? 'ok' : 'bad'}`}
+        onClick={() => jump('integrity')}
+        aria-label={`${where}. ${
+          scan
+            ? `Version ${scan.version}, signed by ${scan.owner}, entity ${scan.key}.`
+            : 'Not a published version.'
+        } ${status.text}. Show integrity details.`}
+      >
+        <span class="proof-mark" aria-hidden="true">
+          {status.ok ? '✓' : '×'}
         </span>
-        <span class="finding-meta">
-          <span class="chip">{f.kind}</span>
-          {points !== undefined && points > 0 && <span class="chip solid num">−{points}</span>}
-          <span class="finding-caret" aria-hidden="true">
-            ›
+        <span class="proof-text">
+          <b>{where}</b>
+          {onArkiv(data, registry?.mode) && registry?.network ? (
+            <span class="muted"> · {registry.network}</span>
+          ) : null}
+          <span class="proof-meta mono">
+            {entity} · {status.text}
           </span>
         </span>
       </button>
-      {open && (
-        <div class="finding-body">
-          <div class="grid g-2">
-            <div>
-              <div class="eyebrow">Impact</div>
-              <p>{f.impact}</p>
-            </div>
-            <div>
-              <div class="eyebrow">Remediation</div>
-              <p>{f.remediation}</p>
-            </div>
-          </div>
-          {group.map((g) => (
-            <div class="finding-foot" key={g.id}>
-              <span class="mono muted">{g.id}</span>
-              <span class="mono muted">
-                {g.detector}@{g.detectorVersion}
-              </span>
-              <span class="mono muted">confidence: {g.confidence}</span>
-              <span class="mono muted">{g.countsTowardPrivacyScore ? 'scored' : 'not scored'}</span>
-              <span style={{ marginLeft: 'auto', flexWrap: 'wrap' }} class="row">
-                {g.evidence.map((ref) => (
-                  <a
-                    key={ref.id}
-                    class="chip evidence-link"
-                    href={`#/scans/${scanId}/evidence/${ref.id}`}
-                  >
-                    {ref.type} · {ref.id.slice(3, 11)} →
-                  </a>
-                ))}
-              </span>
-            </div>
+      {problems.length > 0 && (
+        <ul class="points small proof-problems" aria-label="Verification problems">
+          {problems.map((p) => (
+            <li key={p} class="mono">
+              {p}
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
-  );
-}
-
-function Findings({ data, scanId }: { data: Data; scanId: string }) {
-  const { report } = data;
-  const [kind, setKind] = useState<'all' | 'issue' | 'risk' | 'observation'>('all');
-  // Points shown on a row only when whole ledger lines belong to that row's
-  // findings; lines spanning several rows stay in the ledger table only.
-  const pointsFor = (group: FindingV2[]) => {
-    const ids = new Set(group.map((f) => f.id));
-    const lines = report.privacy.ledger.filter(
-      (l) => l.findingIds.length > 0 && l.findingIds.every((id) => ids.has(id)),
-    );
-    return Math.round(lines.reduce((a, l) => a + l.points, 0) * 10) / 10;
-  };
-  const groups = groupFindings(
-    [...report.privacy.findings]
-      .filter((f) => kind === 'all' || f.kind === kind)
-      .sort(byImportance),
-  );
-  const counts = {
-    all: report.privacy.findings.length,
-    issue: report.privacy.findings.filter((f) => f.kind === 'issue').length,
-    risk: report.privacy.findings.filter((f) => f.kind === 'risk').length,
-    observation: report.privacy.findings.filter((f) => f.kind === 'observation').length,
-  };
-  const totalPenalty = report.privacy.ledger.reduce((a, l) => a + l.points, 0);
-
-  return (
-    <Section
-      id="findings"
-      title="Privacy findings"
-      aside={
-        report.privacy.score === null
-          ? 'Not scored'
-          : `100 − ${Math.round(totalPenalty * 10) / 10} points of deductions → ${report.privacy.score}`
-      }
-    >
-      <div class="segmented compact" role="tablist" style={{ marginBottom: 14 }}>
-        {(['all', 'issue', 'risk', 'observation'] as const).map((k) => (
-          <button
-            key={k}
-            role="tab"
-            aria-selected={kind === k}
-            class={kind === k ? 'on' : ''}
-            onClick={() => setKind(k)}
-          >
-            <b>{k === 'all' ? 'All' : k[0]!.toUpperCase() + k.slice(1) + 's'}</b>
-            <span class="num">{counts[k]}</span>
-          </button>
-        ))}
-      </div>
-      {groups.length === 0 ? (
-        <p class="muted">No findings of this kind.</p>
-      ) : (
-        <div class="panel flush">
-          {groups.map((g, i) => (
-            <FindingRow
-              key={g[0]!.id}
-              group={g}
-              scanId={scanId}
-              points={pointsFor(g)}
-              open={i === 0 && (g[0]!.severity === 'critical' || g[0]!.severity === 'high')}
-            />
-          ))}
-        </div>
-      )}
-      {report.privacy.ledger.length > 0 && (
-        <details class="ledger">
-          <summary>Score ledger · {report.privacy.ledger.length} deductions</summary>
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Deduction</th>
-                <th>Rule</th>
-                <th class="r">Points</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.privacy.ledger.map((l) => (
-                <tr key={l.id}>
-                  <td>{l.label}</td>
-                  <td class="mono muted">{l.rule}</td>
-                  <td class="r mono num">−{l.points}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
-      )}
-    </Section>
-  );
-}
-
-function Wallet({ data }: { data: Data }) {
-  const { report } = data;
-  const conn = report.scan.connection;
-  const kit = conn?.kit;
-  return (
-    <Section id="wallet" title="Wallet integration" aside="How the canary wallet was connected">
-      <div class="grid g-3">
-        <div class="panel">
-          <div class="eyebrow">Connection</div>
-          <div class="wallet-big">
-            {report.scan.status === 'completed'
-              ? 'Connected'
-              : report.scan.status === 'wallet-connect-failed'
-                ? 'Not connected'
-                : 'Page did not load'}
-          </div>
-          <div class="muted small">
-            {conn
-              ? `${conn.requestAccountsCalls} eth_requestAccounts call${conn.requestAccountsCalls === 1 ? '' : 's'} received`
-              : 'No connection diagnostics in this report'}
-          </div>
-          {conn?.failure && (
-            <div class="small" style={{ marginTop: 10 }}>
-              <span class="mono">{conn.failure.category}</span> at {conn.failure.step}:{' '}
-              <span class="dim">{conn.failure.detail}</span>
-            </div>
-          )}
-        </div>
-        <div class="panel">
-          <div class="eyebrow">Wallet kit</div>
-          <div class="wallet-big">
-            {kit && kit.id !== 'none'
-              ? kitWording(kit.id, kit.confidence)
-              : 'No known kit identified'}
-          </div>
-          <div class="muted small">
-            {conn
-              ? `strategy: ${conn.strategy}${conn.recipe ? ` · recipe ${conn.recipe}` : ''}`
-              : '—'}
-          </div>
-          {kit && kit.signals.length > 0 && (
-            <div class="signals">
-              {kit.signals.map((s) => (
-                <code key={s}>{s}</code>
-              ))}
-            </div>
-          )}
-        </div>
-        <div class="panel">
-          <div class="eyebrow">RPC</div>
-          <div class="wallet-big">
-            {report.wallet.usesAnonRpc ? 'Anon-RPC in use' : 'Anon-RPC not detected'}
-          </div>
-          <div class="muted small">Reads the dApp sent through the wallet:</div>
-          {report.wallet.readsViaWallet.length === 0 ? (
-            <div class="small muted" style={{ marginTop: 8 }}>
-              none
-            </div>
-          ) : (
-            <div class="signals">
-              {report.wallet.readsViaWallet.map((r) => (
-                <code key={r.method}>
-                  {r.method} ×{r.count}
-                </code>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-      {conn && conn.steps.length > 0 && (
-        <div class="panel flush" style={{ marginTop: 16 }}>
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Connect step</th>
-                <th>Result</th>
-                <th>Detail</th>
-                <th class="r">Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {conn.steps.map((s, i) => (
-                <tr key={i}>
-                  <td class="mono">{s.step}</td>
-                  <td>
-                    <span class={`chip ${s.result === 'failed' ? 'signal' : ''}`}>{s.result}</span>
-                  </td>
-                  <td class="dim small">{s.detail}</td>
-                  <td class="r mono muted num">{duration(s.ms)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Section>
-  );
-}
-
-function ThirdParties({ data }: { data: Data }) {
-  const { report, evidence } = data;
-  const [filter, setFilter] = useState<'all' | 'pre' | 'leak'>('all');
-  const classByHost = useMemo(() => {
-    const m = new Map<string, ContactClassificationEvidence>();
-    for (const i of Object.values(evidence.items))
-      if (i.type === 'contact-classification') m.set(i.host, i);
-    return m;
-  }, [evidence]);
-  // Hosts with a scored address leak (the backend's findings), not every
-  // canary-match item (which also covers storage and truncated forms).
-  const leakHosts = useMemo(() => {
-    const s = new Set<string>();
-    for (const f of report.privacy.findings) {
-      if (f.detector !== 'canary-leak' || !f.countsTowardPrivacyScore) continue;
-      for (const ref of f.evidence) {
-        const i = evidence.items[ref.id];
-        if (i?.type === 'canary-match') s.add(i.host);
-      }
-    }
-    return s;
-  }, [report, evidence]);
-  const rows = [...report.contacts]
-    .filter((c) =>
-      filter === 'pre'
-        ? c.phases.includes('pre-connect')
-        : filter === 'leak'
-          ? leakHosts.has(c.host)
-          : true,
-    )
-    .sort(
-      (a, b) =>
-        Number(leakHosts.has(b.host)) - Number(leakHosts.has(a.host)) ||
-        b.requestCount - a.requestCount ||
-        a.host.localeCompare(b.host),
-    );
-  const maxReq = Math.max(1, ...report.contacts.map((c) => c.requestCount));
-
-  return (
-    <Section
-      id="third-parties"
-      title="Third-party domains"
-      aside={`${report.contacts.length} hosts across ${new Set(report.contacts.map((c) => c.registrableDomain)).size} domains`}
-    >
-      <div class="segmented compact" role="tablist" style={{ marginBottom: 14 }}>
-        {(
-          [
-            ['all', 'All hosts'],
-            ['pre', 'Before connecting'],
-            ['leak', 'Received the address'],
-          ] as const
-        ).map(([k, l]) => (
-          <button
-            key={k}
-            role="tab"
-            aria-selected={filter === k}
-            class={filter === k ? 'on' : ''}
-            onClick={() => setFilter(k)}
-          >
-            <b>{l}</b>
-          </button>
-        ))}
-      </div>
-      {rows.length === 0 ? (
-        <p class="muted">No hosts match.</p>
-      ) : (
-        <div class="panel flush table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Host</th>
-                <th>Class</th>
-                <th>Relationship</th>
-                <th>Phases</th>
-                <th class="r">Requests</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((c) => {
-                const cls = classByHost.get(c.host);
-                const leak = leakHosts.has(c.host);
-                return (
-                  <tr key={c.host}>
-                    <td>
-                      <div class="mono" style={{ fontSize: '0.82rem' }}>
-                        {c.host}
-                      </div>
-                      {leak && (
-                        <span class="chip signal" style={{ marginTop: 6 }}>
-                          received the wallet address
-                        </span>
-                      )}
-                    </td>
-                    <td class="dim">{RECIPIENT_LABEL[c.class] ?? c.class}</td>
-                    <td>
-                      {cls ? (
-                        <span title={`${cls.rule}: ${cls.basis.map((b) => b.detail).join('; ')}`}>
-                          {cls.relationship}
-                          <span class="muted small"> · {cls.confidence}</span>
-                        </span>
-                      ) : (
-                        <span class="muted">—</span>
-                      )}
-                    </td>
-                    <td class="mono muted small">{c.phases.join(' + ')}</td>
-                    <td class="r">
-                      <div class="row" style={{ justifyContent: 'flex-end', gap: 10 }}>
-                        <div class="bar" style={{ width: 64 }}>
-                          <span style={{ width: `${(c.requestCount / maxReq) * 100}%` }} />
-                        </div>
-                        <span class="mono num" style={{ minWidth: 28 }}>
-                          {c.requestCount}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Section>
-  );
-}
-
-function Integrity({ data, serverVerified }: { data: Data; serverVerified: Data['verification'] }) {
-  const { report, evidence } = data;
-  const [local, setLocal] = useState<IntegrityResult | null>(null);
-  const [ms, setMs] = useState(0);
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const t0 = performance.now();
-      setLocal(verifyReportIntegrity(report, evidence));
-      setMs(Math.round(performance.now() - t0));
-    }, 50);
-    return () => clearTimeout(t);
-  }, [report, evidence]);
-
-  return (
-    <Section id="integrity" title="Integrity" aside="Can this report be trusted as delivered?">
-      <div class="grid g-2">
-        <div class="panel">
-          <div class="eyebrow">Scanner node</div>
-          <div class="check-list">
-            <Check
-              ok={serverVerified.schema}
-              label="Report and evidence match their published schemas"
-            />
-            <Check
-              ok={serverVerified.integrity}
-              label="Evidence bundle hash and references re-verified on load"
-            />
-          </div>
-        </div>
-        <div class="panel">
-          <div class="eyebrow">Recomputed in this browser</div>
-          {local ? (
-            <>
-              <div class="check-list">
-                <Check
-                  ok={local.bundleSha256 === report.evidence.sha256}
-                  label={`Evidence bundle hashes to the value in the report (${ms} ms)`}
-                />
-                <Check
-                  ok={!local.problems.some((p) => p.includes('content id'))}
-                  label={`All ${report.evidence.itemCount} evidence items match their content ids`}
-                />
-                <Check
-                  ok={!local.problems.some((p) => p.includes('findingSet'))}
-                  label="Finding-set digest matches the findings"
-                />
-                <Check
-                  ok={!local.problems.some((p) => p.includes('references'))}
-                  label="Every finding resolves to evidence of the stated type"
-                />
-              </div>
-              {local.problems.length > 0 && (
-                <ul class="points small">
-                  {local.problems.map((p) => (
-                    <li key={p} class="mono">
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
-          ) : (
-            <div class="row muted" style={{ marginTop: 14 }}>
-              <span class="spinner" /> hashing {report.evidence.itemCount} items…
-            </div>
-          )}
-        </div>
-      </div>
-      <dl class="kv" style={{ marginTop: 16 }}>
-        <dt>Evidence sha256</dt>
-        <dd>
-          <code class="mono">{report.evidence.sha256}</code>
-        </dd>
-        <dt>Bundle</dt>
-        <dd class="mono">
-          {report.evidence.bundleVersion} · {report.evidence.canonicalization} ·{' '}
-          {report.evidence.itemCount} items
-        </dd>
-        <dt>Finding set</dt>
-        <dd>
-          <Hash value={report.findingSet.sha256} n={24} />{' '}
-          <span class="muted small">
-            {report.findingSet.count} findings · stable across scans of the same behaviour, unlike
-            the evidence hash
-          </span>
-        </dd>
-      </dl>
-    </Section>
-  );
-}
-
-function Check({ ok, label }: { ok: boolean; label: string }) {
-  return (
-    <div class={`check ${ok ? 'ok' : 'bad'}`}>
-      <span class="check-mark">{ok ? '✓' : '×'}</span>
-      {label}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Who learned what: one row per recipient domain, from the report's contacts
-// and the canary-match evidence only (no scoring, no new judgement).
-
-/** Display order of recipient kinds: most concerning first. */
-const KIND_ORDER = [
-  'unknown-third-party',
-  'analytics',
-  'error-monitoring',
-  'support-chat',
-  'wallet-sdk',
-  'rpc-provider',
-  'walletconnect-relay',
-  'ipfs-gateway',
-  'cdn',
-  'anon-rpc',
-];
-/** Address reaching these classes is the "tracking or unidentified" case. */
-const TRACKING = new Set(['unknown-third-party', 'analytics', 'error-monitoring', 'support-chat']);
-
-interface Recipient {
-  domain: string;
-  kind: string;
-  hosts: string[];
-  ipPhases: Set<string>;
-  address: {
-    /** yes: a scored exact leak; hashed: only hashed forms; possible: only a truncated display form (unscored). */
-    state: 'yes' | 'hashed' | 'possible';
-    phases: Set<string>;
-    how: Set<string>;
-    viaWebSocketOnly: boolean;
-    /** Strongest evidence first (exact, then hashed, then partial). */
-    evidence: Array<{ id: string; rank: number }>;
-  } | null;
-}
-
-const CATEGORY_RANK: Record<string, number> = { exact: 0, hashed: 1, partial: 2 };
-
-function Exposure({ data, scanId }: { data: Data; scanId: string }) {
-  const { report, evidence } = data;
-  const full = report.privacy.coverage === 'full';
-  const rows = useMemo(() => {
-    const m = new Map<string, Recipient>();
-    // One row per (registrable domain, class) — the same unit the score
-    // ledger uses — so an RPC host and an unidentified asset host of the
-    // same domain are never merged under one label.
-    const get = (domain: string, kind: string) => {
-      const key = `${domain}|${kind}`;
-      const r = m.get(key) ?? { domain, kind, hosts: [], ipPhases: new Set(), address: null };
-      m.set(key, r);
-      return r;
-    };
-    for (const c of report.contacts) {
-      const r = get(c.registrableDomain, c.class);
-      if (!r.hosts.includes(c.host)) r.hosts.push(c.host);
-      for (const p of c.phases) r.ipPhases.add(p);
-    }
-    // The address column comes from the backend's canary-leak FINDINGS:
-    // scored leaks are "yes"/"hashed"; an unscored truncated display form is
-    // only "possible"; storage observations are not third-party receipts.
-    for (const f of report.privacy.findings) {
-      if (f.detector !== 'canary-leak') continue;
-      for (const ref of f.evidence) {
-        const item = evidence.items[ref.id];
-        if (item?.type !== 'canary-match' || item.recipientClass === 'first-party') continue;
-        const counted = f.countsTowardPrivacyScore;
-        if (!counted && item.category !== 'partial') continue;
-        const r = get(item.registrableDomain, item.recipientClass);
-        if (!r.hosts.includes(item.host)) r.hosts.push(item.host);
-        const state = !counted ? 'possible' : item.category === 'hashed' ? 'hashed' : 'yes';
-        const a = r.address ?? {
-          state,
-          phases: new Set<string>(),
-          how: new Set<string>(),
-          viaWebSocketOnly: true,
-          evidence: [],
-        };
-        const order = { yes: 0, hashed: 1, possible: 2 } as const;
-        if (order[state] < order[a.state]) a.state = state;
-        a.phases.add(item.phase);
-        a.how.add(item.location.replace(/-/g, ' '));
-        if (item.location !== 'websocket-frame') a.viaWebSocketOnly = false;
-        a.evidence.push({ id: ref.id, rank: CATEGORY_RANK[item.category] ?? 3 });
-        r.address = a;
-      }
-    }
-    for (const r of m.values())
-      r.address?.evidence.sort((x, y) => x.rank - y.rank || x.id.localeCompare(y.id));
-    return [...m.values()].sort(
-      (x, y) =>
-        (x.address ? { yes: 0, hashed: 1, possible: 2 }[x.address.state] : 3) -
-          (y.address ? { yes: 0, hashed: 1, possible: 2 }[y.address.state] : 3) ||
-        KIND_ORDER.indexOf(x.kind) - KIND_ORDER.indexOf(y.kind) ||
-        x.domain.localeCompare(y.domain),
-    );
-  }, [report, evidence]);
-
-  const gotAddress = rows.filter((r) => r.address && r.address.state !== 'possible');
-  const trackersBefore = rows.filter(
-    (r) =>
-      (r.kind === 'analytics' || r.kind === 'error-monitoring' || r.kind === 'support-chat') &&
-      r.ipPhases.has('pre-connect'),
-  );
-  const rpcs = rows.filter((r) => r.kind === 'rpc-provider');
-  // "post-connect" only means "after connecting" when the wallet connected;
-  // otherwise it is the traffic of the connect attempt.
-  const after = full ? 'after connecting' : 'during the connect attempt';
-  const phaseText = (ps: Set<string>) =>
-    ps.has('pre-connect') && ps.has('post-connect')
-      ? `before connecting and ${after}`
-      : ps.has('pre-connect')
-        ? 'before connecting'
-        : after;
-
-  return (
-    <Section
-      id="exposure"
-      title="Who learned what"
-      aside="Every third party reached over HTTP(S), plus any that received the address over WebSocket"
-    >
-      <div class="grid g-3">
-        <Kpi
-          k={gotAddress.length}
-          l="received the wallet address"
-          s={
-            gotAddress.length
-              ? `${gotAddress.filter((r) => TRACKING.has(r.kind)).length} of them trackers or unidentified`
-              : full
-                ? 'not observed in any third-party traffic'
-                : 'not tested: the wallet did not connect'
-          }
-        />
-        <Kpi
-          k={trackersBefore.length}
-          l="trackers before any click"
-          s="analytics, monitoring or chat loaded on arrival"
-        />
-        <Kpi
-          k={rpcs.length}
-          l="RPC providers"
-          s={
-            rpcs.length
-              ? `each can link the addresses it serves to the visitor\u2019s IP${report.wallet.usesAnonRpc ? ' (Anon-RPC also detected)' : ''}`
-              : report.wallet.usesAnonRpc
-                ? 'reads routed through Anon-RPC'
-                : 'none contacted directly'
-          }
-        />
-      </div>
-      <div class="panel flush table-wrap" style={{ marginTop: 16 }}>
-        <table class="table exposure">
-          <thead>
-            <tr>
-              <th>Recipient</th>
-              <th>What it is</th>
-              <th>Wallet address</th>
-              <th>IP address and visit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={`${r.domain}|${r.kind}`}>
-                <td>
-                  <div class="mono" style={{ fontSize: '0.84rem' }}>
-                    {r.domain}
-                  </div>
-                  <div class="muted small" title={r.hosts.join('\n')}>
-                    {r.hosts.length === 1 ? r.hosts[0] : `${r.hosts.length} hosts`}
-                  </div>
-                </td>
-                <td class="dim">{RECIPIENT_LABEL[r.kind] ?? r.kind}</td>
-                <td>
-                  {r.address ? (
-                    <>
-                      <span
-                        class={`chip ${
-                          r.address.state === 'yes' && TRACKING.has(r.kind)
-                            ? 'signal'
-                            : r.address.state === 'possible'
-                              ? ''
-                              : 'solid'
-                        }`}
-                        title={
-                          r.address.state === 'possible'
-                            ? 'Only a truncated display form (0x1234…abcd) was seen; not scored'
-                            : undefined
-                        }
-                      >
-                        {r.address.state === 'yes'
-                          ? 'yes'
-                          : r.address.state === 'hashed'
-                            ? 'hashed address'
-                            : 'possible (truncated)'}
-                      </span>
-                      <div class="muted small" style={{ marginTop: 6 }}>
-                        {phaseText(r.address.phases)} · via {[...r.address.how].join(', ')} ·{' '}
-                        <a href={`#/scans/${scanId}/evidence/${r.address.evidence[0]!.id}`}>
-                          evidence →
-                        </a>
-                      </div>
-                    </>
-                  ) : (
-                    <span class="muted">{full ? 'not observed' : 'not tested'}</span>
-                  )}
-                </td>
-                <td class="small dim">
-                  {r.ipPhases.size
-                    ? phaseText(r.ipPhases)
-                    : r.address?.viaWebSocketOnly
-                      ? `${phaseText(r.address.phases)} (WebSocket)`
-                      : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Section>
+    </>
   );
 }

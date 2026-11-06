@@ -1,0 +1,17 @@
+{
+  // Typecheck for the unit tests (Node side; they import the app's pure modules).
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"],
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["./**/*.ts", "../vitest.config.ts"],
+  "exclude": []
+}

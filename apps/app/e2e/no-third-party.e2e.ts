@@ -30,21 +30,32 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, extname, join, normalize, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
-import type { ScanMeta } from '../src/api.js';
+import type { Job } from '../src/api.js';
 import {
-  COMPLETED_ID,
+  CACHE_PROBLEM,
   FAILED_ID,
+  HOST as SITE,
+  NEW_HOST,
+  OTHER_HOST,
+  PUBLISH_ERROR,
   RUNNING_ID,
-  assessment,
+  UNPUBLISHED_ID,
+  cachedVersionBody,
   citedEvidenceId,
-  completedMeta,
-  failedMeta,
-  reportBody,
-  runningDoneMeta,
-  runningMeta,
+  failedJob,
+  flowsTo,
+  registry,
+  republishedJob,
+  runningDoneJob,
+  runningJob,
   runningProgress,
+  siteBody,
+  sites,
   sseBody,
-  stats,
+  summaryV2,
+  unpublishedJob,
+  unpublishedReport,
+  versionBodies,
 } from './fixtures.js';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -137,19 +148,22 @@ async function open(): Promise<Visit> {
     unstubbed: [],
     net: { inflight: new Set(), lastActivity: Date.now() },
   };
-  // The running scan flips to completed once its event stream has been served.
+  // The running scan flips to completed once its event stream has been served;
+  // the unpublished scan flips to published once its publish is retried.
   let runningDone = false;
-  const metaFor = (id: string): ScanMeta | undefined =>
-    id === COMPLETED_ID
-      ? completedMeta
-      : id === FAILED_ID
-        ? failedMeta
-        : id === RUNNING_ID
-          ? runningDone
-            ? runningDoneMeta
-            : runningMeta
+  let republished = false;
+  const jobFor = (id: string): Job | undefined =>
+    id === FAILED_ID
+      ? failedJob
+      : id === RUNNING_ID
+        ? runningDone
+          ? runningDoneJob
+          : runningJob
+        : id === UNPUBLISHED_ID
+          ? republished
+            ? republishedJob
+            : unpublishedJob
           : undefined;
-  const list = () => [runningMeta, completedMeta, failedMeta];
 
   // Context-level: also catches popups, workers and anything not tied to a page.
   context.on('request', (r) => {
@@ -173,24 +187,42 @@ async function open(): Promise<Visit> {
     const m = req.method();
     const p = u.pathname;
     let mm: RegExpExecArray | null;
-    if (m === 'GET' && p === '/api/health')
-      return json(route, 200, {
-        status: 'ok',
-        service: 'igris-scanner-api',
-        egress: 'public-only',
-      });
-    if (m === 'GET' && p === '/api/scans') return json(route, 200, { scans: list() });
-    if (m === 'POST' && p === '/api/scans')
-      return json(route, 202, { id: FAILED_ID, state: 'queued' });
-    if (m === 'GET' && p === '/api/stats') return json(route, 200, stats(list()));
+    if (m === 'GET' && p === '/api/health') return json(route, 200, { ok: true });
+    if (m === 'GET' && p === '/api/registry') return json(route, 200, registry);
+    if (m === 'GET' && p === '/api/sites') {
+      const limit = Number(u.searchParams.get('limit') ?? 20);
+      return json(route, 200, { sites: sites.slice(0, limit) });
+    }
+    if (m === 'GET' && (mm = /^\/api\/sites\/([^/]+)$/.exec(p)))
+      return json(route, 200, siteBody(decodeURIComponent(mm[1]!)));
+    if (m === 'GET' && (mm = /^\/api\/sites\/([^/]+)\/versions\/(\d+)$/.exec(p))) {
+      const h = decodeURIComponent(mm[1]!);
+      const n = Number(mm[2]);
+      const body =
+        h === SITE ? versionBodies[n] : h === OTHER_HOST && n === 1 ? cachedVersionBody : undefined;
+      return body ? json(route, 200, body) : json(route, 404, { error: 'no such version' });
+    }
+    if (m === 'POST' && (mm = /^\/api\/sites\/([^/]+)\/scans$/.exec(p))) {
+      // Retest of the scanned site → the running scan; a first scan → the failed one.
+      const host = decodeURIComponent(mm[1]!);
+      return json(route, 202, { id: host === SITE ? RUNNING_ID : FAILED_ID });
+    }
     if (m === 'GET' && (mm = /^\/api\/scans\/([0-9a-f-]{36})$/.exec(p))) {
-      const meta = metaFor(mm[1]!);
-      return meta ? json(route, 200, { scan: meta }) : json(route, 404, { error: 'not found' });
+      const job = jobFor(mm[1]!);
+      return job ? json(route, 200, { scan: job }) : json(route, 404, { error: 'not found' });
     }
     if (m === 'GET' && (mm = /^\/api\/scans\/([0-9a-f-]{36})\/report$/.exec(p))) {
-      const meta = metaFor(mm[1]!);
-      if (meta?.state === 'completed') return json(route, 200, reportBody);
-      return json(route, 409, { error: `scan is ${meta?.state ?? 'unknown'}` });
+      // Same contract as apps/api: 404 unknown/nothing cached, 409 not completed.
+      const job = jobFor(mm[1]!);
+      if (!job) return json(route, 404, { error: 'not found' });
+      if (job.state !== 'completed') return json(route, 409, { error: 'scan not completed' });
+      return mm[1] === UNPUBLISHED_ID
+        ? json(route, 200, unpublishedReport)
+        : json(route, 404, { error: 'nothing cached' });
+    }
+    if (m === 'POST' && p === `/api/scans/${UNPUBLISHED_ID}/publish`) {
+      republished = true;
+      return json(route, 200, { publish: republishedJob.publish });
     }
     if (m === 'GET' && p === `/api/scans/${RUNNING_ID}/events`) {
       runningDone = true;
@@ -200,6 +232,8 @@ async function open(): Promise<Visit> {
         body: sseBody(runningProgress),
       });
     }
+    if (m === 'GET' && (mm = /^\/api\/recipients\/([^/]+)$/.exec(p)))
+      return json(route, 200, { flows: flowsTo(decodeURIComponent(mm[1]!)) });
     visit.unstubbed.push(`${m} ${p}`);
     return json(route, 404, { error: 'not stubbed' });
   });
@@ -216,9 +250,10 @@ async function open(): Promise<Visit> {
  * after the context is closed and never be seen. Instead we watch the
  * context's own request lifecycle and only return once NO request is in
  * flight AND none has started or ended for QUIET_MS (and at least QUIET_MS
- * has passed in total). The app polls (/api/health every 15 s, list pages
- * every 5 s), so the window is far shorter than any poll interval; SETTLE_MAX_MS
- * bounds a page that never goes quiet (reported in the summary, not hidden).
+ * has passed in total). The app does not poll — its only interval is the live
+ * scan's clock, which makes no request (test/styles.test.ts keeps it that way)
+ * — and every event stream the stub serves is finite, so a page does go
+ * quiet; SETTLE_MAX_MS bounds one that never does (reported, not hidden).
  */
 const QUIET_MS = 1500;
 const SETTLE_MAX_MS = 12_000;
@@ -259,62 +294,67 @@ const perRoute: Array<{
   byType: Record<string, number>;
 }> = [];
 
+const V2 = `#/site/${SITE}/v/2`;
+
 const ROUTES: Array<{ hash: string; exercise: (page: Page) => Promise<void> }> = [
   {
     hash: '#/',
     exercise: async (page) => {
-      // Recent completed scans come from GET /api/scans.
-      await page.getByText('app.example.org').first().waitFor();
-      await page.getByLabel('dApp URL to scan').fill('app.uniswap.org');
+      // Recently scanned comes from GET /api/sites; search normalises a URL to its host.
+      await page.getByText(SITE).first().waitFor();
+      await page
+        .getByLabel('Search a site or paste a URL')
+        .fill('https://App.Example.org/swap?x=1');
+      await page.getByRole('button', { name: 'Search' }).click();
+      await page.waitForURL(`**/#/site/${SITE}`);
+      await page.getByText(summaryV2.headline).first().waitFor();
     },
   },
   {
-    hash: '#/dashboard',
+    hash: `#/site/${SITE}`,
     exercise: async (page) => {
-      await page.locator('table').first().waitFor();
-      await page.getByText('app.example.org').first().waitFor();
+      // Latest version (v2) with its history rail; open v1 from the rail.
+      await page.getByText(summaryV2.headline).first().waitFor();
+      await page
+        .getByRole('navigation', { name: 'Version history' })
+        .getByText('v1', { exact: true })
+        .click();
+      await page.waitForURL(`**/#/site/${SITE}/v/1`);
+      await page.getByText('Not recorded').first().waitFor();
+      // Retest → POST → the live scan → back to the new version's report.
+      await page.getByRole('button', { name: 'Retest' }).click();
+      await page.waitForURL(`**/#/site/${SITE}/v/2`, { timeout: 15_000 });
+      await page.getByText(summaryV2.headline).first().waitFor();
     },
   },
   {
-    hash: '#/scan',
+    hash: `#/site/${NEW_HOST}`,
     exercise: async (page) => {
-      // Submit a scan: POST /api/scans → the live page of the returned (failed) scan.
-      await page.getByLabel('dApp URL to scan').fill('unreachable.example.com');
-      await page.getByRole('button', { name: 'Scan dApp' }).click();
-      await page.waitForURL(`**/#/scans/${FAILED_ID}`);
+      await page.getByText('Not scanned yet').waitFor();
+      await page.getByRole('button', { name: 'Scan this site' }).click();
+      await page.waitForURL(`**/#/scan/${FAILED_ID}`);
       await page.getByText('What happened').waitFor();
     },
   },
   {
-    hash: '#/history',
+    hash: V2,
     exercise: async (page) => {
-      await page.getByText('unreachable.example.com').first().waitFor();
-      await page.getByRole('button', { name: 'Address leaks' }).click();
-      await page.getByRole('button', { name: 'All', exact: true }).click();
-    },
-  },
-  {
-    hash: `#/scans/${COMPLETED_ID}`,
-    exercise: async (page) => {
-      await page.getByText(assessment.headline).first().waitFor();
-      // Expand a collapsed finding (the first may start open).
-      const head = page.locator('button.finding-head[aria-expanded="false"]').first();
-      const title = await head.locator('.finding-title').innerText();
-      await head.click();
+      await page.getByText(summaryV2.headline).first().waitFor();
+      await page.getByText('Published on Arkiv').first().waitFor();
+      // Timeline rows are focusable and show their details.
+      await page.locator('button.tl-row').first().focus();
+      await page.locator('.tl-detail .kv').waitFor();
+      // Cross-site flows load lazily as the recipients scroll into view.
+      await page.locator('#recipients').scrollIntoViewIfNeeded();
       await page
-        .locator('button.finding-head[aria-expanded="true"]', { hasText: title })
+        .getByText(/Also on 2 other scanned sites/)
         .first()
         .waitFor();
-      await page
-        .getByRole('tab', { name: /Issues/ })
-        .first()
-        .click();
-      await page
-        .getByRole('tab', { name: /Observations/ })
-        .first()
-        .click();
-      const ledger = page.locator('details.ledger summary');
-      if (await ledger.count()) await ledger.first().click();
+      // Findings expand; the in-browser integrity check passes.
+      const head = page.locator('button.finding-head[aria-expanded="false"]').first();
+      await head.click();
+      await page.getByText('Report hashes to the published scanId').waitFor();
+      await expect.poll(() => page.locator('#integrity .check.bad').count()).toBe(0);
       // report.json download goes through a blob: URL, never the network.
       const [dl] = await Promise.all([
         page.waitForEvent('download'),
@@ -324,7 +364,16 @@ const ROUTES: Array<{ hash: string; exercise: (page: Page) => Promise<void> }> =
     },
   },
   {
-    hash: `#/scans/${COMPLETED_ID}/evidence`,
+    hash: `#/site/${SITE}/v/1`,
+    exercise: async (page) => {
+      // Migrated report: no timeline, no RPC inventory — said plainly.
+      await page.getByText('Not recorded').first().waitFor();
+      await expect.poll(() => page.locator('.not-recorded').count()).toBeGreaterThanOrEqual(3);
+      await page.getByText('first published version').first().waitFor();
+    },
+  },
+  {
+    hash: `${V2}/evidence`,
     exercise: async (page) => {
       await page.locator('button.evidence-item').first().waitFor();
       await page.locator('button.chip.filter').nth(1).click();
@@ -333,7 +382,7 @@ const ROUTES: Array<{ hash: string; exercise: (page: Page) => Promise<void> }> =
     },
   },
   {
-    hash: `#/scans/${COMPLETED_ID}/evidence/${citedEvidenceId}`,
+    hash: `${V2}/evidence/${citedEvidenceId}`,
     exercise: async (page) => {
       await page.getByText(citedEvidenceId).first().waitFor();
       await page.getByText(/matches its id/).waitFor();
@@ -341,18 +390,84 @@ const ROUTES: Array<{ hash: string; exercise: (page: Page) => Promise<void> }> =
     },
   },
   {
-    hash: `#/scans/${RUNNING_ID}`,
+    hash: `#/scan/${RUNNING_ID}`,
     exercise: async (page) => {
-      // SSE replay renders in the scanner log, then `done` loads the report.
+      // SSE replay renders in the scanner log; `done` (published) opens the version.
       await expect.poll(() => page.locator('.log-line').count()).toBe(runningProgress.length);
-      await page.getByText(assessment.headline).first().waitFor({ timeout: 15_000 });
+      await page.getByText(/Published on Arkiv · v2 · tx/).waitFor();
+      // Elapsed = the re-fetched job's finishedAt − startedAt (both server clock): 15.0 s.
+      await page.locator('.live-clock .num').getByText('15.0 s').waitFor();
+      await page.waitForURL(`**${V2}`, { timeout: 15_000 });
+      await page.getByText(summaryV2.headline).first().waitFor();
     },
   },
   {
-    hash: `#/scans/${FAILED_ID}`,
+    hash: `#/scan/${FAILED_ID}`,
     exercise: async (page) => {
       await page.getByText('Scan failed').waitFor();
-      await page.getByText(failedMeta.error!).waitFor();
+      await page.getByText(failedJob.error!).waitFor();
+      await page.getByRole('button', { name: 'Retry scan' }).waitFor();
+    },
+  },
+  {
+    hash: `#/scan/${UNPUBLISHED_ID}`,
+    exercise: async (page) => {
+      await page.getByText(`Not published: ${PUBLISH_ERROR}`).waitFor();
+      const view = page.getByRole('link', { name: 'View report (not published yet)' });
+      expect(await view.getAttribute('href')).toBe(`#/scan/${UNPUBLISHED_ID}/report`);
+      await page.getByRole('button', { name: 'Retry publish' }).click();
+      await page.waitForURL(`**${V2}`, { timeout: 15_000 });
+      await page.getByText(summaryV2.headline).first().waitFor();
+    },
+  },
+  {
+    hash: `#/scan/${UNPUBLISHED_ID}/report`,
+    exercise: async (page) => {
+      // The cached report of a completed scan whose publish failed: same view, clear banner.
+      await page.getByText('Not published on Arkiv yet', { exact: true }).waitFor();
+      await page.getByText(summaryV2.headline).first().waitFor();
+      await page
+        .getByText('Not published on Arkiv yet · served from this server’s cache')
+        .waitFor();
+      await page
+        .getByText('Evidence bundle hashes to the reported sha256', { exact: false })
+        .waitFor();
+      await expect.poll(() => page.locator('#integrity .check.bad').count()).toBe(0);
+      // Evidence links stay inside the unpublished scan.
+      const ev = page.locator('a.evidence-link').first();
+      expect(await ev.getAttribute('href')).toMatch(
+        new RegExp(`^#/scan/${UNPUBLISHED_ID}/report/evidence/ev_[0-9a-f]{24}$`),
+      );
+      // Retry publish → the published version.
+      await page.getByRole('button', { name: 'Retry publish' }).click();
+      await page.waitForURL(`**${V2}`, { timeout: 15_000 });
+      await page.getByText(summaryV2.headline).first().waitFor();
+    },
+  },
+  {
+    hash: `#/scan/${UNPUBLISHED_ID}/report/evidence/${citedEvidenceId}`,
+    exercise: async (page) => {
+      await page.getByText(citedEvidenceId).first().waitFor();
+      await page.getByText(/matches its id/).waitFor();
+      await page.getByText('not published yet · served from this server’s cache').waitFor();
+      await page.getByRole('link', { name: 'unpublished scan' }).waitFor();
+    },
+  },
+  {
+    hash: `#/site/${OTHER_HOST}`,
+    exercise: async (page) => {
+      // Published on Arkiv but served from the API's cache, with a problem: both said.
+      await page.getByText('Published on Arkiv · served from this server’s cache').waitFor();
+      await page
+        .locator('.proof-meta')
+        .getByText(/verified · 1 problem$/)
+        .waitFor();
+      expect(await page.locator('.proof-meta').textContent()).not.toContain('✓');
+      await page.locator('.proof-problems').getByText(CACHE_PROBLEM).waitFor();
+      await page
+        .getByRole('navigation', { name: 'Version history' })
+        .getByText('first version')
+        .waitFor();
     },
   },
   {
@@ -386,7 +501,8 @@ describe('web app makes no third-party requests', () => {
         const types = new Set(v.requests.map((r) => r.type));
         for (const t of ['document', 'script', 'stylesheet', 'font', 'fetch'])
           expect(types, `${hash} should request a ${t}`).toContain(t);
-        if (hash === `#/scans/${RUNNING_ID}`) expect(types).toContain('eventsource');
+        if (hash === `#/scan/${RUNNING_ID}` || hash === `#/site/${SITE}`)
+          expect(types).toContain('eventsource');
 
         const byType: Record<string, number> = {};
         for (const r of v.requests) byType[r.type] = (byType[r.type] ?? 0) + 1;
@@ -406,7 +522,7 @@ describe('web app makes no third-party requests', () => {
         .sort();
     try {
       await v.page.goto(`${ORIGIN}/#/`);
-      await v.page.getByText('app.example.org').first().waitFor();
+      await v.page.getByText(SITE).first().waitFor();
       await v.page.evaluate(() => {
         // Immediate beacons.
         new Image().src = 'https://tracker.invalid/pixel.gif?e=connect';
@@ -434,9 +550,9 @@ describe('web app makes no third-party requests', () => {
           { once: true },
         );
       });
-      await v.page.getByLabel('dApp URL to scan').fill('app.uniswap.org');
-      await v.page.locator('a[href="#/history"]').first().click();
-      await v.page.getByText('unreachable.example.com').first().waitFor();
+      await v.page.getByLabel('Search a site or paste a URL').fill('app.uniswap.org');
+      await v.page.locator(`a[href="#/site/${SITE}"]`).first().click();
+      await v.page.getByText(summaryV2.headline).first().waitFor();
 
       // The old settle() — networkidle — returns before the delayed beacons start.
       await v.page.waitForLoadState('networkidle');

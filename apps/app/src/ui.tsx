@@ -1,134 +1,126 @@
-/** Shared presentational components. No data decisions live here. */
+/**
+ * Shared presentational components and wording. No data decisions live here:
+ * verdicts, states and reasons come from the backend; this file only names
+ * them for people.
+ */
 import type { ComponentChildren } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
-import type { Level, SeverityCounts } from './api.js';
+import { useState } from 'preact/hooks';
+import type { Recipient, Verdict } from '@igris/core/contracts';
+import type { SummaryState } from './api.js';
 
-export const LEVEL_LABEL: Record<Level, string> = {
-  'not-assessed': 'Not assessed',
-  critical: 'Critical exposure',
-  high: 'High exposure',
-  elevated: 'Elevated exposure',
-  moderate: 'Moderate exposure',
-  low: 'Low exposure',
+// --------------------------------------------------------------- wording
+
+/** Display order (worst first) — the order the backend sorts recipients in. */
+export const VERDICT_ORDER: readonly Verdict[] = [
+  'unidentified',
+  'tracking',
+  'avoidable',
+  'expected',
+];
+
+export const VERDICT: Record<Verdict, { label: string; meaning: string }> = {
+  expected: { label: 'Expected', meaning: 'Needed for the app to work as built.' },
+  avoidable: { label: 'Avoidable', meaning: 'The app works without this exposure.' },
+  tracking: { label: 'Tracking', meaning: 'Not needed; profiles visitors.' },
+  unidentified: {
+    label: 'Unidentified',
+    meaning: 'Nobody can say what it does with what it receives.',
+  },
 };
 
-export function LevelBadge({ level }: { level: Level }) {
+export const STATE: Record<SummaryState, string> = {
+  'address-to-trackers': 'Address reached trackers',
+  'address-to-services': 'Address reached services only',
+  'no-address-observed': 'No address leak observed',
+  'not-observed': 'Not observed',
+};
+
+export const CLASS_LABEL: Record<string, string> = {
+  'first-party': 'First party',
+  'rpc-provider': 'RPC provider',
+  analytics: 'Analytics',
+  'error-monitoring': 'Error monitoring',
+  'support-chat': 'Support chat',
+  'walletconnect-relay': 'WalletConnect relay',
+  'wallet-sdk': 'Wallet / login SDK',
+  'ipfs-gateway': 'IPFS gateway',
+  cdn: 'CDN',
+  'anon-rpc': 'Anon-RPC',
+  'unknown-third-party': 'Unidentified third party',
+};
+export const classLabel = (c: string) => CLASS_LABEL[c] ?? c;
+
+export const ADDRESS_LABEL: Record<Recipient['learned']['address'], string> = {
+  exact: 'Full address',
+  hashed: 'Hashed address',
+  possible: 'Truncated form (possible match)',
+  none: 'No address',
+};
+
+export const MILESTONE_LABEL: Record<string, string> = {
+  'page-loaded': 'Page loaded',
+  'connect-started': 'Connect started',
+  'accounts-requested': 'Accounts requested',
+  'connect-finished': 'Connect finished',
+  'observation-ended': 'Observation ended',
+};
+
+/**
+ * The one case drawn in red: the address (full or hashed) reached a recipient
+ * the backend judged tracking or unidentified. Reads two backend fields; it
+ * judges nothing itself.
+ */
+export function addressToTracker(r: Pick<Recipient, 'verdict' | 'learned'>): boolean {
   return (
-    <span class={`chip level-${level} ${level === 'critical' ? 'signal' : ''}`}>
-      <span class="level-mark" />
-      {LEVEL_LABEL[level]}
+    (r.verdict === 'tracking' || r.verdict === 'unidentified') &&
+    (r.learned.address === 'exact' || r.learned.address === 'hashed')
+  );
+}
+
+// --------------------------------------------------------------- chips
+
+export function StateChip({ state }: { state: SummaryState }) {
+  return (
+    <span class={`chip state-${state} ${state === 'address-to-trackers' ? 'signal' : ''}`}>
+      <span class="state-mark" />
+      {STATE[state]}
     </span>
   );
 }
 
-export const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'] as const;
-export type SeverityName = (typeof SEVERITY_ORDER)[number];
-
-export function Sev({ s }: { s: SeverityName }) {
+export function VerdictChip({ verdict }: { verdict: Verdict }) {
   return (
-    <span class={`sev ${s}`}>
-      <i />
-      {s}
+    <span class={`chip verdict v-${verdict}`} title={VERDICT[verdict].meaning}>
+      <span class="v-mark" />
+      {VERDICT[verdict].label}
     </span>
   );
 }
 
-/** Severity distribution as a stacked bar, monochrome by intensity. */
-export function SeverityBar({ counts }: { counts: SeverityCounts }) {
-  const total = SEVERITY_ORDER.reduce((a, s) => a + counts[s], 0);
-  if (!total) return <div class="stackbar" />;
-  return (
-    <div
-      class="stackbar"
-      role="img"
-      aria-label={SEVERITY_ORDER.map((s) => `${counts[s]} ${s}`).join(', ')}
-    >
-      {SEVERITY_ORDER.filter((s) => counts[s]).map((s) => (
-        <span key={s} class={`sb-${s}`} style={{ flex: counts[s] }} title={`${counts[s]} ${s}`} />
-      ))}
-    </div>
-  );
-}
-
-export function ScoreDial({
-  score,
-  level,
-  size = 180,
-}: {
-  score: number | null;
-  level: Level;
-  size?: number;
-}) {
-  const r = size / 2 - 8;
-  const c = 2 * Math.PI * r;
-  const [shown, setShown] = useState(0);
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setShown(score ?? 0));
-    return () => cancelAnimationFrame(t);
-  }, [score]);
-  return (
-    <div
-      class={`dial ${level === 'critical' ? 'signal' : ''}`}
-      style={{ width: size, height: size }}
-    >
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-        <circle class="track" cx={size / 2} cy={size / 2} r={r} fill="none" stroke-width="5" />
-        {score !== null && (
-          <circle
-            class="arc"
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            fill="none"
-            stroke-width="5"
-            stroke-dasharray={c}
-            stroke-dashoffset={c * (1 - shown / 100)}
-          />
-        )}
-      </svg>
-      <div class="v">
-        <div>
-          <b style={{ fontSize: size / 45 + 'rem' }}>{score ?? '—'}</b>
-          <div class="eyebrow" style={{ marginTop: 8 }}>
-            {score === null ? 'not scored' : 'privacy / 100'}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function Kpi({ k, l, s }: { k: ComponentChildren; l: string; s?: ComponentChildren }) {
-  return (
-    <div class="panel kpi">
-      <div class="k num">{k}</div>
-      <div class="l eyebrow">{l}</div>
-      {s !== undefined && <div class="s">{s}</div>}
-    </div>
-  );
-}
+// --------------------------------------------------------------- layout
 
 export function Section({
   title,
   aside,
   children,
   id,
+  lede,
 }: {
   title: string;
   aside?: ComponentChildren;
   children: ComponentChildren;
   id?: string;
+  lede?: ComponentChildren;
 }) {
   return (
-    <section class="section" id={id}>
+    <section class="section" id={id} aria-labelledby={id ? `${id}-h` : undefined}>
       <div class="section-head">
-        <h2 class="h2">{title}</h2>
-        {aside && (
-          <div class="muted" style={{ fontSize: '0.82rem' }}>
-            {aside}
-          </div>
-        )}
+        <h2 class="h2" id={id ? `${id}-h` : undefined}>
+          {title}
+        </h2>
+        {aside && <div class="muted small">{aside}</div>}
       </div>
+      {lede && <p class="lede">{lede}</p>}
       {children}
     </section>
   );
@@ -137,7 +129,7 @@ export function Section({
 export function Empty({ title, children }: { title: string; children?: ComponentChildren }) {
   return (
     <div class="panel empty">
-      <h3 class="h1">{title}</h3>
+      <h2 class="h1">{title}</h2>
       <div style={{ marginTop: 12 }}>{children}</div>
     </div>
   );
@@ -145,7 +137,7 @@ export function Empty({ title, children }: { title: string; children?: Component
 
 export function Loading({ label = 'Loading' }: { label?: string }) {
   return (
-    <div class="row muted" style={{ padding: '48px 0', justifyContent: 'center' }}>
+    <div class="row muted" style={{ padding: '48px 0', justifyContent: 'center' }} role="status">
       <span class="spinner" />
       {label}
     </div>
@@ -155,9 +147,20 @@ export function Loading({ label = 'Loading' }: { label?: string }) {
 export function ErrorNote({ error }: { error: unknown }) {
   return (
     <div class="panel">
-      <div class="form-error" style={{ marginTop: 0 }}>
+      <div class="form-error" style={{ marginTop: 0 }} role="alert">
         {error instanceof Error ? error.message : String(error)}
       </div>
+    </div>
+  );
+}
+
+export function NotRecorded({ what }: { what: string }) {
+  return (
+    <div class="panel not-recorded">
+      <span class="eyebrow">Not recorded</span>
+      <p class="muted small" style={{ margin: '8px 0 0' }}>
+        {what}
+      </p>
     </div>
   );
 }
@@ -165,7 +168,7 @@ export function ErrorNote({ error }: { error: unknown }) {
 export function Hash({ value, n = 12 }: { value: string; n?: number }) {
   return (
     <code class="mono" title={value}>
-      {value.slice(0, n)}…
+      {value.length > n ? `${value.slice(0, n)}…` : value}
     </code>
   );
 }
@@ -175,6 +178,7 @@ export function Copy({ text, label = 'Copy' }: { text: string; label?: string })
   return (
     <button
       class="btn sm"
+      type="button"
       onClick={() => {
         void navigator.clipboard?.writeText(text).then(() => {
           setDone(true);
@@ -197,20 +201,39 @@ export function download(name: string, text: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+export function Check({ ok, label }: { ok: boolean; label: ComponentChildren }) {
+  return (
+    <div class={`check ${ok ? 'ok' : 'bad'}`}>
+      <span class="check-mark" aria-hidden="true">
+        {ok ? '✓' : '×'}
+      </span>
+      <span class="sr-only">{ok ? 'Passed: ' : 'Failed: '}</span>
+      {label}
+    </div>
+  );
+}
+
+// --------------------------------------------------------------- time
+
 const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
-export function ago(iso: string, now = Date.now()): string {
-  const s = Math.round((new Date(iso).getTime() - now) / 1000);
+export function ago(when: string | number, now = Date.now()): string {
+  const ms = typeof when === 'number' ? when * 1000 : new Date(when).getTime();
+  const s = Math.round((ms - now) / 1000);
   const a = Math.abs(s);
   if (a < 60) return rtf.format(s, 'second');
   if (a < 3600) return rtf.format(Math.round(s / 60), 'minute');
   if (a < 86400) return rtf.format(Math.round(s / 3600), 'hour');
   return rtf.format(Math.round(s / 86400), 'day');
 }
-export function stamp(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
+/** ISO string or unix seconds → local date and time. */
+export function stamp(when: string | number): string {
+  return new Date(typeof when === 'number' ? when * 1000 : when).toLocaleString(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+}
+export function day(when: number): string {
+  return new Date(when * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' });
 }
 export function duration(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
@@ -218,8 +241,13 @@ export function duration(ms: number): string {
   if (s < 60) return `${s.toFixed(1)} s`;
   return `${Math.floor(s / 60)} m ${Math.round(s % 60)} s`;
 }
+export const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
+export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+export const short = (s: string, head = 6, tail = 4) =>
+  s.length > head + tail + 1 ? `${s.slice(0, head)}…${s.slice(-tail)}` : s;
 
-/** Wording for kit identification confidence (high = modal observed). */
+// --------------------------------------------------------------- kits
+
 export const KIT_NAME: Record<string, string> = {
   rainbowkit: 'RainbowKit',
   connectkit: 'ConnectKit',
