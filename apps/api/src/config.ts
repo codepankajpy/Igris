@@ -5,6 +5,13 @@
  *
  * Registry configuration (IGRIS_REGISTRY, ARKIV_*, IGRIS_SCANNER,
  * IGRIS_TRUSTED_SCANNERS) is read by registry.ts.
+ *
+ * The request worker (docs/design/SCAN-NETWORK.md, worker.ts):
+ *   IGRIS_WORKER               1 | 0 (default: on in Arkiv mode, off in local mode)
+ *   IGRIS_WORKER_POLL_MS       poll interval, ms (default 15000)
+ *   IGRIS_REQUEST_WINDOW_S     how far back requests are read, s (default 3600)
+ *   IGRIS_REQUESTS_PER_CREATOR requests fulfilled per creator per hour (default 5)
+ *   IGRIS_BLOCKED_REQUESTERS   comma-separated creators whose requests are ignored
  */
 import { resolve } from 'node:path';
 
@@ -36,6 +43,42 @@ export interface ApiConfig {
   dwellMs: number;
   /** Job metadata and the local cache of finished scans live here. */
   dataDir: string;
+  worker: WorkerConfig;
+}
+
+export interface WorkerConfig {
+  /** IGRIS_WORKER; null = not set (on in Arkiv mode, off in local mode). */
+  enabled: boolean | null;
+  pollMs: number;
+  windowS: number;
+  perCreatorPerHour: number;
+  /** Creators (addresses, or local labels) whose requests are ignored; lower-cased. */
+  blockedRequesters: string[];
+}
+
+const REQUESTER_RE = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/;
+
+function workerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
+  const raw = env.IGRIS_WORKER?.trim();
+  if (raw !== undefined && raw !== '' && raw !== '0' && raw !== '1') {
+    throw new Error(`IGRIS_WORKER must be 1 or 0 (got "${raw}")`);
+  }
+  const blocked = (env.IGRIS_BLOCKED_REQUESTERS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const b of blocked) {
+    if (!REQUESTER_RE.test(b)) {
+      throw new Error('IGRIS_BLOCKED_REQUESTERS must be a comma-separated list of addresses');
+    }
+  }
+  return {
+    enabled: raw === undefined || raw === '' ? null : raw === '1',
+    pollMs: int(env, 'IGRIS_WORKER_POLL_MS', 15_000, 1_000, 3_600_000),
+    windowS: int(env, 'IGRIS_REQUEST_WINDOW_S', 3600, 60, 7 * 86_400),
+    perCreatorPerHour: int(env, 'IGRIS_REQUESTS_PER_CREATOR', 5, 1, 1000),
+    blockedRequesters: blocked.map((b) => b.toLowerCase()),
+  };
 }
 
 function int(env: NodeJS.ProcessEnv, key: string, def: number, min: number, max: number): number {
@@ -75,5 +118,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     allowedPorts: ports,
     dwellMs: int(env, 'IGRIS_DWELL_MS', 4000, 1000, 20_000),
     dataDir: resolve(env.IGRIS_DATA_DIR ?? '.igris-data'),
+    worker: workerConfig(env),
   };
 }
