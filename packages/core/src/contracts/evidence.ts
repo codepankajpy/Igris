@@ -5,8 +5,8 @@
  * by the project owner 2026-11-06 and frozen (hash-pinned) as well, like
  * `igris.evidence.v3` (+ the wallet-sdk recipient class). All three still
  * validate. New bundles are written as `igris.evidence.v4` = v3 + the
- * `wallet-request` item type (PROPOSED, docs/design/WALLET-REQUESTS.md; not
- * hash-pinned until the owner approves it, like report 3.0.0).
+ * `wallet-request` item type (docs/design/WALLET-REQUESTS.md; approved
+ * 2026-11-07 and hash-pinned, like report 3.0.0).
  *
  * The redacted, self-contained artifact holding every piece of evidence a
  * report's findings reference. Properties:
@@ -436,7 +436,7 @@ export const EVIDENCE_BUNDLE_SCHEMA_V3 = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// igris.evidence.v4 (PROPOSED, docs/design/WALLET-REQUESTS.md) = v3 + exactly
+// igris.evidence.v4 (FROZEN 2026-11-07, docs/design/WALLET-REQUESTS.md) = v3 + exactly
 // one item type, `wallet-request`. The v3 item schemas are reused unchanged
 // (contracts.test.ts asserts it).
 // ---------------------------------------------------------------------------
@@ -518,16 +518,15 @@ export const WALLET_REQUEST_ITEM_SCHEMA = {
 
 /**
  * Current (v4) item schema: the v3 item schemas unchanged + wallet-request.
- * PROPOSED — TODO(evidence-v4 approval): pin contentHash of this and of
- * EVIDENCE_BUNDLE_SCHEMA in contracts.test.ts once the owner approves
- * docs/design/WALLET-REQUESTS.md.
+ * FROZEN (approved by the owner 2026-11-07): its content hash and that of
+ * EVIDENCE_BUNDLE_SCHEMA are pinned in contracts.test.ts.
  */
 export const EVIDENCE_ITEM_SCHEMA = {
   $id: 'https://igris.dev/schemas/evidence-item-4.json',
   oneOf: [...EVIDENCE_ITEM_SCHEMA_V3.oneOf, WALLET_REQUEST_ITEM_SCHEMA],
 };
 
-/** Current (v4) bundle schema (PROPOSED, not yet hash-pinned). */
+/** Current (v4) bundle schema. FROZEN (approved 2026-11-07; hash-pinned). */
 export const EVIDENCE_BUNDLE_SCHEMA = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $id: 'https://igris.dev/schemas/evidence-bundle-4.json',

@@ -1,7 +1,6 @@
 /**
- * The Arkiv entity schemas of the one flow (docs/design/FLOW.md), the open
- * scan requests (docs/design/SCAN-NETWORK.md) and the decoded wallet
- * requests (docs/design/WALLET-REQUESTS.md).
+ * The Arkiv entity schemas of the one flow (docs/design/FLOW.md) and the
+ * decoded wallet requests (docs/design/WALLET-REQUESTS.md).
  *
  * Schema names are versioned: a breaking attribute change gets a new name
  * rather than corrupting old rows. Every `bytes` column holds gzip of the
@@ -13,7 +12,6 @@ import { bool, bytes, defineSchema, i32, str, u64 } from '@arkiv-network/sdk/sch
 export const SCAN_SCHEMA_NAME = 'igris.scan.v2';
 export const EVIDENCE_SCHEMA_NAME = 'igris.evidence.v1';
 export const FLOW_SCHEMA_NAME = 'igris.flow.v1';
-export const REQUEST_SCHEMA_NAME = 'igris.request.v1';
 export const WALLET_REQUEST_SCHEMA_NAME = 'igris.walletreq.v1';
 
 /** One per published version of a site. */
@@ -37,12 +35,9 @@ export const ScanSchema = defineSchema(SCAN_SCHEMA_NAME, {
   usesAnonRpc: bool().indexed(),
   scannerVersion: str(),
   reportVersion: str(),
-  /**
-   * Entity key (lower-case 0x hex) of the igris.request.v1 this version
-   * fulfilled; "" when none. Entities published before requests existed have
-   * no such attribute and decode as `request: null`.
-   */
-  request: str().indexed(),
+  // Some live entities also carry a `request` str attribute (written by an
+  // earlier multi-node release, "" or an entity key). It is no longer
+  // written; readers ignore it (rows.ts) and never select it.
   /** gzip(canonical Report 3.0.0). */
   report: bytes(),
 });
@@ -70,18 +65,6 @@ export const FlowSchema = defineSchema(FLOW_SCHEMA_NAME, {
 });
 
 /**
- * An open scan request: anyone may create one, any scanner node may fulfil
- * it. Created readonly + permissionlessExtension with a 7-day expiry.
- */
-export const RequestSchema = defineSchema(REQUEST_SCHEMA_NAME, {
-  hostname: str().indexed(),
-  /** The http(s) URL to scan, on `hostname`; ≤ 128 UTF-8 bytes (longer URLs are refused). */
-  url: str(),
-  /** Unix seconds. */
-  requestedAt: u64().indexed(),
-});
-
-/**
  * One per wallet request of a published version, except kind "connect".
  * Booleans are i32 0/1 so they can be filtered with `= i32(1)`.
  */
@@ -104,11 +87,7 @@ export const WalletRequestSchema = defineSchema(WALLET_REQUEST_SCHEMA_NAME, {
 });
 
 export type IgrisSchema =
-  | typeof ScanSchema
-  | typeof EvidenceSchema
-  | typeof FlowSchema
-  | typeof RequestSchema
-  | typeof WalletRequestSchema;
+  typeof ScanSchema | typeof EvidenceSchema | typeof FlowSchema | typeof WalletRequestSchema;
 
 /** Every scan attribute except the report payload: what listings select. */
 export const SCAN_LIST_COLUMNS = Object.keys(ScanSchema.columns).filter((c) => c !== 'report');

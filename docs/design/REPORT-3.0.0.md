@@ -1,7 +1,7 @@
 # Report 3.0.0 — no score; verdicts and a timeline (design)
 
-Status: **proposed** (implemented on `mvp-web-app`; frozen and hash-pinned
-only after the project owner approves this document). Owner decisions this
+Status: **approved and frozen** (owner, 2026-11-07); the schema is
+hash-pinned in `packages/core/src/contracts/contracts.test.ts`. Owner decisions this
 implements (2026-11-06): "don't score websites — list what we find, what is
 legit and what is safe, show it with timelines and graphs", and "remove the
 score from reports too".

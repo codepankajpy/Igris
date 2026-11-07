@@ -1,9 +1,9 @@
 /**
- * Open scan requests (igris.request.v1), request-linked scans and decoded
- * wallet requests (igris.walletreq.v1) — docs/design/SCAN-NETWORK.md and
- * docs/design/WALLET-REQUESTS.md. One parity suite runs against both
- * backends (Arkiv through a fake node, and the local file); backend-specific
- * checks (batch contents, query strings, gas) follow.
+ * Decoded wallet requests (igris.walletreq.v1, docs/design/WALLET-REQUESTS.md),
+ * draft 3.0.0 versions, and igris.scan.v2 rows of an earlier release that
+ * carry a `request` attribute. One parity suite runs against both backends
+ * (Arkiv through a fake node, and the local file); backend-specific checks
+ * (batch contents, query strings, gas) follow.
  */
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +13,7 @@ import { ExpirationTime } from '@arkiv-network/sdk';
 import { bytesToHex, getAddress, keccak256, toHex } from 'viem';
 import { contentHash, type ReportV3 } from '@igris/core';
 import { CANARY_A } from '@igris/core/testing';
-import { ArkivSiteRegistry, MAX_REQUEST_ROWS, REQUEST_EXPIRY_DAYS } from './arkiv.js';
+import { ArkivSiteRegistry } from './arkiv.js';
 import { estimateBatchGas, MAX_TRANSACTION_GAS } from './gas.js';
 import { LOCAL_FILE_FORMAT, LocalSiteRegistry } from './local.js';
 import {
@@ -25,14 +25,8 @@ import {
   withVersion,
   type WireEntity,
 } from './payload.js';
-import {
-  RequestSchema,
-  ScanSchema,
-  WalletRequestSchema,
-  EvidenceSchema,
-  FlowSchema,
-} from './schemas.js';
-import { MAX_REQUESTS_PER_CREATOR, REQUEST_CLOCK_SKEW_S } from './rows.js';
+import { ScanSchema, WalletRequestSchema, EvidenceSchema, FlowSchema } from './schemas.js';
+import { ARKIV_FORMAT, LOCAL_FORMAT, parseScanRow } from './rows.js';
 import { PublishRefusedError, type SiteRegistry } from './site-registry.js';
 import {
   FakeNode,
@@ -59,13 +53,11 @@ import { DRAFT_V3_NOTE, ScanLoadError } from './verify.js';
  */
 
 const HOST = 'app.example.org';
-const URL_ = 'https://app.example.org/';
 const T0 = 1_793_923_200; // 2026-11-06T00:00:00Z
 
 interface Harness {
   name: 'arkiv' | 'local';
   reg: SiteRegistry;
-  clock: { t: number };
   /** Raw stored entities (Arkiv wire shape). */
   entities(): WireEntity[];
   /** Store an entity as a hostile writer would. */
@@ -87,12 +79,10 @@ interface Harness {
 function arkivHarness(): Harness {
   const s = scanner();
   const node = new FakeNode(s.address);
-  const clock = { t: T0 };
-  const reg = new ArkivSiteRegistry({ scanner: s, io: node.io, now: () => clock.t });
+  const reg = new ArkivSiteRegistry({ scanner: s, io: node.io });
   return {
     name: 'arkiv',
     reg,
-    clock,
     entities: () => node.entities,
     add: (e) => node.entities.push(e),
     set: (es) => (node.entities = es),
@@ -100,12 +90,7 @@ function arkivHarness(): Harness {
     mallory: '0x000000000000000000000000000000000000dead',
     publisherId: s.address.toLowerCase(),
     reader: (trusted) =>
-      new ArkivSiteRegistry({
-        scanner: null,
-        io: node.io,
-        trustedOwners: trusted,
-        now: () => clock.t,
-      }),
+      new ArkivSiteRegistry({ scanner: null, io: node.io, trustedOwners: trusted }),
     readonlyFlags: () => node.entities.map((e) => e.creationFlags ?? -1),
   };
 }
@@ -113,7 +98,6 @@ function arkivHarness(): Harness {
 function localHarness(): Harness {
   const dir = mkdtempSync(join(tmpdir(), 'igris-net-'));
   const file = join(dir, 'registry.json');
-  const clock = { t: T0 };
   const read = (): WireEntity[] => {
     try {
       return (JSON.parse(readFileSync(file, 'utf8')) as { entities: WireEntity[] }).entities;
@@ -125,16 +109,14 @@ function localHarness(): Harness {
     writeFileSync(file, JSON.stringify({ format: LOCAL_FILE_FORMAT, entities: es }));
   return {
     name: 'local',
-    reg: new LocalSiteRegistry({ file, publisher: 'igris-test', now: () => clock.t }),
-    clock,
+    reg: new LocalSiteRegistry({ file, publisher: 'igris-test' }),
     entities: read,
     add: (e) => write([...read(), e]),
     set: write,
     freshKey: (seed) => `local:${keccak256(toHex(`fresh-${seed}`)).slice(2)}`,
     mallory: 'mallory',
     publisherId: 'igris-test',
-    reader: (trusted) =>
-      new LocalSiteRegistry({ file, publisher: null, trustedOwners: trusted, now: () => clock.t }),
+    reader: (trusted) => new LocalSiteRegistry({ file, publisher: null, trustedOwners: trusted }),
     readonlyFlags: () => read().map((e) => e.creationFlags ?? -1),
   };
 }
@@ -151,234 +133,76 @@ const setAttr = (e: WireEntity, name: string, value: unknown) => {
   attr(e, name)!.value = value;
 };
 
+/** `e` with a `request` str attribute, as an earlier multi-node release wrote it. */
+const withRequestAttr = (e: WireEntity, value: unknown): WireEntity => ({
+  ...structuredClone(e),
+  attributes: [...e.attributes, { name: 'request', type: 'str', value }],
+});
+
 describe.each([
   ['arkiv', arkivHarness],
   ['local', localHarness],
-] as const)('%s registry: open scan requests', (_name, make) => {
-  it('createRequest writes a readonly + permissionlessExtension request; request() reads it', async () => {
-    const h = make();
-    const r = await h.reg.createRequest(HOST, 'https://app.example.org');
-    expect(r).toMatchObject({
-      creator: h.reg.publisher,
-      hostname: HOST,
-      url: URL_, // canonical form
-      requestedAt: T0,
-      expiresAtBlock: null,
-    });
-    const stored = h.entities().find((e) => e.key === r.key)!;
-    expect(schemaOf(stored)).toBe('igris.request.v1');
-    expect(stored.creationFlags).toBe(3); // readonly | permissionlessExtension
-    const { expiresAtBlock: _e, ...rest } = r;
-    expect(await h.reg.request(r.key)).toMatchObject(rest);
-    expect(await h.reg.request('nope')).toBeNull();
-    expect(await h.reg.request(h.freshKey('missing'))).toBeNull();
-  });
-
-  it('createRequest refuses invalid hostnames and URLs, and a read-only registry', async () => {
-    const h = make();
-    const bad: Array<[string, string]> = [
-      ['App.Example.org', URL_],
-      ['localhost', 'https://localhost/'],
-      [HOST, 'ftp://app.example.org/'],
-      [HOST, 'javascript:alert(1)'],
-      [HOST, 'https://other.example.org/'],
-      [HOST, 'https://evil.example@app.example.org/'],
-      [HOST, 'https://user:pw@app.example.org/'],
-      [HOST, `https://app.example.org/${'a'.repeat(120)}`],
-      [HOST, 'not a url'],
-    ];
-    for (const [host, url] of bad) {
-      await expect(h.reg.createRequest(host, url), `${host} ${url}`).rejects.toThrow(
-        PublishRefusedError,
-      );
-    }
-    await expect(h.reader([h.publisherId]).createRequest(HOST, URL_)).rejects.toThrow(/read-only/);
-    expect(h.entities()).toEqual([]);
-  });
-
-  it('openRequests: any creator, since-filtered, oldest first; hostile rows are skipped', async () => {
-    const h = make();
-    const a = await h.reg.createRequest(HOST, URL_);
-    h.clock.t = T0 + 60;
-    const b = await h.reg.createRequest('other.example.net', 'https://other.example.net/x?y=1');
-    const genuine = h.entities().find((e) => e.key === b.key)!;
-    const byMallory = clone(h, genuine, 'm', (c) => {
-      c.creator = h.mallory; // a valid request by someone else: accepted
-      c.owner = h.mallory;
-      setAttr(c, 'requestedAt', h.name === 'arkiv' ? toHex(T0 + 30) : String(T0 + 30));
-    });
-    h.add(byMallory);
-    // Third parties following the spec need not create readonly requests:
-    // mutable ones (or rows whose flags the node does not report) are valid.
-    const stamp = (c: WireEntity, t: number) =>
-      setAttr(c, 'requestedAt', h.name === 'arkiv' ? toHex(t) : String(t));
-    const mutable = clone(h, genuine, 'mutable', (c) => {
-      c.creationFlags = 2; // permissionlessExtension only
-      stamp(c, T0 + 40);
-    });
-    const noFlags = clone(h, genuine, 'noflags', (c) => {
-      delete c.creationFlags;
-      stamp(c, T0 + 50);
-    });
-    h.add(mutable);
-    h.add(noFlags);
-    const hostile: Array<[string, (c: WireEntity) => void]> = [
-      ['host', (c) => setAttr(c, 'url', 'https://evil.example.com/')],
-      ['scheme', (c) => setAttr(c, 'url', 'javascript:alert(1)')],
-      ['long', (c) => setAttr(c, 'url', `https://other.example.net/${'a'.repeat(200)}`)],
-      ['upper', (c) => setAttr(c, 'hostname', 'Other.example.net')],
-      ['noncanon', (c) => setAttr(c, 'url', 'https://other.example.net')],
-      ['ts', (c) => setAttr(c, 'requestedAt', 'soon')],
-      ['type', (c) => (attr(c, 'url')!.type = 'bytes')],
-      ['future', (c) => stamp(c, T0 + 60 + REQUEST_CLOCK_SKEW_S + 1)], // ahead of the clock
-      ['nocreator', (c) => ((c as { creator?: unknown }).creator = 42)],
-    ];
-    for (const [seed, over] of hostile) h.add(clone(h, genuine, seed, over));
-
-    const open = await h.reg.openRequests({ since: T0 });
-    expect(open.map((r) => r.key)).toEqual([a.key, byMallory.key, mutable.key, noFlags.key, b.key]);
-    expect(await h.reg.request(mutable.key)).toMatchObject({
-      key: mutable.key,
-      url: genuine.attributes.find((x) => x.name === 'url')!.value,
-    });
-    const m = open[1]!;
-    expect(m.creator.toLowerCase()).toBe(h.mallory);
-    expect(await h.reg.request(byMallory.key)).toMatchObject({ key: byMallory.key });
-    for (const [seed] of hostile) expect(await h.reg.request(h.freshKey(seed))).toBeNull();
-
-    expect((await h.reg.openRequests({ since: T0 + 31 })).map((r) => r.key)).toEqual([
-      mutable.key,
-      noFlags.key,
-      b.key,
-    ]);
-    // at most `limit`: the newest ones, oldest first
-    expect((await h.reg.openRequests({ since: 0, limit: 2 })).map((r) => r.key)).toEqual([
-      noFlags.key,
-      b.key,
-    ]);
-    expect(await h.reg.openRequests({ since: -1 })).toEqual([]);
-    expect(await h.reg.openRequests({ since: 1.5 })).toEqual([]);
-    // a read-only reader trusting nobody still sees requests (any creator)
-    expect(await h.reader([]).openRequests({ since: T0 })).toHaveLength(5);
-  });
-
-  it('publish({ request }) records the request; fulfilments() returns trusted scans only', async () => {
-    const h = make();
-    const r = await h.reg.createRequest(HOST, URL_);
-    const a = leaky();
-    const v1 = await h.reg.publish(a.report, a.bundle, { request: r.key });
-    expect(v1.scan.request).toBe(r.key.toLowerCase());
-    const stored = h.entities().find((e) => e.key === v1.scan.key)!;
-    expect(attr(stored, 'request')).toMatchObject({ type: 'str', value: r.key.toLowerCase() });
-    expect((await h.reg.versions(HOST))[0]!.request).toBe(r.key.toLowerCase());
-
-    const b = fixedSegment();
-    const v2 = await h.reg.publish(b.report, b.bundle);
-    expect(v2.scan.request).toBeNull();
-    expect(
-      attr(
-        h.entities().find((e) => e.key === v2.scan.key)!,
-        'request',
-      )?.value,
-    ).toBe('');
-
-    // the forgery $creator exists for: mallory's scan "fulfilling" the request,
-    // transferred to the trusted publisher
-    const forged = clone(h, stored, 'forged-scan', (c) => {
-      c.creator = h.mallory;
-      c.owner = h.publisherId;
-      setAttr(c, 'version', 9);
-      setAttr(c, 'previous', v2.scan.key);
-    });
-    h.add(forged);
-    expect((await h.reg.fulfilments(r.key)).map((s) => s.key)).toEqual([v1.scan.key]);
-    expect(await h.reg.fulfilments(h.freshKey('other'))).toEqual([]);
-    expect(await h.reg.fulfilments('0x12')).toEqual([]);
-    // trust is per reader: one that trusts mallory sees only mallory's scan
-    expect((await h.reader([h.mallory]).fulfilments(r.key)).map((s) => s.key)).toEqual([
-      forged.key,
-    ]);
-  });
-
-  it('publish refuses a malformed, unknown or other-site request and writes nothing', async () => {
-    const h = make();
-    const other = await h.reg.createRequest('other.example.net', 'https://other.example.net/');
-    const before = h.entities().length;
-    const a = leaky();
-    await expect(h.reg.publish(a.report, a.bundle, { request: 'x' })).rejects.toThrow(
-      /not an? .*entity key/,
-    );
-    await expect(
-      h.reg.publish(a.report, a.bundle, { request: h.freshKey('ghost') }),
-    ).rejects.toThrow(/not a live, valid igris\.request\.v1/);
-    await expect(h.reg.publish(a.report, a.bundle, { request: other.key })).rejects.toThrow(
-      /is for other\.example\.net, not app\.example\.org/,
-    );
-    expect(h.entities()).toHaveLength(before);
-  });
-
-  it('an older scan entity without a request attribute decodes as request null', async () => {
+] as const)('%s registry: igris.scan.v2 rows carrying a request attribute', (_name, make) => {
+  it('a publish writes no request attribute', async () => {
     const h = make();
     const a = leaky();
     const v1 = await h.reg.publish(a.report, a.bundle);
+    expect(
+      attr(
+        h.entities().find((e) => e.key === v1.scan.key)!,
+        'request',
+      ),
+    ).toBeUndefined();
+    expect(v1.scan).not.toHaveProperty('request');
+    expect(Object.keys(ScanSchema.columns)).not.toContain('request');
+  });
+
+  it('live rows with request "" or an entity key still load verified; the attribute is ignored', async () => {
+    const h = make();
+    const a = leaky();
+    const v1 = await h.reg.publish(a.report, a.bundle);
+    const b = fixedSegment();
+    const v2 = await h.reg.publish(b.report, b.bundle);
     h.set(
       h
         .entities()
         .map((e) =>
           e.key === v1.scan.key
-            ? { ...e, attributes: e.attributes.filter((x) => x.name !== 'request') }
-            : e,
+            ? withRequestAttr(e, '')
+            : e.key === v2.scan.key
+              ? withRequestAttr(e, keccak256(toHex('an old request')))
+              : e,
         ),
     );
-    const [s] = await h.reg.versions(HOST);
-    expect(s).toMatchObject({ key: v1.scan.key, request: null });
-    expect((await h.reg.load(s!)).verified).toBe(true);
-    // a mistyped request attribute makes the row invalid (skipped)
-    h.set(
-      h.entities().map((e) =>
-        e.key === v1.scan.key
-          ? {
-              ...e,
-              attributes: [...e.attributes, { name: 'request', type: 'str', value: 'junk' }],
-            }
-          : e,
-      ),
-    );
-    expect(await h.reg.versions(HOST)).toEqual([]);
-  });
-  it('one creator flooding requests (> 1000 rows, some future-dated) cannot hide other creators', async () => {
-    const h = make();
-    const a = await h.reg.createRequest(HOST, URL_); // the publisher, at T0
-    const genuine = h.entities().find((e) => e.key === a.key)!;
-    const carol = h.name === 'arkiv' ? '0x000000000000000000000000000000000000beef' : 'carol';
-    const as = (seed: string, creator: string, t: number) =>
-      clone(h, genuine, seed, (c) => {
-        c.creator = creator;
-        c.owner = creator;
-        setAttr(c, 'requestedAt', h.name === 'arkiv' ? toHex(t) : String(t));
-      });
-    const byCarol = as('carol', carol, T0 + 10);
-    // mallory: 1500 requests newer than everyone else's …
-    const flood = Array.from({ length: 1500 }, (_, i) => as(`flood-${i}`, h.mallory, T0 + 100 + i));
-    // … and 200 dated far ahead, which would sort above everything for days
-    const future = Array.from({ length: 200 }, (_, i) =>
-      as(`future-${i}`, h.mallory, T0 + 86_400 + i),
-    );
-    h.set([...h.entities(), byCarol, ...flood, ...future]);
-    h.clock.t = T0 + 1600;
-
-    const open = await h.reg.openRequests({ since: T0 });
-    // everyone else is still there; mallory gets her newest MAX_REQUESTS_PER_CREATOR
-    expect(open.map((r) => r.key)).toEqual([
-      a.key,
-      byCarol.key,
-      ...flood.slice(-MAX_REQUESTS_PER_CREATOR).map((e) => e.key),
+    const versions = await h.reg.versions(HOST);
+    expect(versions.map((s) => [s.key, s.version])).toEqual([
+      [v2.scan.key, 2],
+      [v1.scan.key, 1],
     ]);
-    expect(open.every((r) => r.requestedAt <= h.clock.t + REQUEST_CLOCK_SKEW_S)).toBe(true);
-    expect(await h.reg.request(future[0]!.key)).toBeNull();
-    // once the clock reaches a future-dated request (minus the skew), it counts
-    h.clock.t = T0 + 86_400 - REQUEST_CLOCK_SKEW_S;
-    expect(await h.reg.request(future[0]!.key)).toMatchObject({ key: future[0]!.key });
+    for (const s of versions) {
+      expect(s).not.toHaveProperty('request');
+      expect((await h.reg.load(s)).verified).toBe(true);
+    }
+    expect(await h.reg.byKey(v2.scan.key)).toMatchObject({ version: 2, previous: v1.scan.key });
+    expect(await h.reg.findByScanId(HOST, v1.scan.scanId)).toMatchObject({ key: v1.scan.key });
+    expect((await h.reg.recentSites()).map((s) => s.key)).toEqual([v2.scan.key]);
+    // a retest still becomes the next version, linked to the old row
+    const c = leaky('2026-11-07T00:00:00.000Z');
+    const v3 = await h.reg.publish(c.report, c.bundle);
+    expect(v3.scan).toMatchObject({ version: 3, previous: v2.scan.key });
+  });
+
+  it('the decoder accepts and ignores any request value (the node may return unselected attributes)', async () => {
+    const h = make();
+    const a = leaky();
+    const v1 = await h.reg.publish(a.report, a.bundle);
+    const stored = h.entities().find((e) => e.key === v1.scan.key)!;
+    const format = h.name === 'arkiv' ? ARKIV_FORMAT : LOCAL_FORMAT;
+    const plain = parseScanRow(stored, format);
+    expect(plain).not.toBeNull();
+    for (const value of ['', keccak256(toHex('req')), 'junk', 42]) {
+      expect(parseScanRow(withRequestAttr(stored, value), format), String(value)).toEqual(plain);
+    }
   });
 });
 
@@ -605,22 +429,6 @@ describe.each([
   });
 });
 
-describe('LocalSiteRegistry request expiry', () => {
-  it('emulates the 7-day request lifetime: expired requests are neither read nor fulfillable', async () => {
-    const h = localHarness();
-    const r = await h.reg.createRequest(HOST, URL_);
-    h.clock.t = T0 + 7 * 86_400 - 1;
-    expect(await h.reg.request(r.key)).not.toBeNull();
-    h.clock.t = T0 + 7 * 86_400;
-    expect(await h.reg.request(r.key)).toBeNull();
-    expect(await h.reg.openRequests({ since: 0 })).toEqual([]);
-    const a = leaky();
-    await expect(h.reg.publish(a.report, a.bundle, { request: r.key })).rejects.toThrow(
-      /not a live, valid/,
-    );
-  });
-});
-
 describe('walletRequestValues', () => {
   const base = { hostname: HOST, scanId: 'a'.repeat(64), scannedAt: T0 };
   const report = (walletRequests: unknown) =>
@@ -710,28 +518,13 @@ describe('walletRequestValues', () => {
 });
 
 describe('ArkivSiteRegistry batches', () => {
-  it('request batch: igris.request.v1, readonly + permissionlessExtension, 7-day expiry', () => {
-    const reg = new ArkivSiteRegistry({ scanner: null });
-    const batch = reg.requestBatch(HOST, URL_, T0);
-    const [c] = batch.creates as unknown as Create[];
-    expect(c!.schema).toBe(RequestSchema);
-    expect(c!.flags).toEqual({ readonly: true, permissionlessExtension: true });
-    expect(c!.expiration).toEqual(ExpirationTime.fromDays(REQUEST_EXPIRY_DAYS));
-    expect(c!.values).toEqual({
-      hostname: HOST,
-      url: URL_,
-      requestedAt: { type: 'u64', value: BigInt(T0) },
-    });
-  });
-
   it('publish batch: scan + evidence + flows + walletreqs, all readonly with the scan expiry', async () => {
     const s = scanner();
     const node = new FakeNode(s.address);
-    const reg = new ArkivSiteRegistry({ scanner: s, io: node.io, now: () => T0 });
-    const r = await reg.createRequest(HOST, URL_);
+    const reg = new ArkivSiteRegistry({ scanner: s, io: node.io });
     const a = leaky(undefined, sampleCapturedWalletRequests());
-    const res = await reg.publish(a.report, a.bundle, { request: r.key });
-    const creates = node.batches[1]!.creates as unknown as Create[];
+    const res = await reg.publish(a.report, a.bundle);
+    const creates = node.batches[0]!.creates as unknown as Create[];
     expect(creates.map((c) => c.schema)).toEqual([
       ScanSchema,
       EvidenceSchema,
@@ -747,7 +540,7 @@ describe('ArkivSiteRegistry batches', () => {
       expect(c.expiration).toEqual(expiration);
       expect(c.flags).toEqual({ readonly: true });
     }
-    expect(creates[0]!.values.request).toBe(r.key.toLowerCase());
+    expect(creates[0]!.values).not.toHaveProperty('request');
     expect(creates[6]!.values).toMatchObject({
       kind: 'permit2',
       unlimited: 1,
@@ -761,45 +554,6 @@ describe('ArkivSiteRegistry batches', () => {
     expect(node.queries[0]).toBe(
       `arkiv.schema = str('igris.walletreq.v1') AND kind = str('permit2') AND unlimited = i32(1) AND $creator = addr(${getAddress(s.address)}) ORDER BY scannedAt:u64 DESC`,
     );
-    node.queries = [];
-    await reg.openRequests({ since: T0 });
-    expect(node.queries[0]).toBe(
-      `arkiv.schema = str('igris.request.v1') AND requestedAt >= u64(${T0}) AND requestedAt <= u64(${T0 + REQUEST_CLOCK_SKEW_S}) ORDER BY requestedAt:u64 DESC`,
-    );
-    node.queries = [];
-    await reg.fulfilments(r.key);
-    expect(node.queries[0]).toBe(
-      `arkiv.schema = str('igris.scan.v2') AND request = str('${r.key.toLowerCase()}') AND $creator = addr(${getAddress(s.address)}) ORDER BY version:i32 DESC`,
-    );
-  });
-
-  it(`openRequests walks at most ${MAX_REQUEST_ROWS} request rows`, async () => {
-    const s = scanner();
-    const node = new FakeNode(s.address);
-    const clock = { t: T0 };
-    const reg = new ArkivSiteRegistry({ scanner: s, io: node.io, now: () => clock.t });
-    const honest = await reg.createRequest(HOST, URL_);
-    const genuine = node.entities[0]!;
-    const mallory = '0x000000000000000000000000000000000000dead';
-    const flood = (n: number) =>
-      Array.from({ length: n }, (_, i) => {
-        const c = structuredClone(genuine);
-        c.key = keccak256(toHex(`flood-${i}`));
-        c.creator = c.owner = mallory;
-        c.attributes.find((x) => x.name === 'requestedAt')!.value = toHex(T0 + 1 + i);
-        return c;
-      });
-    clock.t = T0 + MAX_REQUEST_ROWS + 1;
-    // one row short of the bound: the honest request is still reached
-    node.entities = [genuine, ...flood(MAX_REQUEST_ROWS - 1)];
-    expect((await reg.openRequests({ since: T0 })).map((r) => r.key)).toContain(honest.key);
-    // at the bound the walk stops (cost stays bounded): MAX_REQUEST_ROWS / 100 pages
-    node.entities = [genuine, ...flood(MAX_REQUEST_ROWS)];
-    node.queries = [];
-    const open = await reg.openRequests({ since: T0 });
-    expect(open.map((r) => r.key)).not.toContain(honest.key);
-    expect(open).toHaveLength(MAX_REQUESTS_PER_CREATOR);
-    expect(node.queries).toHaveLength(MAX_REQUEST_ROWS / 100);
   });
 
   it('a report with 20 wallet requests + 40 flows stays well under the 2^24 gas cap', () => {
@@ -825,12 +579,7 @@ describe('ArkivSiteRegistry batches', () => {
       scanId: pub.scan.scanId,
       scannedAt: pub.scan.scannedAt,
     }));
-    const v = withVersion(
-      { ...pub, flows, walletRequests },
-      7,
-      keccak256(toHex('prev')),
-      keccak256(toHex('req')),
-    );
+    const v = withVersion({ ...pub, flows, walletRequests }, 7, keccak256(toHex('prev')));
     const gas = estimateBatchGas(reg.batchFor(v));
     expect(gas.creates).toBe(62);
     // the index entities (60 of them) are small; the two payloads dominate

@@ -37,7 +37,6 @@ import {
   PUBLISHED_WALLET_REQUEST_KINDS,
   WALLET_REQUEST_OUTCOMES,
   isHostname,
-  requestUrlProblem,
   utf8Length,
   MAX_STR_BYTES,
 } from './rows.js';
@@ -123,8 +122,6 @@ export interface ScanValues {
   usesAnonRpc: boolean;
   scannerVersion: string;
   reportVersion: string;
-  /** Entity key of the fulfilled igris.request.v1 (lower-case), "" when none. */
-  request: string;
   report: Uint8Array;
 }
 
@@ -169,7 +166,7 @@ export interface WalletRequestValues {
 /** A validated publication, before a version number is assigned. */
 export interface Publication {
   hostname: string;
-  scan: Omit<ScanValues, 'version' | 'previous' | 'request'>;
+  scan: Omit<ScanValues, 'version' | 'previous'>;
   evidence: EvidenceValues;
   flows: Array<Omit<FlowValues, 'version'>>;
   /** One per report.walletRequests entry except kind "connect" (capped, see MAX_WALLET_REQUEST_ENTITIES). */
@@ -413,40 +410,18 @@ export function buildPublication(report: ReportV3, bundle: EvidenceBundle): Publ
   };
 }
 
-/**
- * Assign the version number, the previous version's key and the request it
- * fulfilled (an entity key, stored lower-case; null/absent ⇒ "").
- */
+/** Assign the version number and the previous version's key ("" for version 1). */
 export function withVersion(
   pub: Publication,
   version: number,
   previous: string | null,
-  request: string | null = null,
 ): VersionedPublication {
   return {
-    scan: { ...pub.scan, version, previous: previous ?? '', request: request?.toLowerCase() ?? '' },
+    scan: { ...pub.scan, version, previous: previous ?? '' },
     evidence: pub.evidence,
     flows: pub.flows.map((f) => ({ ...f, version })),
     walletRequests: pub.walletRequests.map((w) => ({ ...w, version })),
   };
-}
-
-/**
- * `url` in canonical form for a request on `hostname`, or PublishRefusedError
- * (not http(s), not on that hostname, credentials, over 128 bytes, …).
- */
-export function canonicalRequestUrl(hostname: string, url: string): string {
-  if (!isHostname(hostname))
-    throw new PublishRefusedError('hostname is not a lower-case DNS hostname');
-  let href: string;
-  try {
-    href = new URL(url).href;
-  } catch {
-    throw new PublishRefusedError('url is not an absolute URL');
-  }
-  const problem = requestUrlProblem(hostname, href);
-  if (problem !== null) throw new PublishRefusedError(`refused scan request: ${problem}`);
-  return href;
 }
 
 // ---------------------------------------------------------------------------

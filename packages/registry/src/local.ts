@@ -16,25 +16,15 @@ import {
   type ReportV3,
   type WalletRequestKind,
 } from '@igris/core';
-import {
-  buildPublication,
-  canonicalRequestUrl,
-  toWireAttributes,
-  withVersion,
-  type WireEntity,
-} from './payload.js';
+import { buildPublication, toWireAttributes, withVersion, type WireEntity } from './payload.js';
 import {
   LOCAL_FORMAT,
   LOCAL_KEY_RE,
   LOCAL_OWNER_RE,
-  MAX_UNIX,
-  PERMISSIONLESS_EXTENSION_FLAG,
   PUBLISHED_WALLET_REQUEST_KINDS,
   READONLY_FLAG,
-  RequestPicker,
   SHA256_RE,
   byNewestFlow,
-  byRequestedAt,
   byVersionDesc,
   isFlowOf,
   isHostname,
@@ -43,25 +33,17 @@ import {
   ownerSet,
   parseEvidenceRow,
   parseFlowRow,
-  parseRequestRow,
   parseScanRow,
   parseWalletRequestRow,
   scanReportPayload,
 } from './rows.js';
-import {
-  EvidenceSchema,
-  FlowSchema,
-  RequestSchema,
-  ScanSchema,
-  WalletRequestSchema,
-} from './schemas.js';
+import { EvidenceSchema, FlowSchema, ScanSchema, WalletRequestSchema } from './schemas.js';
 import {
   PublishRefusedError,
   type FlowEntity,
   type LoadedScan,
   type PublishedScan,
   type PublishResult,
-  type ScanRequest,
   type SiteRegistry,
   type WalletRequestEntity,
 } from './site-registry.js';
@@ -75,8 +57,6 @@ export interface LocalSiteRegistryOptions {
   publisher: string | null;
   /** Owners whose entities reads accept (default: [publisher] when there is one). */
   trustedOwners?: string[];
-  /** Clock, unix seconds (default: the system clock): requestedAt and request expiry. */
-  now?: () => number;
 }
 
 interface LocalFile {
@@ -87,13 +67,6 @@ interface LocalFile {
 const DEFAULT_LIMIT = 50;
 /** Same cap as the Arkiv backend (its page size). */
 const MAX_FLOWS_LIMIT = 100;
-/** Same as the Arkiv backend: requests live 7 days (emulated here from requestedAt). */
-const REQUEST_LIFETIME_S = 7 * 86_400;
-const DEFAULT_REQUESTS = 100;
-const MAX_REQUESTS = 1000;
-/** Creation flags written locally, as on Arkiv. */
-const READONLY = READONLY_FLAG;
-const REQUEST_FLAGS = READONLY_FLAG | PERMISSIONLESS_EXTENSION_FLAG;
 
 export class LocalSiteRegistry implements SiteRegistry {
   readonly mode = 'local' as const;
@@ -104,10 +77,8 @@ export class LocalSiteRegistry implements SiteRegistry {
   /** Why the last read found the file unusable (null when it was fine or absent). */
   lastReadProblem: string | null = null;
   private queue: Promise<unknown> = Promise.resolve();
-  private readonly now: () => number;
 
   constructor(opts: LocalSiteRegistryOptions) {
-    this.now = opts.now ?? (() => Math.floor(Date.now() / 1000));
     if (opts.publisher !== null && !LOCAL_OWNER_RE.test(opts.publisher)) {
       throw new Error(`invalid local publisher ${JSON.stringify(opts.publisher)}`);
     }
@@ -274,104 +245,17 @@ export class LocalSiteRegistry implements SiteRegistry {
       .slice(0, limit);
   }
 
-  // --- open scan requests ---------------------------------------------------
-
-  /**
-   * Live (not expired), valid requests of the file, any creator; not dated
-   * more than REQUEST_CLOCK_SKEW_S in the future (parseRequestRow).
-   */
-  private requests(entities: unknown[]): ScanRequest[] {
-    const now = this.now();
-    return entities
-      .map((e) => parseRequestRow(e, LOCAL_FORMAT, { now }))
-      .filter((r): r is ScanRequest => r !== null && r.requestedAt + REQUEST_LIFETIME_S > now);
-  }
-
-  createRequest(hostname: string, url: string): Promise<ScanRequest> {
-    const run = this.queue.then(() => this.createRequestNow(hostname, url));
-    this.queue = run.catch(() => undefined);
-    return run;
-  }
-
-  private createRequestNow(hostname: string, url: string): ScanRequest {
-    const creator = this.publisher;
-    if (creator === null)
-      throw new PublishRefusedError('this registry is read-only (no publisher)');
-    const href = canonicalRequestUrl(hostname, url);
-    const requestedAt = this.now();
-    if (!Number.isSafeInteger(requestedAt) || requestedAt < 1 || requestedAt > MAX_UNIX)
-      throw new Error(`invalid clock value ${requestedAt}`);
-    const entities = this.readFile(true);
-    const key = `local:${contentHash({
-      s: RequestSchema.name,
-      creator,
-      hostname,
-      url: href,
-      requestedAt,
-      n: entities.length,
-    })}`;
-    const entity: WireEntity = {
-      key,
-      owner: creator,
-      creator,
-      expiresAt: null,
-      creationFlags: REQUEST_FLAGS,
-      attributes: toWireAttributes(RequestSchema, { hostname, url: href, requestedAt }),
-    };
-    this.writeFile([...entities, entity]);
-    const r = parseRequestRow(entity, LOCAL_FORMAT);
-    if (!r) throw new Error('internal: the written request entity does not decode');
-    return r;
-  }
-
-  async request(key: string): Promise<ScanRequest | null> {
-    if (typeof key !== 'string' || !LOCAL_KEY_RE.test(key)) return null;
-    return this.requests(this.readFile(false)).find((r) => r.key === key) ?? null;
-  }
-
-  async openRequests(opts: { since: number; limit?: number }): Promise<ScanRequest[]> {
-    const since = opts.since;
-    if (!Number.isSafeInteger(since) || since < 0 || since > MAX_UNIX) return [];
-    const limit = Math.max(1, Math.min(opts.limit ?? DEFAULT_REQUESTS, MAX_REQUESTS));
-    // Same selection as Arkiv: newest first, per-creator cap, then oldest first.
-    const picker = new RequestPicker(limit);
-    for (const r of this.requests(this.readFile(false))
-      .filter((x) => x.requestedAt >= since)
-      .sort((a, b) => byRequestedAt(b, a))) {
-      if (picker.full) break;
-      picker.offer(r);
-    }
-    return picker.result();
-  }
-
-  async fulfilments(key: string): Promise<PublishedScan[]> {
-    if (typeof key !== 'string' || !LOCAL_KEY_RE.test(key)) return [];
-    return this.scans(this.readFile(false))
-      .filter((s) => s.request === key)
-      .sort(byVersionDesc);
-  }
-
   // --- publish --------------------------------------------------------------
 
-  publish(
-    report: ReportV3,
-    bundle: EvidenceBundle,
-    opts: { request?: string } = {},
-  ): Promise<PublishResult> {
-    const run = this.queue.then(() => this.publishNow(report, bundle, opts.request));
+  publish(report: ReportV3, bundle: EvidenceBundle): Promise<PublishResult> {
+    const run = this.queue.then(() => this.publishNow(report, bundle));
     this.queue = run.catch(() => undefined);
     return run;
   }
 
-  private publishNow(
-    report: ReportV3,
-    bundle: EvidenceBundle,
-    request: string | undefined,
-  ): PublishResult {
+  private publishNow(report: ReportV3, bundle: EvidenceBundle): PublishResult {
     const owner = this.publisher;
     if (owner === null) throw new PublishRefusedError('this registry is read-only (no publisher)');
-    if (request !== undefined && (typeof request !== 'string' || !LOCAL_KEY_RE.test(request)))
-      throw new PublishRefusedError('opts.request is not a local entity key');
     const pub = buildPublication(report, bundle);
     const entities = this.readFile(true);
     const history = this.scans(entities, [...this.trustedOwners, owner])
@@ -386,19 +270,8 @@ export class LocalSiteRegistry implements SiteRegistry {
         `report scannedAt ${pub.scan.scannedAt} is older than ${pub.hostname} version ${prev.version} (${prev.scannedAt}); history does not run backwards`,
       );
     }
-    if (request !== undefined) {
-      const r = this.requests(entities).find((x) => x.key === request);
-      if (!r)
-        throw new PublishRefusedError(
-          `request ${request} is not a live, valid igris.request.v1 entity`,
-        );
-      if (r.hostname !== pub.hostname)
-        throw new PublishRefusedError(
-          `request ${request} is for ${r.hostname}, not ${pub.hostname}`,
-        );
-    }
     const version = prev ? prev.version + 1 : 1;
-    const v = withVersion(pub, version, prev?.key ?? null, request ?? null);
+    const v = withVersion(pub, version, prev?.key ?? null);
     const localKey = (id: unknown) => `local:${contentHash(id)}`;
 
     const scanKey = localKey({
@@ -444,7 +317,7 @@ export class LocalSiteRegistry implements SiteRegistry {
       owner,
       creator: owner,
       expiresAt: null,
-      creationFlags: READONLY,
+      creationFlags: READONLY_FLAG,
       attributes,
     });
     const created: WireEntity[] = [

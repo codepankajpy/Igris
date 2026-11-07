@@ -22,16 +22,10 @@ import {
 } from '@igris/core';
 import { SCHEMA_ATTRIBUTE } from '@arkiv-network/sdk/schema';
 import { getAddress } from 'viem';
-import type {
-  FlowEntity,
-  PublishedScan,
-  ScanRequest,
-  WalletRequestEntity,
-} from './site-registry.js';
+import type { FlowEntity, PublishedScan, WalletRequestEntity } from './site-registry.js';
 import {
   EVIDENCE_SCHEMA_NAME,
   FLOW_SCHEMA_NAME,
-  REQUEST_SCHEMA_NAME,
   SCAN_SCHEMA_NAME,
   WALLET_REQUEST_SCHEMA_NAME,
 } from './schemas.js';
@@ -61,9 +55,8 @@ export function isHostname(v: unknown): v is string {
   return typeof v === 'string' && v.length <= MAX_STR_BYTES && HOSTNAME_RE.test(v);
 }
 
-/** Creation-flag bits (Arkiv `creationFlags` byte). */
+/** Readonly bit of Arkiv's `creationFlags` byte. */
 export const READONLY_FLAG = 1;
-export const PERMISSIONLESS_EXTENSION_FLAG = 2;
 
 /** Wallet request kinds that get an igris.walletreq.v1 entity (all but "connect"). */
 export const PUBLISHED_WALLET_REQUEST_KINDS = WALLET_REQUEST_KINDS.filter(
@@ -79,31 +72,6 @@ export function isChecksummedAddress(v: unknown): v is string {
   } catch {
     return false;
   }
-}
-
-/**
- * Why `url` is not a valid scan-request URL for `hostname`, or null when it
- * is: an absolute http(s) URL in canonical form (`new URL(url).href`),
- * without credentials, whose hostname is exactly `hostname`, ≤ 128 UTF-8
- * bytes (Arkiv's str limit; longer URLs are refused, never truncated).
- * Validation only: whether the target may be fetched (SSRF guard, public
- * egress) is decided by the scanner node before it scans.
- */
-export function requestUrlProblem(hostname: unknown, url: unknown): string | null {
-  if (!isHostname(hostname)) return 'hostname is not a lower-case DNS hostname';
-  if (typeof url !== 'string') return 'url is not a string';
-  if (utf8Length(url) > MAX_STR_BYTES) return `url exceeds ${MAX_STR_BYTES} bytes`;
-  let u: URL;
-  try {
-    u = new URL(url);
-  } catch {
-    return 'url is not an absolute URL';
-  }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') return 'url is not http(s)';
-  if (u.username !== '' || u.password !== '') return 'url carries credentials';
-  if (u.hostname !== hostname) return `url is not on ${hostname}`;
-  if (u.href !== url) return 'url is not in canonical form';
-  return null;
 }
 
 /** Formats of keys and owners for one backend. */
@@ -260,15 +228,8 @@ export function parseScanRow(entity: unknown, format: RowFormat): PublishedScan 
     const trackingRecipients = int(attrs, 'trackingRecipients', 'i32', 0, recipients);
     const reportVersion = str(attrs, 'reportVersion');
     if (reportVersion !== '3.0.0') bad('reportVersion');
-    // Absent on entities published before requests existed → null.
-    let request: string | null = null;
-    if (attrs.has('request')) {
-      const r = str(attrs, 'request');
-      if (r !== '') {
-        if (!format.key.test(r) || r.toLowerCase() === key.toLowerCase()) bad('request');
-        request = r;
-      }
-    }
+    // A `request` attribute (on entities of an earlier multi-node release)
+    // is ignored, whatever it holds: it is not part of the version.
     const scan: PublishedScan = {
       key,
       owner,
@@ -288,7 +249,6 @@ export function parseScanRow(entity: unknown, format: RowFormat): PublishedScan 
       scannerVersion: str(attrs, 'scannerVersion'),
       reportVersion,
       expiresAtBlock,
-      request,
     };
     return scan;
   });
@@ -356,91 +316,6 @@ export function parseFlowRow(entity: unknown, format: RowFormat): FlowEntity | n
   });
 }
 
-/**
- * How far in the future a request's self-declared `requestedAt` may lie
- * (clock skew between a creator and a reader). Later ones are rejected: a
- * request dated ahead would sort above every honest one for as long as it
- * likes.
- */
-export const REQUEST_CLOCK_SKEW_S = 300;
-
-/**
- * Decode an igris.request.v1 row; null when invalid. Requests come from ANY
- * creator, so this is the only gate: the hostname, the URL (http(s), on that
- * hostname, canonical, ≤ 128 bytes) and requestedAt must all hold; with
- * `now`, a requestedAt more than REQUEST_CLOCK_SKEW_S after it is rejected
- * too. The readonly creation flag is NOT required: a third party following
- * docs/design/SCAN-NETWORK.md may create a mutable request. That is safe
- * because a scan records only the request's key and every node re-validates
- * the URL it reads (SSRF guard, public egress) right before it scans; what
- * was scanned is in each published report.
- */
-export function parseRequestRow(
-  entity: unknown,
-  format: RowFormat,
-  opts: { now?: number } = {},
-): ScanRequest | null {
-  return guard(() => {
-    const { key, owner, expiresAtBlock, attrs } = meta(entity, REQUEST_SCHEMA_NAME, format);
-    const host = hostname(attrs, 'hostname');
-    const url = str(attrs, 'url');
-    if (requestUrlProblem(host, url) !== null) bad('url');
-    const requestedAt = int(attrs, 'requestedAt', 'u64', 1, MAX_UNIX);
-    if (opts.now !== undefined && !(requestedAt <= opts.now + REQUEST_CLOCK_SKEW_S))
-      bad('requestedAt');
-    return {
-      key,
-      creator: owner,
-      hostname: host,
-      url,
-      requestedAt,
-      expiresAtBlock,
-    };
-  });
-}
-
-/** At most this many requests per creator in one openRequests() answer. */
-export const MAX_REQUESTS_PER_CREATOR = 20;
-
-/**
- * Picks openRequests' answer while rows are read NEWEST FIRST: at most
- * `perCreator` requests per creator (the newest), at most `limit` in all,
- * each key once. A creator over its cap is skipped, not counted, so reading
- * goes on past it and one creator flooding the registry cannot hide the
- * requests of others (bounded only by how many rows the caller walks).
- */
-export class RequestPicker {
-  private readonly counts = new Map<string, number>();
-  private readonly keys = new Set<string>();
-  private readonly picked: ScanRequest[] = [];
-  constructor(
-    private readonly limit: number,
-    private readonly perCreator: number = MAX_REQUESTS_PER_CREATOR,
-  ) {}
-
-  get full(): boolean {
-    return this.picked.length >= this.limit;
-  }
-
-  /** Offer one request (callers offer newest first). */
-  offer(r: ScanRequest): void {
-    if (this.full) return;
-    const k = r.key.toLowerCase();
-    if (this.keys.has(k)) return;
-    this.keys.add(k);
-    const c = r.creator.toLowerCase();
-    const n = this.counts.get(c) ?? 0;
-    if (n >= this.perCreator) return;
-    this.counts.set(c, n + 1);
-    this.picked.push(r);
-  }
-
-  /** The picked requests, oldest first. */
-  result(): ScanRequest[] {
-    return [...this.picked].sort(byRequestedAt);
-  }
-}
-
 /** Decode an igris.walletreq.v1 row; null when invalid. */
 export function parseWalletRequestRow(
   entity: unknown,
@@ -466,11 +341,6 @@ export function parseWalletRequestRow(
       scannedAt: int(attrs, 'scannedAt', 'u64', 1, MAX_UNIX),
     };
   });
-}
-
-/** Oldest request first; ties by key (the order openRequests returns). */
-export function byRequestedAt(a: ScanRequest, b: ScanRequest): number {
-  return a.requestedAt - b.requestedAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 }
 
 /** Newest version first; ties (two owners) by newest scannedAt, then key. */

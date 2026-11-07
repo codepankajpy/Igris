@@ -6,9 +6,9 @@
  *
  * The shapes below are what apps/api SENDS (apps/api/src/public.ts): the
  * registry's rows (packages/registry, site-registry.ts) without the signer —
- * a scan's, flow's or wallet request's `owner` and a request's `creator` are
- * never part of a response. They are restated here, type-only, because the
- * browser bundle must not depend on the backend's module graph.
+ * a scan's, flow's or wallet request's `owner` is never part of a response.
+ * They are restated here, type-only, because the browser bundle must not
+ * depend on the backend's module graph.
  */
 import type {
   EvidenceBundle,
@@ -97,71 +97,9 @@ export interface PublishedScan {
   scannerVersion: string;
   reportVersion: string;
   expiresAtBlock: number | null;
-  /**
-   * Entity key of the igris.request.v1 this scan fulfilled; null when it was
-   * not made for a request (entities published before requests existed).
-   */
-  request: string | null;
-}
-
-/**
- * An open scan request (igris.request.v1): anyone can create one; every
- * scanner node that sees it may fulfil it (docs/design/SCAN-NETWORK.md).
- * The API's PublicRequest — registry's ScanRequest without `creator` (public
- * on Arkiv by design; the API does not send it).
- */
-export interface ScanRequest {
-  key: string;
-  hostname: string;
-  url: string;
-  /** Unix seconds. */
-  requestedAt: number;
-  expiresAtBlock: number | null;
-}
-
-/**
- * One round: a request and the trusted scans that fulfilled it (a scan with
- * no request is a round of one). `node` is the API's label ("Scanner 1"…),
- * never an address.
- */
-export interface RoundSummary {
-  request: ScanRequest | null;
-  scans: Array<{ version: number; key: string; node: string }>;
 }
 
 export type AddressExposure = 'exact' | 'hashed' | 'possible' | 'none';
-export type AgreementStatus = 'agree' | 'differ' | 'partial';
-
-/** Recipient-by-recipient comparison of a round's scans, computed by the API. */
-export interface Agreement {
-  /** Node labels, in the API's order (this node first). */
-  nodes: string[];
-  rows: Array<{
-    registrableDomain: string;
-    class: string;
-    /** Keyed by node label; null when that node's scan did not see the recipient. */
-    byNode: Record<string, { verdict: Verdict; address: AddressExposure } | null>;
-    status: AgreementStatus;
-  }>;
-  summary: { agree: number; differ: number; partial: number };
-}
-
-/**
- * GET /api/sites/:hostname/rounds/:requestKey. `request` is null when the
- * request entity has expired on Arkiv: its scans (and the agreement) still
- * come back.
- */
-export interface RoundResponse {
-  request: ScanRequest | null;
-  scans: Array<{ scan: PublishedScan; node: string; verified: boolean }>;
-  agreement: Agreement | null;
-}
-
-/** GET /api/nodes — labels only, never addresses. */
-export interface NodeInfo {
-  label: string;
-  self: boolean;
-}
 
 /**
  * One decoded wallet request of a published version (igris.walletreq.v1): the
@@ -235,7 +173,6 @@ export interface SiteResponse {
   hostname: string;
   versions: PublishedScan[];
   scanning: { id: string; state: JobState } | null;
-  rounds: RoundSummary[];
 }
 
 export interface VersionResponse {
@@ -247,14 +184,11 @@ export interface VersionResponse {
   summary: Summary;
   changes: Changes | null;
   source: 'arkiv' | 'local';
-  /** Label of the scanner node that published this version ("Scanner 1"…). */
-  node: string;
 }
 
-/** POST /api/sites/:hostname/scans → 202. `request` is null when no request entity was made. */
+/** POST /api/sites/:hostname/scans → 202: the new job's id. */
 export interface ScanStarted {
   id: string;
-  request: ScanRequest | null;
 }
 
 /**
@@ -283,10 +217,23 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The backend's origin when the website is hosted apart from it (website on
+ * Vercel, backend on Railway): VITE_IGRIS_API_URL, validated and fixed at
+ * build time by vite.config.ts (which also allows only it in the CSP's
+ * connect-src). "" = this same origin.
+ */
+export const API_ORIGIN = String(import.meta.env.VITE_IGRIS_API_URL ?? '');
+
+/** The URL of an API path ("/api/…") on the backend. */
+export function apiUrl(path: string): string {
+  return API_ORIGIN + path;
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, init);
+    res = await fetch(apiUrl(path), init);
   } catch {
     throw new ApiError(0, 'The IGRIS API is not reachable. Is it running?');
   }
@@ -319,12 +266,9 @@ export const api = {
   site: (hostname: string) => call<SiteResponse>(`/api/sites/${enc(hostname)}`),
   version: (hostname: string, n: number) =>
     call<VersionResponse>(`/api/sites/${enc(hostname)}/versions/${n}`),
-  /** Scan or retest: the new job id and its request entity; a 409 carries the running job's id. */
+  /** Scan or retest: the new job id; a 409 carries the running job's id. */
   scan: (hostname: string, url?: string) =>
     call<ScanStarted>(`/api/sites/${enc(hostname)}/scans`, post(url ? { url } : {})),
-  round: (hostname: string, requestKey: string) =>
-    call<RoundResponse>(`/api/sites/${enc(hostname)}/rounds/${enc(requestKey)}`),
-  nodes: () => call<{ nodes: NodeInfo[] }>('/api/nodes').then((r) => r.nodes),
   walletRequests: (
     q: { kind?: WalletRequestKind; unlimited?: boolean; hostname?: string; limit?: number } = {},
   ) => {
@@ -349,52 +293,14 @@ export const api = {
     call<{ flows: FlowEntity[] }>(`/api/recipients/${enc(domain)}`).then((r) => r.flows),
 };
 
-/**
- * Start a scan of `hostname`; if one is already running, return that one's id
- * (its request is not known then: null). The request is remembered for the
- * live scan page (see rememberRequest).
- */
+/** Start a scan of `hostname`; if one is already running, return that one's id. */
 export async function startScan(hostname: string, url?: string): Promise<ScanStarted> {
-  let started: ScanStarted;
   try {
     const r = await api.scan(hostname, url);
-    started = { id: r.id, request: r.request ?? null };
+    return { id: r.id };
   } catch (e) {
-    if (e instanceof ApiError && e.status === 409 && e.id) return { id: e.id, request: null };
+    if (e instanceof ApiError && e.status === 409 && e.id) return { id: e.id };
     throw e;
-  }
-  if (started.request) rememberRequest(started.id, started.request);
-  return started;
-}
-
-/*
- * The request a job was started for. GET /api/scans/:id does not carry it, so
- * the POST response's request is kept for this tab: in memory, and in
- * sessionStorage so a reload of the live scan page still shows it. Storage is
- * a convenience only — it may be unavailable, and then nothing is shown.
- */
-const requests = new Map<string, ScanRequest>();
-const STORE_KEY = (id: string) => `igris.request.${id}`;
-
-export function rememberRequest(jobId: string, request: ScanRequest): void {
-  requests.set(jobId, request);
-  try {
-    sessionStorage.setItem(STORE_KEY(jobId), JSON.stringify(request));
-  } catch {
-    /* storage unavailable: memory only */
-  }
-}
-
-export function requestFor(jobId: string): ScanRequest | null {
-  const known = requests.get(jobId);
-  if (known) return known;
-  try {
-    const raw = sessionStorage.getItem(STORE_KEY(jobId));
-    if (!raw) return null;
-    const r = JSON.parse(raw) as ScanRequest;
-    return typeof r?.key === 'string' && typeof r.hostname === 'string' ? r : null;
-  } catch {
-    return null;
   }
 }
 

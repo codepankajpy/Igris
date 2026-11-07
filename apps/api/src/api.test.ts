@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -25,7 +25,7 @@ import {
   type ReportV3,
   type ScanResult,
 } from '@igris/core';
-import { sampleCapture, sampleResult } from '@igris/core/testing';
+import { sampleResult } from '@igris/core/testing';
 import { isPublicAddress, type ScanOptions } from '@igris/scanner';
 import { LocalSiteRegistry, PublishRefusedError, diffVersions } from '@igris/registry';
 import type {
@@ -35,14 +35,11 @@ import type {
   LoadedScanner,
   PublishResult,
   PublishedScan,
-  ScanRequest,
   ScannerProfile,
   SiteRegistry,
   WalletRequestEntity,
 } from '@igris/registry';
-import { Lru, ROUND_REQUEST_VERSIONS, createApp, type RoundSummary } from './app.js';
-import { compareRound, type Agreement } from './agreement.js';
-import { RequestWorker, workerEnabled, type WorkerOptions } from './worker.js';
+import { Lru, createApp } from './app.js';
 import { DRAFT_NOTE, readCachedScan, writeCachedScan } from './artifacts.js';
 import { loadConfig, type ApiConfig } from './config.js';
 import { SiteScanService, type Job, type ScanFn } from './jobs.js';
@@ -55,10 +52,8 @@ import { scanTarget, validateHostname, validateScanUrl } from './validate.js';
 // ---------------------------------------------------------------------------
 
 const PUBLISHER = '0x1111111111111111111111111111111111111111';
-/** A second trusted scanner node. */
+/** Another trusted scanner key (IGRIS_TRUSTED_SCANNERS). */
 const OTHER = '0x2222222222222222222222222222222222222222';
-/** Someone who only creates requests. */
-const STRANGER = '0x3333333333333333333333333333333333333333';
 
 /** A valid Arkiv entity key (32 bytes). */
 const entityKey = (n: number) => `0x${n.toString(16).padStart(64, '0')}`;
@@ -82,16 +77,7 @@ class FakeRegistry implements SiteRegistry {
   readonly byKeyCalls: string[] = [];
   statusCalls = 0;
   statusImpl: () => Promise<{ ready: boolean; reason?: string }> = async () => ({ ready: true });
-  // Scan requests (igris.request.v1) and wallet requests (igris.walletreq.v1).
-  readonly requests: ScanRequest[] = [];
-  failCreateRequest: Error | null = null;
-  failOpenRequests: Error | null = null;
-  failFulfilments: Error | null = null;
-  createRequestCalls = 0;
-  openRequestsCalls = 0;
-  readonly publishRequests: Array<string | undefined> = [];
-  /** Unix seconds for requestedAt. */
-  nowS = () => Math.floor(Date.now() / 1000);
+  // Wallet requests (igris.walletreq.v1).
   walletRows: WalletRequestEntity[] = [];
   readonly walletCalls: Array<Parameters<SiteRegistry['walletRequests']>[0]> = [];
 
@@ -151,23 +137,13 @@ class FakeRegistry implements SiteRegistry {
     if (bundleHash(p.bundle) !== scan.evidenceSha256) problems.push('evidence mismatch');
     return { ...p, verified: problems.length === 0, problems };
   }
-  async publish(
-    report: ReportV3,
-    bundle: EvidenceBundle,
-    opts: { request?: string } = {},
-  ): Promise<PublishResult> {
+  async publish(report: ReportV3, bundle: EvidenceBundle): Promise<PublishResult> {
     this.publishCalls += 1;
-    this.publishRequests.push(opts.request);
     if (this.failPublish) throw this.failPublish;
-    return this.publishAs(PUBLISHER, report, bundle, opts.request);
+    return this.publishAs(PUBLISHER, report, bundle);
   }
-  /** What another trusted node's publish would leave on the registry. */
-  async publishAs(
-    owner: string,
-    report: ReportV3,
-    bundle: EvidenceBundle,
-    request?: string,
-  ): Promise<PublishResult> {
+  /** What a publish by another trusted scanner key would leave on the registry. */
+  async publishAs(owner: string, report: ReportV3, bundle: EvidenceBundle): Promise<PublishResult> {
     const host = new URL(report.scan.target).hostname;
     // Same contract as the real backends: idempotent per scanId, and history
     // never runs backwards.
@@ -200,7 +176,6 @@ class FakeRegistry implements SiteRegistry {
       scannerVersion: report.scan.scannerVersion,
       reportVersion: report.reportVersion,
       expiresAtBlock: null,
-      request: request ?? null,
     };
     this.scans.push(scan);
     this.payloads.set(key, { report, bundle });
@@ -228,44 +203,6 @@ class FakeRegistry implements SiteRegistry {
   async flowsTo(recipient: string, opts?: { limit?: number }) {
     this.check();
     return this.flows.filter((f) => f.recipient === recipient).slice(0, opts?.limit ?? 100);
-  }
-  async createRequest(hostname: string, url: string): Promise<ScanRequest> {
-    this.createRequestCalls += 1;
-    if (this.failCreateRequest) throw this.failCreateRequest;
-    if (this.publisher === null) throw new PublishRefusedError('read-only');
-    return this.addRequest(this.publisher, hostname, url);
-  }
-  /** A request as anyone (any creator) could write it. */
-  addRequest(creator: string, hostname: string, url: string, requestedAt = this.nowS()) {
-    const r: ScanRequest = {
-      key: entityKey(this.requests.length + 1),
-      creator,
-      hostname,
-      url,
-      requestedAt,
-      expiresAtBlock: null,
-    };
-    this.requests.push(r);
-    return r;
-  }
-  async request(key: string) {
-    this.check();
-    return this.requests.find((r) => r.key.toLowerCase() === key.toLowerCase()) ?? null;
-  }
-  async openRequests(opts: { since: number; limit?: number }) {
-    this.openRequestsCalls += 1;
-    if (this.failOpenRequests) throw this.failOpenRequests;
-    return this.requests
-      .filter((r) => r.requestedAt >= opts.since)
-      .sort((a, b) => a.requestedAt - b.requestedAt)
-      .slice(-(opts.limit ?? 100));
-  }
-  async fulfilments(key: string) {
-    if (this.failFulfilments) throw this.failFulfilments;
-    this.check();
-    return this.scans
-      .filter((s) => s.request?.toLowerCase() === key.toLowerCase())
-      .sort((a, b) => b.version - a.version);
   }
   async walletRequests(opts: Parameters<SiteRegistry['walletRequests']>[0]) {
     this.walletCalls.push(opts);
@@ -349,7 +286,6 @@ interface StartOpts<R extends SiteRegistry> {
   queue?: JobQueue;
   dataDir?: string;
   probe?: { timeoutMs?: number; ttlMs?: number; now?: () => number };
-  requestCache?: { nullTtlMs?: number; now?: () => number };
   log?: (m: string) => void;
 }
 
@@ -369,6 +305,7 @@ async function start<R extends SiteRegistry = FakeRegistry>(o: StartOpts<R> = {}
     registry,
     egress: { mode: 'public-only', allowedPorts: cfg.allowedPorts },
     dwellMs: 1000,
+    chromiumSandbox: cfg.chromiumSandbox,
     ...(o.log ? { log: o.log } : {}),
   });
   const app = createApp(cfg, {
@@ -379,7 +316,6 @@ async function start<R extends SiteRegistry = FakeRegistry>(o: StartOpts<R> = {}
     diffVersions: o.diff ?? fakeDiff,
     log: o.log ?? (() => {}),
     ...(o.probe ? { probe: o.probe } : {}),
-    ...(o.requestCache ? { requestCache: o.requestCache } : {}),
   });
   server = await new Promise<Server>((r) => {
     const s = app.listen(0, '127.0.0.1', () => r(s));
@@ -541,12 +477,11 @@ describe('scan → publish → versions (the flow)', () => {
       hostname: HOST,
       versions: [],
       scanning: null,
-      rounds: [],
     });
 
     const a = await post(`/api/sites/${HOST}/scans`);
     expect(a.status).toBe(202);
-    expect(Object.keys(a.body)).toEqual(['id', 'request']);
+    expect(Object.keys(a.body)).toEqual(['id']);
     const job1 = await waitDone(a.body.id as string);
     expect(job1).toMatchObject({
       hostname: HOST,
@@ -588,19 +523,8 @@ describe('scan → publish → versions (the flow)', () => {
     const v2 = await get(`/api/sites/${HOST}/versions/2`);
     expect(v2.status).toBe(200);
     expect(Object.keys(v2.body).sort()).toEqual(
-      [
-        'changes',
-        'evidence',
-        'node',
-        'problems',
-        'report',
-        'scan',
-        'source',
-        'summary',
-        'verified',
-      ].sort(),
+      ['changes', 'evidence', 'problems', 'report', 'scan', 'source', 'summary', 'verified'].sort(),
     );
-    expect(v2.body.node).toBe('Scanner 1');
     expect(v2.body).toMatchObject({ verified: true, problems: [], source: 'arkiv' });
     expect(v2.body.summary).toEqual(summarise(r2.report, r2.bundle));
     expect(v2.body.changes).toEqual({ sameBehaviour: true, added: [], removed: [], changed: [] });
@@ -845,6 +769,9 @@ describe('POST /api/sites/:hostname/scans', () => {
       ['GET', '/api/scans'],
       ['GET', '/api/stats'],
       ['POST', '/api/scans'],
+      // the removed multi-node network: node labels and per-request rounds
+      ['GET', '/api/nodes'],
+      ['GET', `/api/sites/${HOST}/rounds/${'0x' + 'a'.repeat(64)}`],
     ] as const) {
       expect((await fetch(base + path, { method })).status, path).toBe(404);
     }
@@ -872,7 +799,6 @@ describe('restart behaviour', () => {
       events: [],
       version: null,
       publish: null,
-      request: null,
     };
     const publishing = { ...base, id: '11111111-1111-4111-8111-111111111111' };
     const scanning = { ...base, id: '22222222-2222-4222-8222-222222222222' };
@@ -1015,6 +941,27 @@ describe('config', () => {
     expect(() => loadConfig({ IGRIS_CONCURRENCY: '0' })).toThrow();
     expect(() => loadConfig({ IGRIS_ALLOWED_PORTS: '80,abc' })).toThrow();
   });
+
+  it('IGRIS_CHROMIUM_SANDBOX: 1 = on, 0 or unset = off, anything else is refused', () => {
+    expect(loadConfig({}).chromiumSandbox).toBe(false);
+    expect(loadConfig({ IGRIS_CHROMIUM_SANDBOX: '' }).chromiumSandbox).toBe(false);
+    expect(loadConfig({ IGRIS_CHROMIUM_SANDBOX: '0' }).chromiumSandbox).toBe(false);
+    expect(loadConfig({ IGRIS_CHROMIUM_SANDBOX: '1' }).chromiumSandbox).toBe(true);
+    for (const v of ['true', 'yes', '2', 'on']) {
+      expect(() => loadConfig({ IGRIS_CHROMIUM_SANDBOX: v }), v).toThrow(/IGRIS_CHROMIUM_SANDBOX/);
+    }
+  });
+
+  it('the sandbox setting reaches every scan; unset, the option is not passed at all', async () => {
+    const on = fakeScan([result()]);
+    const a = await start({ scan: on.fn, cfg: { chromiumSandbox: true } });
+    await a.waitDone((await a.post(`/api/sites/${HOST}/scans`)).body.id as string);
+    expect(on.calls[0]!.chromiumSandbox).toBe(true);
+    const off = fakeScan([result()]);
+    const b = await start({ scan: off.fn });
+    await b.waitDone((await b.post(`/api/sites/${HOST}/scans`)).body.id as string);
+    expect(off.calls[0]!).not.toHaveProperty('chromiumSandbox');
+  });
 });
 
 describe('JobQueue', () => {
@@ -1129,7 +1076,6 @@ function writeInterruptedPublish(dataDir: string, id: string, scanId: string): v
     events: [],
     version: null,
     publish: null,
-    request: null,
   };
   writeFileSync(join(dataDir, 'jobs', `${id}.json`), JSON.stringify({ job, scanId }));
 }
@@ -1476,10 +1422,10 @@ describe('versions route: verified-load LRU and read rate limit', () => {
     expect((await get(`/api/scans/${id}/report`)).status).toBe(200);
     expect((await get(`/api/sites/${HOST}/versions/1`)).status).toBe(429);
     expect((await get(`/api/scans/${id}/report`)).status).toBe(429);
-    // A site read looks up its rounds' requests: an expensive read too.
+    // A site read lists a site's whole history: an expensive read too.
     expect((await get(`/api/sites/${HOST}`)).status).toBe(429);
     expect((await get('/api/sites')).status).toBe(200); // cheap reads unaffected
-    expect((await get('/api/nodes')).status).toBe(200);
+    expect((await get('/api/health')).status).toBe(200);
   });
 });
 
@@ -1497,7 +1443,7 @@ describe('scan hostnames must be publishable (isHostname)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Scan network (docs/design/SCAN-NETWORK.md): requests, worker, rounds, nodes
+// Single node: a scan is a local job; nothing is requested from other nodes
 // ---------------------------------------------------------------------------
 
 /** A 20-byte address on its own (not the prefix of a 32-byte entity key). */
@@ -1507,355 +1453,50 @@ function expectNoAddressIn(lines: string[]): void {
   for (const l of lines) expect(l, l).not.toMatch(ADDRESS_RE);
 }
 
-/** Both trusted nodes; this node (PUBLISHER) is Scanner 1, OTHER is Scanner 2. */
-const TWO_NODES: RegistryInfo = { ...READY, trustedOwners: [OTHER, PUBLISHER] };
+/** This node (PUBLISHER) plus another trusted scanner key (IGRIS_TRUSTED_SCANNERS). */
+const TWO_TRUSTED: RegistryInfo = { ...READY, trustedOwners: [OTHER, PUBLISHER] };
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-async function until(cond: () => boolean, what = 'condition'): Promise<void> {
-  const t0 = Date.now();
-  while (!cond()) {
-    if (Date.now() - t0 > 5000) throw new Error(`timeout waiting for ${what}`);
-    await sleep(5);
-  }
-}
-
-describe('POST /api/sites/:hostname/scans creates an open request', () => {
-  it('creates igris.request.v1 (signed by this node), starts the job for it, publishes with { request }', async () => {
+describe('POST /api/sites/:hostname/scans (single node)', () => {
+  it('202 { id } only; the job publishes the next version; the site read is { hostname, versions, scanning }', async () => {
     const { post, get, waitDone, registry } = await start();
     const a = await post(`/api/sites/${HOST}/scans`, { url: `https://${HOST}/swap` });
     expect(a.status).toBe(202);
-    const key = entityKey(1);
-    expect(a.body.request).toEqual({
-      key,
-      hostname: HOST,
-      url: `https://${HOST}/swap`,
-      requestedAt: registry.requests[0]!.requestedAt,
-      expiresAtBlock: null,
-    });
-    // Signed by this node on the registry; the response never names the creator.
-    expect(registry.requests[0]!.creator).toBe(PUBLISHER);
-    expect(a.body.request).not.toHaveProperty('creator');
+    expect(Object.keys(a.body)).toEqual(['id']);
     const job = await waitDone(a.body.id as string);
-    expect(job).toMatchObject({ state: 'completed', version: 1, request: key });
-    expect(registry.publishRequests).toEqual([key]);
-    expect(registry.scans[0]!.request).toBe(key);
-    expect((await get(`/api/scans/${job.id}`)).body.scan).toMatchObject({ request: key });
-  });
-
-  it('the job is reserved first: a scan that finishes before the request exists waits for it', async () => {
-    const registry = new FakeRegistry();
-    let release!: () => void;
-    const gate = new Promise<void>((r) => (release = r));
-    const create = registry.createRequest.bind(registry);
-    registry.createRequest = async (h, u) => {
-      await gate;
-      return create(h, u);
-    };
-    const { post, get, waitDone, jobs } = await start({ registry });
-    const pending = post(`/api/sites/${HOST}/scans`);
-    let running: string | undefined;
-    await until(() => (running = jobs.inFlight(HOST)?.id) !== undefined, 'the job');
-    await sleep(30);
-    // The (instant) scan is done, but its publish waits for the request.
-    expect(registry.publishCalls).toBe(0);
-    expect(jobs.get(running!)!.state).toBe('running');
-    // One scan per hostname holds meanwhile (409 with the running id).
-    expect((await get(`/api/sites/${HOST}`)).body.scanning).toMatchObject({ id: running });
-    const dup = await post(`/api/sites/${HOST}/scans`);
-    expect(dup.status).toBe(409);
-    expect(dup.body.id).toBe(running);
-    release();
-    const a = await pending;
-    expect(a.status).toBe(202);
-    await waitDone(a.body.id as string);
-    expect(registry.publishRequests).toEqual([entityKey(1)]);
-    expect(registry.requests).toHaveLength(1); // the 409 created none
-  });
-
-  it('request null when it cannot be created (registry error, URL over 128 bytes); the scan still runs', async () => {
-    const logs: string[] = [];
-    const registry = new FakeRegistry();
-    registry.failCreateRequest = new Error(
-      `arkiv: insufficient funds for gas (sender ${PUBLISHER})`,
-    );
-    const { post, waitDone } = await start({ registry, log: (m) => logs.push(m) });
-    const a = await post(`/api/sites/${HOST}/scans`);
-    expect(a.status).toBe(202);
-    expect(a.body.request).toBeNull();
-    expect(await waitDone(a.body.id as string)).toMatchObject({ version: 1, request: null });
-    expect(registry.publishRequests).toEqual([undefined]);
-    expect(registry.scans[0]!.request).toBeNull();
-    expect(logs.join('\n')).toMatch(/scan request could not be created .*insufficient funds/);
-
-    registry.failCreateRequest = null;
-    const calls = registry.createRequestCalls;
-    const long = `https://${HOST}/${'x'.repeat(120)}`;
-    const b = await post(`/api/sites/${HOST}/scans`, { url: long });
-    expect(b.status).toBe(202);
-    expect(b.body.request).toBeNull();
-    expect(registry.createRequestCalls).toBe(calls); // never sent: Arkiv would refuse it
-    await waitDone(b.body.id as string);
-    expectNoAddressIn(logs);
-  });
-
-  it('no request is created for a refused POST (400 / 409 / 503)', async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((r) => (release = r));
-    const { post, registry, waitDone } = await start({
-      scan: fakeScan([result()], gate).fn,
-      queue: new JobQueue(1, 0, 60_000),
-    });
-    expect((await post('/api/sites/localhost/scans')).status).toBe(400);
-    const a = await post(`/api/sites/${HOST}/scans`);
-    expect((await post(`/api/sites/${HOST}/scans`)).status).toBe(409);
-    expect((await post('/api/sites/other.example.org/scans')).status).toBe(503);
-    expect(registry.requests).toHaveLength(1);
-    release();
-    await waitDone(a.body.id as string);
-  });
-});
-
-describe('request worker', () => {
-  async function harness(o: StartOpts<FakeRegistry> = {}, over: Partial<WorkerOptions> = {}) {
-    const h = await start<FakeRegistry>(o);
-    const logs: string[] = [];
-    const w = new RequestWorker({
-      registry: h.registry,
-      jobs: h.jobs,
-      self: PUBLISHER,
-      allowedPorts: [80, 443],
-      isPublicAddress,
-      pollMs: 10,
-      windowS: 3600,
-      perCreatorPerHour: 5,
-      blockedRequesters: [],
-      log: (m) => logs.push(m),
-      ...over,
-    });
-    return { ...h, w, logs };
-  }
-
-  it('fulfils a request anyone created: same queue, public-only egress, published with { request }', async () => {
-    const { fn, calls } = fakeScan([result()]);
-    const { w, registry, jobs, waitDone, logs } = await harness({ scan: fn });
-    const r = registry.addRequest(STRANGER, HOST, `https://${HOST}/swap`);
-    expect(await w.poll()).toEqual([{ key: r.key, decision: 'submitted' }]);
-    const job = jobs.forRequest(r.key)!;
-    expect(job).toMatchObject({ hostname: HOST, url: `https://${HOST}/swap`, request: r.key });
-    expect(await waitDone(job.id)).toMatchObject({ state: 'completed', version: 1 });
-    expect(calls[0]!.egress).toEqual({ mode: 'public-only', allowedPorts: [80, 443] });
-    expect(registry.scans[0]!.request).toBe(r.key);
-    // Attempted once: never scanned again (fulfilled or not).
-    expect(await w.poll()).toEqual([{ key: r.key, decision: 'attempted' }]);
-    expect(calls).toHaveLength(1);
-    expect(logs.join('\n')).toContain(`request ${r.key} (${HOST}): scanning`);
-    expectNoAddressIn(logs);
-  });
-
-  it('skips requests this node already fulfilled or is running; another node fulfilling does not count', async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((r) => (release = r));
-    const { w, registry, post, waitDone, jobs, logs } = await harness({
-      scan: fakeScan([result()], gate).fn,
-      info: TWO_NODES,
-    });
-    // Fulfilled by this node (as the registry shows after a restart).
-    const done = registry.addRequest(STRANGER, 'done.example.org', 'https://done.example.org/');
-    const r0 = result('2026-11-05T00:00:00.000Z');
-    await registry.publishAs(PUBLISHER, r0.report, r0.bundle, done.key);
-    // Fulfilled by the other node only: this node still scans it.
-    const other = registry.addRequest(STRANGER, 'b.example.org', 'https://b.example.org/');
-    const r1 = result('2026-11-05T01:00:00.000Z');
-    await registry.publishAs(OTHER, r1.report, r1.bundle, other.key);
-    // This node's own request (POST): its job is running.
-    const own = await post(`/api/sites/${HOST}/scans`);
-    const ownKey = (own.body.request as { key: string }).key;
-
-    expect(await w.poll()).toEqual([
-      { key: done.key, decision: 'fulfilled' },
-      { key: other.key, decision: 'submitted' },
-      { key: ownKey, decision: 'running' },
-    ]);
-    release();
-    await waitDone(own.body.id as string);
-    await until(() => jobs.inFlight('b.example.org') === undefined, 'b');
-    expect(await w.poll()).toEqual([
-      { key: done.key, decision: 'fulfilled' },
-      { key: other.key, decision: 'attempted' },
-      { key: ownKey, decision: 'attempted' },
-    ]);
-    expect(logs.join('\n')).toContain('already fulfilled by this node');
-    expectNoAddressIn(logs);
-  });
-
-  it('ignores invalid targets exactly like the POST route (SSRF guard), logged once', async () => {
-    const { fn, calls } = fakeScan([result()]);
-    const { w, registry, logs } = await harness({ scan: fn });
-    // Each passes the registry's own row check (canonical http(s) URL on the hostname).
-    const bad = [
-      registry.addRequest(STRANGER, 'printer.local', 'http://printer.local/'),
-      registry.addRequest(STRANGER, '169.254.169.254', 'http://169.254.169.254/latest/meta-data/'),
-      registry.addRequest(STRANGER, '10.0.0.1', 'http://10.0.0.1/'),
-      registry.addRequest(STRANGER, 'metadata.google.internal', 'http://metadata.google.internal/'),
-      registry.addRequest(STRANGER, HOST, `https://${HOST}:8443/`),
-      registry.addRequest(STRANGER, HOST, 'https://evil.org/'),
-      registry.addRequest(STRANGER, 'Upper.Example.org', 'https://upper.example.org/'),
-    ];
-    const d = await w.poll();
-    expect(d).toEqual(bad.map((r) => ({ key: r.key, decision: 'invalid' })));
-    expect(calls).toHaveLength(0);
-    const logged = logs.length;
-    expect(logged).toBe(bad.length);
-    await w.poll();
-    expect(logs).toHaveLength(logged); // decided once, not re-logged every poll
-    expectNoAddressIn(logs);
-  });
-
-  it('ignores blocked requesters (IGRIS_BLOCKED_REQUESTERS), case-insensitively', async () => {
-    const { w, registry, logs } = await harness(
-      {},
-      { blockedRequesters: [STRANGER.toUpperCase().replace('0X', '0x')] },
-    );
-    const r = registry.addRequest(STRANGER, HOST, `https://${HOST}/`);
-    const ok = registry.addRequest(OTHER, 'b.example.org', 'https://b.example.org/');
-    expect(await w.poll()).toEqual([
-      { key: r.key, decision: 'blocked' },
-      { key: ok.key, decision: 'submitted' },
-    ]);
-    expect(logs.join('\n')).toMatch(/ignored — the requester is blocked/);
-    expectNoAddressIn(logs);
-  });
-
-  it('per-creator limit per hour (IGRIS_REQUESTS_PER_CREATOR): over-limit requests wait', async () => {
-    let t = Date.now();
-    const { w, registry, logs, jobs } = await harness(
-      {},
-      { perCreatorPerHour: 1, windowS: 7200, now: () => t },
-    );
-    const a = registry.addRequest(STRANGER, 'a.example.org', 'https://a.example.org/');
-    const b = registry.addRequest(STRANGER, 'b.example.org', 'https://b.example.org/');
-    const c = registry.addRequest(OTHER, 'c.example.org', 'https://c.example.org/');
-    expect(await w.poll()).toEqual([
-      { key: a.key, decision: 'submitted' },
-      { key: b.key, decision: 'rate-limited' },
-      { key: c.key, decision: 'submitted' }, // another creator has its own budget
-    ]);
-    await until(() => jobs.inFlight('a.example.org') === undefined, 'a');
-    await w.poll();
-    expect(logs.filter((l) => l.includes('requests this hour'))).toHaveLength(1); // logged once
-    t += 3_600_000;
-    expect((await w.poll()).find((x) => x.key === b.key)!.decision).toBe('submitted');
-    expectNoAddressIn(logs);
-  });
-
-  it('a busy hostname or a full queue defers the request until there is room', async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((r) => (release = r));
-    const { w, registry, post, waitDone, jobs } = await harness({
-      scan: fakeScan([result()], gate).fn,
-      queue: new JobQueue(1, 0, 60_000),
-    });
-    const own = await post(`/api/sites/${HOST}/scans`);
-    const same = registry.addRequest(STRANGER, HOST, `https://${HOST}/`);
-    const other = registry.addRequest(STRANGER, 'b.example.org', 'https://b.example.org/');
-    const d = await w.poll();
-    expect(d.filter((x) => x.key !== (own.body.request as { key: string }).key)).toEqual([
-      { key: same.key, decision: 'busy' },
-      { key: other.key, decision: 'busy' },
-    ]);
-    release();
-    await waitDone(own.body.id as string);
-    const later = await w.poll();
-    expect(later.find((x) => x.key === same.key)!.decision).toBe('submitted');
-    await waitDone(jobs.forRequest(same.key)!.id);
-    expect((await w.poll()).find((x) => x.key === other.key)!.decision).toBe('submitted');
-  });
-
-  it('never throws: registry failures are logged and retried next poll', async () => {
-    const { w, registry, logs } = await harness();
-    registry.failOpenRequests = new Error(`arkiv rpc down for ${PUBLISHER}`);
-    expect(await w.poll()).toEqual([]);
-    expect(logs.at(-1)).toMatch(/could not read open requests \(arkiv rpc down for 0x…\)/);
-    registry.failOpenRequests = null;
-    const r = registry.addRequest(STRANGER, HOST, `https://${HOST}/`);
-    registry.failFulfilments = new Error('timeout');
-    expect(await w.poll()).toEqual([{ key: r.key, decision: 'error' }]);
-    registry.failFulfilments = null;
-    expect(await w.poll()).toEqual([{ key: r.key, decision: 'submitted' }]);
-    expectNoAddressIn(logs);
-  });
-
-  it('only reads requests inside IGRIS_REQUEST_WINDOW_S', async () => {
-    const { w, registry } = await harness({}, { windowS: 60 });
-    registry.addRequest(STRANGER, HOST, `https://${HOST}/`, registry.nowS() - 3600);
-    expect(await w.poll()).toEqual([]);
-  });
-
-  it('start() polls on its interval without overlap; stop() ends it cleanly', async () => {
-    const { w, registry } = await harness({}, { pollMs: 5 });
-    w.start();
-    w.start(); // idempotent
-    expect(w.isRunning).toBe(true);
-    await until(() => registry.openRequestsCalls >= 3, 'polls');
-    await w.stop();
-    expect(w.isRunning).toBe(false);
-    const n = registry.openRequestsCalls;
-    await sleep(40);
-    expect(registry.openRequestsCalls).toBe(n);
-  });
-
-  it('IGRIS_WORKER default: on in Arkiv mode, off in local mode; explicit 1/0 wins', () => {
-    expect(workerEnabled({ enabled: null }, 'arkiv')).toBe(true);
-    expect(workerEnabled({ enabled: null }, 'local')).toBe(false);
-    expect(workerEnabled({ enabled: true }, 'local')).toBe(true);
-    expect(workerEnabled({ enabled: false }, 'arkiv')).toBe(false);
-  });
-});
-
-describe('worker config (env)', () => {
-  it('defaults and bounds', () => {
-    expect(loadConfig({}).worker).toEqual({
-      enabled: null,
-      pollMs: 15_000,
-      windowS: 3600,
-      perCreatorPerHour: 5,
-      blockedRequesters: [],
-    });
-    expect(
-      loadConfig({
-        IGRIS_WORKER: '0',
-        IGRIS_WORKER_POLL_MS: '2000',
-        IGRIS_REQUEST_WINDOW_S: '600',
-        IGRIS_REQUESTS_PER_CREATOR: '2',
-        IGRIS_BLOCKED_REQUESTERS: ` ${STRANGER.toUpperCase().replace('0X', '0x')} , ${OTHER}`,
-      }).worker,
-    ).toEqual({
-      enabled: false,
-      pollMs: 2000,
-      windowS: 600,
-      perCreatorPerHour: 2,
-      blockedRequesters: [STRANGER, OTHER],
-    });
-    expect(loadConfig({ IGRIS_WORKER: '1' }).worker.enabled).toBe(true);
-    for (const env of [
-      { IGRIS_WORKER: 'yes' },
-      { IGRIS_WORKER_POLL_MS: '10' },
-      { IGRIS_REQUEST_WINDOW_S: '0' },
-      { IGRIS_REQUESTS_PER_CREATOR: '0' },
-      { IGRIS_BLOCKED_REQUESTERS: 'bad address!' },
-    ]) {
-      expect(() => loadConfig(env), JSON.stringify(env)).toThrow();
+    expect(job).toMatchObject({ state: 'completed', version: 1, publish: { ok: true } });
+    expect(job).not.toHaveProperty('request');
+    expect(registry.publishCalls).toBe(1);
+    const site = await get(`/api/sites/${HOST}`);
+    expect(Object.keys(site.body).sort()).toEqual(['hostname', 'scanning', 'versions']);
+    for (const v of site.body.versions as Array<Record<string, unknown>>) {
+      expect(v).not.toHaveProperty('owner');
+      expect(v).not.toHaveProperty('request');
     }
+    const v1 = await get(`/api/sites/${HOST}/versions/1`);
+    expect(v1.status).toBe(200);
+    expect(v1.body).not.toHaveProperty('node');
+    expect(v1.body.scan).not.toHaveProperty('owner');
+  });
+
+  it('one version sequence across trusted keys: changes are shown against the v(n−1) of another key', async () => {
+    diffCalls.length = 0;
+    const h = await start({ info: TWO_TRUSTED });
+    const x = result('2026-11-06T00:00:00.000Z');
+    const y = result('2026-11-06T00:10:00.000Z');
+    await h.registry.publishAs(OTHER, x.report, x.bundle);
+    await h.registry.publishAs(PUBLISHER, y.report, y.bundle);
+    const v2 = await h.get(`/api/sites/${HOST}/versions/2`);
+    expect(v2.body).toMatchObject({ problems: [] });
+    expect(v2.body.changes).not.toBeNull();
+    expect(diffCalls).toHaveLength(1);
   });
 });
 
-describe('job records written before requests existed', () => {
-  it('load with request null', async () => {
+describe('job records of an earlier release', () => {
+  it('load whether or not they carry a request; responses never include it', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'igris-api-'));
     mkdirSync(join(dataDir, 'jobs'), { recursive: true });
-    const id = '44444444-4444-4444-8444-444444444444';
-    const legacy = {
+    const legacy = (id: string, extra: object) => ({
       id,
       hostname: HOST,
       url: `https://${HOST}/`,
@@ -1865,215 +1506,28 @@ describe('job records written before requests existed', () => {
       events: [],
       version: null,
       publish: null,
-    };
+      ...extra,
+    });
+    const without = '44444444-4444-4444-8444-444444444444';
+    const withKey = '77777777-7777-4777-8777-777777777777';
     writeFileSync(
-      join(dataDir, 'jobs', `${id}.json`),
-      JSON.stringify({ job: legacy, scanId: null }),
+      join(dataDir, 'jobs', `${without}.json`),
+      JSON.stringify({ job: legacy(without, {}), scanId: null }),
     );
-    const { get, jobs } = await start({ dataDir });
-    expect((await get(`/api/scans/${id}`)).body.scan).toMatchObject({ request: null });
-    expect(jobs.forRequest(entityKey(1))).toBeUndefined();
-  });
-});
-
-describe('rounds and agreement', () => {
-  /** What a second node might see: no Segment call, Sentry without the hashed address. */
-  function otherView(scannedAt: string): ScanResult {
-    const cap = sampleCapture();
-    cap.requests = cap.requests
-      .filter((r) => !r.url.includes('segment.io'))
-      .map((r) =>
-        r.url.includes('sentry.io')
-          ? { ...r, url: 'https://o1.ingest.sentry.io/api/1/envelope/' }
-          : r,
-      );
-    return sampleResult({ scannedAt, capture: cap });
-  }
-
-  async function twoNodeRound() {
-    const h = await start({ info: TWO_NODES });
-    // An old scan without a request: a round of one.
-    const r0 = result('2026-11-05T00:00:00.000Z');
-    await h.registry.publish(r0.report, r0.bundle);
-    const a = result('2026-11-06T00:00:00.000Z');
-    const posted = await h.post(`/api/sites/${HOST}/scans`);
-    await h.waitDone(posted.body.id as string);
-    const key = (posted.body.request as { key: string }).key;
-    // The other trusted node fulfils the same request with its own observation.
-    const b = otherView('2026-11-06T00:05:00.000Z');
-    await h.registry.publishAs(OTHER, b.report, b.bundle, key);
-    return { ...h, key, a, b };
-  }
-
-  it('site route: versions grouped into rounds (light), nodes as labels', async () => {
-    const { get, key, registry } = await twoNodeRound();
-    const site = await get(`/api/sites/${HOST}`);
-    expect(site.status).toBe(200);
-    const rounds = site.body.rounds as RoundSummary[];
-    expect(rounds).toEqual([
-      {
-        request: {
-          key,
-          hostname: HOST,
-          url: `https://${HOST}/`,
-          requestedAt: registry.requests[0]!.requestedAt,
-          expiresAtBlock: null,
-        },
-        scans: [
-          { version: 3, key: '0xkey3', node: 'Scanner 2' },
-          { version: 2, key: '0xkey2', node: 'Scanner 1' },
-        ],
-      },
-      { request: null, scans: [{ version: 1, key: '0xkey1', node: 'Scanner 1' }] },
-    ]);
-    // Versions keep their shape, minus the signer address.
-    for (const v of site.body.versions as Array<Record<string, unknown>>) {
-      expect(v).not.toHaveProperty('owner');
-      expect(v).toHaveProperty('request');
+    writeFileSync(
+      join(dataDir, 'jobs', `${withKey}.json`),
+      JSON.stringify({
+        job: legacy(withKey, { request: entityKey(1) }),
+        scanId: null,
+        unclaimed: entityKey(2),
+      }),
+    );
+    const { get } = await start({ dataDir });
+    for (const id of [without, withKey]) {
+      const scan = (await get(`/api/scans/${id}`)).body.scan as Record<string, unknown>;
+      expect(scan).toMatchObject({ id, state: 'failed', error: 'boom' });
+      expect(scan).not.toHaveProperty('request');
     }
-    const v3 = await get(`/api/sites/${HOST}/versions/3`);
-    expect(v3.body.node).toBe('Scanner 2');
-    expect(v3.body.scan).not.toHaveProperty('owner');
-  });
-
-  it('round route: loads and verifies each scan; agreement per (domain, class)', async () => {
-    const { get, key, a, b } = await twoNodeRound();
-    const r = await get(`/api/sites/${HOST}/rounds/${key}`);
-    expect(r.status).toBe(200);
-    expect(Object.keys(r.body).sort()).toEqual(['agreement', 'request', 'scans']);
-    expect(r.body.request).toMatchObject({ key, hostname: HOST });
-    const scans = r.body.scans as Array<{
-      scan: Record<string, unknown>;
-      node: string;
-      verified: boolean;
-    }>;
-    expect(scans.map((s) => [s.scan.version, s.node, s.verified])).toEqual([
-      [3, 'Scanner 2', true],
-      [2, 'Scanner 1', true],
-    ]);
-    for (const s of scans) expect(s.scan).not.toHaveProperty('owner');
-
-    const agreement = r.body.agreement as Agreement;
-    expect(agreement).toEqual(
-      compareRound([
-        { node: 'Scanner 1', report: a.report },
-        { node: 'Scanner 2', report: b.report },
-      ]),
-    );
-    expect(agreement.nodes).toEqual(['Scanner 1', 'Scanner 2']);
-    const status = (domain: string) =>
-      agreement.rows.find((x) => x.registrableDomain === domain)?.status;
-    // Sanity of the fixture: Sentry got a hashed address on node 1 only.
-    const sentry = (rep: ReportV3) =>
-      rep.recipients.find((x) => x.registrableDomain === 'sentry.io')?.learned.address;
-    expect([sentry(a.report), sentry(b.report)]).toEqual(['hashed', 'none']);
-    expect(status('segment.io')).toBe('partial');
-    expect(status('sentry.io')).toBe('differ');
-    expect(status('infura.io')).toBe('agree');
-    const { agree, differ, partial } = agreement.summary;
-    expect(agree + differ + partial).toBe(agreement.rows.length);
-    expect([agree > 0, differ > 0, partial > 0]).toEqual([true, true, true]);
-  });
-
-  it('an unverified scan is shown as such and left out of the agreement', async () => {
-    const { get, key, registry } = await twoNodeRound();
-    const p = registry.payloads.get('0xkey3')!;
-    p.report = { ...p.report, scan: { ...p.report.scan, notes: ['tampered'] } };
-    const r = await get(`/api/sites/${HOST}/rounds/${key}`);
-    expect((r.body.scans as Array<{ verified: boolean }>).map((s) => s.verified)).toEqual([
-      false,
-      true,
-    ]);
-    expect(r.body.agreement).toBeNull(); // one verified node agrees with nobody
-  });
-
-  it("one version sequence across nodes: changes are shown against another trusted node's v(n−1)", async () => {
-    diffCalls.length = 0;
-    const h = await start({ info: TWO_NODES });
-    const x = result('2026-11-06T00:00:00.000Z');
-    const y = result('2026-11-06T00:10:00.000Z');
-    await h.registry.publishAs(PUBLISHER, x.report, x.bundle);
-    await h.registry.publishAs(OTHER, y.report, y.bundle);
-    const v2 = await h.get(`/api/sites/${HOST}/versions/2`);
-    expect(v2.body).toMatchObject({ node: 'Scanner 2', problems: [] });
-    expect(v2.body.changes).not.toBeNull();
-    expect(diffCalls).toHaveLength(1);
-  });
-
-  it('a round with one node has no agreement; a node scanning twice counts once (its newest)', async () => {
-    const h = await start({ info: TWO_NODES });
-    const r = h.registry.addRequest(STRANGER, HOST, `https://${HOST}/`);
-    const x = result('2026-11-06T00:00:00.000Z');
-    const y = result('2026-11-06T00:10:00.000Z');
-    await h.registry.publishAs(PUBLISHER, x.report, x.bundle, r.key);
-    await h.registry.publishAs(PUBLISHER, y.report, y.bundle, r.key);
-    const round = await h.get(`/api/sites/${HOST}/rounds/${r.key}`);
-    expect(round.body.agreement).toBeNull();
-    expect((round.body.scans as unknown[]).length).toBe(2);
-  });
-
-  it('400 malformed key; 404 unknown request or a request for another site', async () => {
-    const { get, registry } = await start();
-    expect((await get(`/api/sites/${HOST}/rounds/nope`)).status).toBe(400);
-    expect((await get(`/api/sites/${HOST}/rounds/0xkey1`)).status).toBe(400);
-    expect((await get(`/api/sites/localhost/rounds/${entityKey(1)}`)).status).toBe(400);
-    const unknown = await get(`/api/sites/${HOST}/rounds/${entityKey(99)}`);
-    expect(unknown.status).toBe(404);
-    expect(unknown.body.error).toMatch(/no scan request/);
-    const elsewhere = registry.addRequest(
-      STRANGER,
-      'other.example.org',
-      'https://other.example.org/',
-    );
-    expect((await get(`/api/sites/${HOST}/rounds/${elsewhere.key}`)).status).toBe(404);
-    // A request nobody fulfilled yet: no scans, no agreement.
-    const open = registry.addRequest(STRANGER, HOST, `https://${HOST}/`);
-    const r = await get(`/api/sites/${HOST}/rounds/${open.key}`);
-    expect(r.body).toMatchObject({ scans: [], agreement: null });
-  });
-
-  it('a trusted scan pointing at a request that is gone (expired) is still grouped, with request null', async () => {
-    const h = await start({ info: TWO_NODES });
-    const x = result('2026-11-06T00:00:00.000Z');
-    await h.registry.publishAs(OTHER, x.report, x.bundle, entityKey(77));
-    const site = await h.get(`/api/sites/${HOST}`);
-    expect(site.body.rounds).toEqual([
-      { request: null, scans: [{ version: 1, key: '0xkey1', node: 'Scanner 2' }] },
-    ]);
-  });
-
-  it('round reads are rate limited like other expensive reads', async () => {
-    const { get, key } = await (async () => {
-      const h = await start({ cfg: { readRateLimitMax: 1 } });
-      const posted = await h.post(`/api/sites/${HOST}/scans`);
-      await h.waitDone(posted.body.id as string);
-      return { ...h, key: (posted.body.request as { key: string }).key };
-    })();
-    expect((await get(`/api/sites/${HOST}/rounds/${key}`)).status).toBe(200);
-    expect((await get(`/api/sites/${HOST}/rounds/${key}`)).status).toBe(429);
-  });
-});
-
-describe('GET /api/nodes', () => {
-  it('labels only: this node first, then IGRIS_TRUSTED_SCANNERS order', async () => {
-    const { get } = await start({ info: TWO_NODES });
-    const r = await get('/api/nodes');
-    expect(r.body).toEqual({
-      nodes: [
-        { label: 'Scanner 1', self: true },
-        { label: 'Scanner 2', self: false },
-      ],
-    });
-    expect(JSON.stringify(r.body)).not.toMatch(ADDRESS_RE);
-  });
-
-  it('a read-only node has no self', async () => {
-    const { get } = await start({
-      info: { ...READY, publisher: null, ready: false, trustedOwners: [OTHER] },
-    });
-    expect((await get('/api/nodes')).body).toEqual({
-      nodes: [{ label: 'Scanner 1', self: false }],
-    });
   });
 });
 
@@ -2151,86 +1605,39 @@ describe('GET /api/wallet-requests', () => {
   });
 });
 
-describe('integration: requests on the real LocalSiteRegistry (two local nodes, one file)', () => {
-  it('node 2 requests, node 1 worker fulfils, node 2 fulfils too: one round, agreement', async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), 'igris-api-net-'));
+describe('integration: history published earlier by another key (real LocalSiteRegistry)', () => {
+  it('a retest here becomes the next version, linked to and diffed against it', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'igris-api-trusted-'));
     const file = join(dataDir, 'registry.json');
-    const trustedOwners = ['local', 'node-b'];
-    const nodeA = new LocalSiteRegistry({ file, publisher: 'local', trustedOwners });
-    const nodeB = new LocalSiteRegistry({ file, publisher: 'node-b', trustedOwners });
-    const ra = result('2026-11-06T00:00:00.000Z');
+    const trustedOwners = ['local', 'earlier-key'];
+    const earlier = new LocalSiteRegistry({ file, publisher: 'earlier-key', trustedOwners });
+    const here = new LocalSiteRegistry({ file, publisher: 'local', trustedOwners });
+    const r1 = result('2026-11-06T00:00:00.000Z');
+    const v1 = (await earlier.publish(r1.report, r1.bundle)).scan;
+    const r2 = result('2026-11-06T00:05:00.000Z');
     const h = await start({
-      registry: nodeA,
+      registry: here,
       dataDir,
       diff: diffVersions,
       info: { ...READY, mode: 'local', publisher: 'local', network: 'local', trustedOwners },
-      scan: fakeScan([ra]).fn,
+      scan: fakeScan([r2]).fn,
     });
-    const req = await nodeB.createRequest(HOST, `https://${HOST}/`);
-    const logs: string[] = [];
-    const w = new RequestWorker({
-      registry: nodeA,
-      jobs: h.jobs,
-      self: 'local',
-      allowedPorts: [80, 443],
-      isPublicAddress,
-      pollMs: 10,
-      windowS: 3600,
-      perCreatorPerHour: 5,
-      blockedRequesters: [],
-      log: (m) => logs.push(m),
-    });
-    expect(await w.poll()).toEqual([{ key: req.key, decision: 'submitted' }]);
-    const job = await h.waitDone(h.jobs.forRequest(req.key)!.id);
-    expect(job).toMatchObject({ version: 1, publish: { ok: true, mode: 'local' } });
-    expect((await nodeA.fulfilments(req.key)).map((s) => s.owner)).toEqual(['local']);
-
-    const rb = result('2026-11-06T00:05:00.000Z');
-    await nodeB.publish(rb.report, rb.bundle, { request: req.key });
-    const site = await h.get(`/api/sites/${HOST}`);
-    expect(site.body.rounds).toEqual([
-      {
-        request: expect.objectContaining({ key: req.key, hostname: HOST }),
-        scans: [
-          { version: 2, key: expect.any(String), node: 'Scanner 2' },
-          { version: 1, key: expect.any(String), node: 'Scanner 1' },
-        ],
-      },
+    const job = await h.waitDone((await h.post(`/api/sites/${HOST}/scans`)).body.id as string);
+    expect(job).toMatchObject({ version: 2, publish: { ok: true, mode: 'local' } });
+    const versions = (await h.get(`/api/sites/${HOST}`)).body.versions as PublishedScan[];
+    expect(versions.map((v) => [v.version, v.previous])).toEqual([
+      [2, v1.key],
+      [1, null],
     ]);
-    const round = await h.get(`/api/sites/${HOST}/rounds/${req.key}`);
-    expect(round.status).toBe(200);
-    const agreement = round.body.agreement as Agreement;
-    expect(agreement.nodes).toEqual(['Scanner 1', 'Scanner 2']);
-    // Same behaviour seen by both nodes: every recipient agrees.
-    expect(agreement.summary).toEqual({ agree: agreement.rows.length, differ: 0, partial: 0 });
-    // Fulfilled by this node now: skipped from here on (even after a restart).
-    expect(await w.poll()).toEqual([{ key: req.key, decision: 'attempted' }]);
-    const fresh = new RequestWorker({
-      registry: nodeA,
-      jobs: new SiteScanService({
-        dataDir: mkdtempSync(join(tmpdir(), 'igris-api-net2-')),
-        queue: new JobQueue(1, 4, 60_000),
-        scan: fakeScan([ra]).fn,
-        registry: nodeA,
-        egress: { mode: 'public-only', allowedPorts: [80, 443] },
-        dwellMs: 1000,
-      }),
-      self: 'local',
-      allowedPorts: [80, 443],
-      isPublicAddress,
-      pollMs: 10,
-      windowS: 3600,
-      perCreatorPerHour: 5,
-      blockedRequesters: [],
-    });
-    expect(await fresh.poll()).toEqual([{ key: req.key, decision: 'fulfilled' }]);
+    const v2 = await h.get(`/api/sites/${HOST}/versions/2`);
+    expect(v2.body).toMatchObject({ verified: true, problems: [] });
+    expect(v2.body.changes).toEqual(diffVersions(r1.report, r2.report));
   });
 });
 
 // ---------------------------------------------------------------------------
-// Regressions: wallet-request audit + open scan requests review
+// Regressions: wallet-request audit review
 // ---------------------------------------------------------------------------
-
 describe('regression: job errors and logs never carry an address (errText)', () => {
   const leak = `insufficient funds for gas * price + value: address ${PUBLISHER} have 0 want 1`;
 
@@ -2288,134 +1695,11 @@ describe('regression: job errors and logs never carry an address (errText)', () 
   });
 });
 
-describe('regression: GET /api/sites/:hostname is bounded and never fails on a request lookup', () => {
-  /** Count (and optionally fail) registry.request calls. */
-  function countRequests(registry: FakeRegistry) {
-    const orig = registry.request.bind(registry);
-    const c = { calls: 0, fail: null as Error | null };
-    registry.request = async (key: string) => {
-      c.calls += 1;
-      if (c.fail) throw c.fail;
-      return orig(key);
-    };
-    return c;
-  }
-
-  it('request() throws → 200 with rounds (request null); logged without addresses, not cached', async () => {
-    const logs: string[] = [];
-    const h = await start({ log: (m) => logs.push(m) });
-    const req = h.registry.addRequest(STRANGER, HOST, `https://${HOST}/`);
-    const r = result();
-    await h.registry.publish(r.report, r.bundle, { request: req.key });
-    const c = countRequests(h.registry);
-    c.fail = new Error(`rpc down (signer ${PUBLISHER})`);
-    const site = await h.get(`/api/sites/${HOST}`);
-    expect(site.status).toBe(200);
-    expect(site.body.rounds).toEqual([
-      { request: null, scans: [{ version: 1, key: '0xkey1', node: 'Scanner 1' }] },
-    ]);
-    expect(logs.join('\n')).toMatch(/could not be read/);
-    expectNoAddressIn(logs);
-    // An error is not a miss: once the registry answers, the request shows.
-    c.fail = null;
-    const again = await h.get(`/api/sites/${HOST}`);
-    expect((again.body.rounds as RoundSummary[])[0]!.request).toMatchObject({ key: req.key });
-  });
-
-  it('a request not found is cached for the TTL (10 min by default); one found, for good', async () => {
-    let t = 0;
-    const h = await start({ requestCache: { nullTtlMs: 1000, now: () => t } });
-    const key = entityKey(77);
-    const r = result();
-    await h.registry.publish(r.report, r.bundle, { request: key });
-    const c = countRequests(h.registry);
-    await h.get(`/api/sites/${HOST}`);
-    await h.get(`/api/sites/${HOST}`);
-    expect(c.calls).toBe(1);
-    t = 1001;
-    await h.get(`/api/sites/${HOST}`);
-    expect(c.calls).toBe(2);
-    h.registry.requests.push({
-      key,
-      creator: STRANGER,
-      hostname: HOST,
-      url: `https://${HOST}/`,
-      requestedAt: 1,
-      expiresAtBlock: null,
-    });
-    t = 2002;
-    const found = await h.get(`/api/sites/${HOST}`);
-    expect((found.body.rounds as RoundSummary[])[0]!.request).toMatchObject({ key });
-    expect(c.calls).toBe(3);
-    t = 1e12;
-    await h.get(`/api/sites/${HOST}`);
-    expect(c.calls).toBe(3);
-  });
-
-  it(`looks up the requests of the newest ${ROUND_REQUEST_VERSIONS} versions only (distinct keys)`, async () => {
-    const h = await start();
-    const r = result();
-    const base = (await h.registry.publish(r.report, r.bundle)).scan;
-    h.registry.scans.length = 0;
-    const n = ROUND_REQUEST_VERSIONS + 10;
-    for (let v = 1; v <= n; v++) {
-      // Two versions per request key for the newest ones: still one lookup each.
-      const k = v > n - 4 ? entityKey(1000) : entityKey(1000 + v);
-      h.registry.scans.push({ ...base, key: `0xkey${v}`, version: v, request: k });
-    }
-    const c = countRequests(h.registry);
-    const site = await h.get(`/api/sites/${HOST}`);
-    expect(site.status).toBe(200);
-    const distinctNewest = new Set(
-      h.registry.scans.filter((s) => s.version > n - ROUND_REQUEST_VERSIONS).map((s) => s.request),
-    ).size;
-    expect(c.calls).toBe(distinctNewest);
-    expect(c.calls).toBeLessThanOrEqual(ROUND_REQUEST_VERSIONS);
-    expect((site.body.versions as unknown[]).length).toBe(n);
-  });
-
+describe('regression: GET /api/sites/:hostname is an expensive read', () => {
   it('site reads are rate limited like other expensive reads', async () => {
     const { get } = await start({ cfg: { readRateLimitMax: 1 } });
     expect((await get(`/api/sites/${HOST}`)).status).toBe(200);
     expect((await get(`/api/sites/${HOST}`)).status).toBe(429);
-  });
-});
-
-describe('regression: a round whose request entity expired is still served', () => {
-  it('200 with request null and the agreement when trusted scans reference the key; 404 when none do', async () => {
-    const h = await start({ info: TWO_NODES });
-    const key = entityKey(77); // never (or no longer) on the registry
-    const x = result('2026-11-06T00:00:00.000Z');
-    const y = result('2026-11-06T00:05:00.000Z');
-    await h.registry.publishAs(PUBLISHER, x.report, x.bundle, key);
-    await h.registry.publishAs(OTHER, y.report, y.bundle, key);
-    const round = await h.get(`/api/sites/${HOST}/rounds/${key}`);
-    expect(round.status).toBe(200);
-    expect(round.body.request).toBeNull();
-    expect(
-      (round.body.scans as Array<{ node: string; verified: boolean }>).map((s) => s.node),
-    ).toEqual(['Scanner 2', 'Scanner 1']);
-    const agreement = round.body.agreement as Agreement;
-    expect(agreement.nodes).toEqual(['Scanner 1', 'Scanner 2']);
-    expect(agreement.summary.differ).toBe(0);
-    expect(agreement.summary.partial).toBe(0);
-
-    // A request lookup that fails reads as an expired one.
-    const orig = h.registry.request.bind(h.registry);
-    h.registry.request = async () => {
-      throw new Error('rpc down');
-    };
-    expect((await h.get(`/api/sites/${HOST}/rounds/${key}`)).body.request).toBeNull();
-    h.registry.request = orig;
-
-    const nobody = await h.get(`/api/sites/${HOST}/rounds/${entityKey(78)}`);
-    expect(nobody.status).toBe(404);
-    // Scans of ANOTHER site referencing the key do not make it this site's round.
-    const z = result('2026-11-06T00:10:00.000Z', { target: 'https://other.example.org/' });
-    expect(new URL(z.report.scan.target).hostname).toBe('other.example.org');
-    await h.registry.publishAs(PUBLISHER, z.report, z.bundle, entityKey(79));
-    expect((await h.get(`/api/sites/other.example.org/rounds/${entityKey(79)}`)).status).toBe(200);
-    expect((await h.get(`/api/sites/${HOST}/rounds/${entityKey(79)}`)).status).toBe(404);
   });
 });
 
@@ -2496,73 +1780,6 @@ describe('regression: a draft 3.0.0 scan in the cache (before walletRequests)', 
     registry.scans[0] = { ...registry.scans[0]!, evidenceSha256: 'f'.repeat(64) };
     const bad = await get(`/api/sites/${HOST}/versions/1`);
     expect(bad.body.problems).toContain('evidence hash does not match evidenceSha256');
-  });
-});
-
-describe('regression: an idempotent republish does not claim a request it does not carry', () => {
-  it('the registry already held this scan without the request → job.request null, with a note', async () => {
-    const r = result();
-    const logs: string[] = [];
-    const { jobs, registry, waitDone, dataDir } = await start({
-      scan: fakeScan([r]).fn,
-      log: (m) => logs.push(m),
-    });
-    await registry.publish(r.report, r.bundle); // the same report, no request
-    const req = registry.addRequest(STRANGER, HOST, `https://${HOST}/`);
-    const job = jobs.submit(HOST, `https://${HOST}/`, { request: req.key });
-    const done = await waitDone(job.id);
-    expect(registry.publishRequests.at(-1)).toBe(req.key);
-    expect(done).toMatchObject({
-      state: 'completed',
-      version: 1,
-      request: null,
-      publish: {
-        ok: true,
-        note: expect.stringMatching(/without a request; it does not fulfil request/),
-      },
-    });
-    // Still attempted by this node (the worker does not re-scan it), across a restart too.
-    expect(jobs.forRequest(req.key)?.id).toBe(job.id);
-    const restarted = new SiteScanService({
-      dataDir,
-      queue: new JobQueue(1, 4, 60_000),
-      scan: fakeScan([r]).fn,
-      registry,
-      egress: { mode: 'public-only', allowedPorts: [443] },
-      dwellMs: 1000,
-    });
-    expect(restarted.forRequest(req.key)).toMatchObject({ id: job.id, request: null });
-    expectNoAddressIn(logs);
-  });
-
-  it('a version carrying the request is claimed as before (no note)', async () => {
-    const r = result();
-    const { jobs, registry, waitDone } = await start({ scan: fakeScan([r]).fn });
-    const req = registry.addRequest(STRANGER, HOST, `https://${HOST}/`);
-    await registry.publish(r.report, r.bundle, { request: req.key });
-    const done = await waitDone(jobs.submit(HOST, `https://${HOST}/`, { request: req.key }).id);
-    expect(done.request).toBe(req.key);
-    expect(done.publish).not.toHaveProperty('note');
-  });
-
-  it('after a restart, adopting a version published for another request does not claim it', async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), 'igris-api-'));
-    const r = result();
-    const scanId = writeCachedScan(dataDir, r.report, r.bundle);
-    const registry = new FakeRegistry();
-    await registry.publish(r.report, r.bundle, { request: entityKey(5) });
-    const id = '66666666-6666-4666-8666-666666666666';
-    writeInterruptedPublish(dataDir, id, scanId);
-    const file = join(dataDir, 'jobs', `${id}.json`);
-    const rec = JSON.parse(readFileSync(file, 'utf8')) as { job: Job; scanId: string };
-    rec.job.request = entityKey(6);
-    writeFileSync(file, JSON.stringify(rec));
-    const { get } = await start({ registry, dataDir });
-    expect((await get(`/api/scans/${id}`)).body.scan).toMatchObject({
-      version: 1,
-      request: null,
-      publish: { ok: true, note: expect.stringContaining(`for request ${entityKey(5)}`) },
-    });
   });
 });
 

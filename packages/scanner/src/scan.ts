@@ -93,6 +93,13 @@ export interface ScanOptions {
    * the returned report has status page-load-failed and coverage none.
    */
   signal?: AbortSignal;
+  /**
+   * Run Chromium inside its own OS sandbox (default false). Needs a host
+   * that allows it (Docker: --cap-add=SYS_ADMIN or a Chrome seccomp
+   * profile); when it cannot start, the scan fails — it never silently
+   * falls back to an unsandboxed browser.
+   */
+  chromiumSandbox?: boolean;
 }
 
 async function settle(page: import('playwright').Page, dwellMs: number): Promise<void> {
@@ -189,10 +196,11 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       args.push(...egressChromiumArgs(egressProxy.url));
     }
     if (args.length) launchOptions.args = args;
+    if (options.chromiumSandbox === true) launchOptions.chromiumSandbox = true;
     emit(
       'browser',
       'started',
-      `isolated Chromium, egress ${options.egress?.mode ?? 'unrestricted'}${egressProxy ? ' (filtering proxy)' : ''}`,
+      `isolated Chromium${options.chromiumSandbox === true ? ' (OS sandbox on)' : ''}, egress ${options.egress?.mode ?? 'unrestricted'}${egressProxy ? ' (filtering proxy)' : ''}`,
     );
     browser = await chromium.launch(launchOptions);
     if (aborted) throw new Error('scan aborted');

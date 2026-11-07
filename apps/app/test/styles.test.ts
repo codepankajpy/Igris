@@ -56,7 +56,7 @@ describe('red is reserved for "the address reached a tracking/unidentified recip
   });
 });
 
-describe('wallet-request risks and agreement statuses use the neutral emphasis, never the signal red', () => {
+describe('wallet-request risks use the neutral emphasis, never the signal red', () => {
   const neutral = [
     '.wr-flag',
     '.wr-flag::before',
@@ -64,11 +64,6 @@ describe('wallet-request risks and agreement statuses use the neutral emphasis, 
     '.wr-emph',
     '.tl-wr path',
     '.tl-wr.risk path',
-    '.chip.st-agree',
-    '.chip.st-differ',
-    '.chip.st-partial',
-    '.agreement-unverified',
-    '.chip.node-chip',
   ];
   for (const sel of neutral)
     it(`${sel} is drawn without the signal red`, () => {

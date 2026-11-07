@@ -29,7 +29,6 @@ import { buildLookup } from '../report/lookup.js';
 import { RecipientsSection } from '../report/Recipients.js';
 import { RpcSection } from '../report/Rpc.js';
 import { WalletRequestsSection } from '../report/WalletRequests.js';
-import { nodeLabel } from '../rounds.js';
 import {
   ChangesSection,
   FindingsSection,
@@ -97,9 +96,6 @@ export function ReportView({
             <StateChip state={summary.state} />
             <span class="chip">{scan ? `v${scan.version}` : 'not published'}</span>
             <span class="chip">{stamp(scan ? scan.scannedAt : report.scan.scannedAt)}</span>
-            {data.node !== null && (
-              <span class="chip node-chip">Scanned by {nodeLabel(data.node)}</span>
-            )}
             {report.privacy.coverage === 'pre-connect-only' && (
               <span class="chip">before connecting only</span>
             )}

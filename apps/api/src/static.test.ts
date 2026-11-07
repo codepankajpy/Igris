@@ -191,11 +191,7 @@ describe('blank values (a copied .env.example) mean "not set"', () => {
         'IGRIS_RATE_LIMIT_MAX',
         'IGRIS_READ_RATE_LIMIT_MAX',
         'IGRIS_RATE_LIMIT_WINDOW_MS',
-        'IGRIS_WORKER',
-        'IGRIS_WORKER_POLL_MS',
-        'IGRIS_REQUEST_WINDOW_S',
-        'IGRIS_REQUESTS_PER_CREATOR',
-        'IGRIS_BLOCKED_REQUESTERS',
+        'IGRIS_CHROMIUM_SANDBOX',
       ].map((k) => [k, '']),
     );
     expect(loadConfig(blank)).toEqual(loadConfig({}));

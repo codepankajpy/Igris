@@ -4,9 +4,7 @@
  * Writes: one atomic `executeBatch` per published version — 1 igris.scan.v2
  * + 1 igris.evidence.v1 + N igris.flow.v1 + M igris.walletreq.v1 creates,
  * all readonly and signed by the scanner key; the whole batch lands or none
- * of it does. `createRequest` writes one igris.request.v1 (readonly +
- * permissionlessExtension, 7-day expiry); requests of other creators are
- * read whether readonly or not.
+ * of it does.
  *
  * Reads: raw `arkiv_query` JSON-RPC calls, with query strings built by the
  * SDK's expression builders, filtered server-side to `trustedOwners` AND
@@ -25,8 +23,6 @@ import {
   and,
   checkAgainstSchema,
   eq,
-  gte,
-  lte,
   or,
   projectSelection,
   type Expression,
@@ -39,23 +35,14 @@ import type { EvidenceBundle, ReportV3 } from '@igris/core';
 import type { LoadedScanner } from './identity.js';
 import type { WalletRequestKind } from '@igris/core';
 import { estimateBatchGas, MAX_TRANSACTION_GAS } from './gas.js';
-import {
-  buildPublication,
-  canonicalRequestUrl,
-  withVersion,
-  type VersionedPublication,
-} from './payload.js';
+import { buildPublication, withVersion, type VersionedPublication } from './payload.js';
 import {
   ARKIV_FORMAT,
   ARKIV_KEY_RE,
   ARKIV_OWNER_RE,
-  MAX_UNIX,
   PUBLISHED_WALLET_REQUEST_KINDS,
-  REQUEST_CLOCK_SKEW_S,
-  RequestPicker,
   SHA256_RE,
   byNewestFlow,
-  byRequestedAt,
   byVersionDesc,
   isHostname,
   isOfVersion,
@@ -63,7 +50,6 @@ import {
   ownerSet,
   parseEvidenceRow,
   parseFlowRow,
-  parseRequestRow,
   parseScanRow,
   parseWalletRequestRow,
   scanReportPayload,
@@ -73,7 +59,6 @@ import {
 import {
   EvidenceSchema,
   FlowSchema,
-  RequestSchema,
   SCAN_LIST_COLUMNS,
   ScanSchema,
   WalletRequestSchema,
@@ -85,7 +70,6 @@ import {
   type LoadedScan,
   type PublishedScan,
   type PublishResult,
-  type ScanRequest,
   type SiteRegistry,
   type WalletRequestEntity,
 } from './site-registry.js';
@@ -97,21 +81,11 @@ export const ARKIV_NETWORK = 'rabdi';
 /** Default entity lifetime: as long as Arkiv allows, rounded down (max ≈ 182.5 days). */
 export const DEFAULT_EXPIRY_DAYS = 180;
 export const MAX_EXPIRY_DAYS = 182;
-/** Lifetime of an igris.request.v1 (anyone may extend it: permissionlessExtension). */
-export const REQUEST_EXPIRY_DAYS = 7;
-/** Default / largest number of requests openRequests returns. */
-const DEFAULT_REQUESTS = 100;
 /** Arkiv's page size limit. */
 const PAGE = 100;
 const DEFAULT_LIMIT = 50;
 /** Upper bound on rows one read walks (pages of 100). */
 const MAX_ROWS = 1000;
-/**
- * Upper bound on request rows openRequests walks. Higher than MAX_ROWS: rows
- * of a creator over its per-creator cap are skipped and reading goes on, so
- * one creator must write this many in-window requests to hide anyone else's.
- */
-export const MAX_REQUEST_ROWS = 5000;
 /** Hostnames resolved per "latest version" query in flowsTo (one OR group). */
 const HOSTS_PER_QUERY = 25;
 
@@ -136,8 +110,6 @@ export interface ArkivSiteRegistryOptions {
   expiryDays?: number;
   /** Tests only: replace the node calls. */
   io?: Partial<ArkivIo>;
-  /** Clock for requestedAt, unix seconds (default: the system clock). */
-  now?: () => number;
 }
 
 /** A query string: schema tag AND filters (validated against the schema), optional sort. */
@@ -180,9 +152,6 @@ const WALLET_REQUEST_SELECT = listSelect(
   WalletRequestSchema,
   Object.keys(WalletRequestSchema.columns),
 );
-const REQUEST_SELECT = listSelect(RequestSchema, Object.keys(RequestSchema.columns));
-
-const systemNow = (): number => Math.floor(Date.now() / 1000);
 
 function checksummed<T extends { owner: string }>(row: T): T {
   return { ...row, owner: getAddress(row.owner) };
@@ -195,11 +164,9 @@ export class ArkivSiteRegistry implements SiteRegistry {
   readonly trustedOwners: string[];
   readonly expiryDays: number;
   private readonly io: ArkivIo;
-  private readonly now: () => number;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(opts: ArkivSiteRegistryOptions) {
-    this.now = opts.now ?? systemNow;
     const expiryDays = opts.expiryDays ?? DEFAULT_EXPIRY_DAYS;
     if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > MAX_EXPIRY_DAYS) {
       throw new Error(`expiryDays must be an integer in 1..${MAX_EXPIRY_DAYS}, got ${expiryDays}`);
@@ -546,115 +513,8 @@ export class ArkivSiteRegistry implements SiteRegistry {
     return this.onlyLatestVersions(rows, limit);
   }
 
-  // --- open scan requests (docs/design/SCAN-NETWORK.md) ------------------------
-
-  /** The batch one request writes: readonly + permissionlessExtension, 7-day expiry. */
-  requestBatch(hostname: string, url: string, requestedAt: number): ExecuteBatchParameters {
-    return {
-      creates: [
-        {
-          schema: RequestSchema,
-          values: { hostname, url, requestedAt: u64(BigInt(requestedAt)) },
-          expiration: ExpirationTime.fromDays(REQUEST_EXPIRY_DAYS),
-          // readonly: the URL can never be patched after a node fulfilled it
-          // (readonly does not block extension: Arkiv's ReadOnlyEntity rule
-          // leaves expiry, transfer and delete open).
-          flags: { readonly: true, permissionlessExtension: true },
-        },
-      ],
-    } as unknown as ExecuteBatchParameters;
-  }
-
-  async createRequest(hostname: string, url: string): Promise<ScanRequest> {
-    const creator = this.publisher;
-    if (creator === null)
-      throw new PublishRefusedError('this registry is read-only (no scanner key)');
-    const href = canonicalRequestUrl(hostname, url);
-    const requestedAt = this.now();
-    if (!Number.isSafeInteger(requestedAt) || requestedAt < 1 || requestedAt > MAX_UNIX)
-      throw new Error(`invalid clock value ${requestedAt}`);
-    const { txHash, createdEntities } = await this.io.executeBatch(
-      this.requestBatch(hostname, href, requestedAt),
-    );
-    const k = createdEntities[0];
-    if (createdEntities.length !== 1 || k === undefined || !ARKIV_KEY_RE.test(k)) {
-      throw new Error(
-        `Arkiv batch ${txHash} created ${createdEntities.length} entities, expected 1 request`,
-      );
-    }
-    return { key: k, creator, hostname, url: href, requestedAt, expiresAtBlock: null };
-  }
-
-  async request(entityKey: string): Promise<ScanRequest | null> {
-    if (typeof entityKey !== 'string' || !ARKIV_KEY_RE.test(entityKey)) return null;
-    // Any creator: anyone may ask for a scan. The row itself is checked strictly.
-    const q = buildQuery(RequestSchema, [eq('$key', key(entityKey as Hex))]);
-    const rows = await this.fetchRows(q, REQUEST_SELECT, 1);
-    const now = this.now();
-    const r = rows
-      .map((row) => parseRequestRow(row, ARKIV_FORMAT, { now }))
-      .find((x) => x !== null && x.key.toLowerCase() === entityKey.toLowerCase());
-    return r ? { ...r, creator: getAddress(r.creator) } : null;
-  }
-
-  /**
-   * Requests with since ≤ requestedAt ≤ now + REQUEST_CLOCK_SKEW_S, any
-   * creator, at most `limit` (default 100, ≤ 1000): the NEWEST ones when
-   * there are more (so a burst of old requests cannot hide new ones), at
-   * most MAX_REQUESTS_PER_CREATOR per creator, returned oldest first. Rows
-   * are read newest first; a creator over its cap is skipped and reading
-   * goes on (up to MAX_REQUEST_ROWS rows), so one creator's flood cannot
-   * hide other creators' requests.
-   */
-  async openRequests(opts: { since: number; limit?: number }): Promise<ScanRequest[]> {
-    const since = opts.since;
-    if (!Number.isSafeInteger(since) || since < 0 || since > MAX_UNIX) return [];
-    const limit = Math.max(1, Math.min(opts.limit ?? DEFAULT_REQUESTS, MAX_ROWS));
-    const now = this.now();
-    if (!Number.isSafeInteger(now)) return [];
-    const latest = Math.min(now + REQUEST_CLOCK_SKEW_S, MAX_UNIX);
-    if (since > latest) return [];
-    const q = buildQuery(
-      RequestSchema,
-      [gte('requestedAt', u64(BigInt(since))), lte('requestedAt', u64(BigInt(latest)))],
-      { name: 'requestedAt', type: 'u64', dir: 'DESC' },
-    );
-    const picker = new RequestPicker(limit);
-    for (let offset = 0; offset < MAX_REQUEST_ROWS && !picker.full; offset += PAGE) {
-      const page = await this.fetchPage(q, REQUEST_SELECT, PAGE, offset);
-      page
-        .map((row) => parseRequestRow(row, ARKIV_FORMAT, { now }))
-        .filter((r): r is ScanRequest => r !== null && r.requestedAt >= since)
-        .sort((a, b) => byRequestedAt(b, a)) // newest first within the page too
-        .forEach((r) => picker.offer(r));
-      if (page.length < PAGE) break;
-    }
-    return picker.result().map((r) => ({ ...r, creator: getAddress(r.creator) }));
-  }
-
-  async fulfilments(requestKey: string): Promise<PublishedScan[]> {
-    if (typeof requestKey !== 'string' || !ARKIV_KEY_RE.test(requestKey)) return [];
-    if (this.trustedOwners.length === 0) return [];
-    const k = requestKey.toLowerCase();
-    const q = buildQuery(ScanSchema, [eq('request', k), ownersFilter(this.trustedOwners)], {
-      name: 'version',
-      type: 'i32',
-      dir: 'DESC',
-    });
-    return this.trustedScans(
-      await this.fetchRows(q, SCAN_LIST_SELECT, MAX_ROWS),
-      this.trustedOwners,
-    )
-      .filter((s) => s.request?.toLowerCase() === k)
-      .sort(byVersionDesc);
-  }
-
-  publish(
-    report: ReportV3,
-    bundle: EvidenceBundle,
-    opts: { request?: string } = {},
-  ): Promise<PublishResult> {
-    const run = this.queue.then(() => this.publishNow(report, bundle, opts.request));
+  publish(report: ReportV3, bundle: EvidenceBundle): Promise<PublishResult> {
+    const run = this.queue.then(() => this.publishNow(report, bundle));
     this.queue = run.catch(() => undefined);
     return run;
   }
@@ -689,16 +549,10 @@ export class ArkivSiteRegistry implements SiteRegistry {
     return { creates } as unknown as ExecuteBatchParameters;
   }
 
-  private async publishNow(
-    report: ReportV3,
-    bundle: EvidenceBundle,
-    request: string | undefined,
-  ): Promise<PublishResult> {
+  private async publishNow(report: ReportV3, bundle: EvidenceBundle): Promise<PublishResult> {
     const owner = this.publisher;
     if (owner === null)
       throw new PublishRefusedError('this registry is read-only (no scanner key)');
-    if (request !== undefined && (typeof request !== 'string' || !ARKIV_KEY_RE.test(request)))
-      throw new PublishRefusedError('opts.request is not an Arkiv entity key');
     const pub = buildPublication(report, bundle);
     const owners = [...new Set([...this.trustedOwners, owner])];
     const history = await this.scansOf(pub.hostname, owners, [], PAGE);
@@ -715,19 +569,8 @@ export class ArkivSiteRegistry implements SiteRegistry {
         `report scannedAt ${pub.scan.scannedAt} is older than ${pub.hostname} version ${prev.version} (${prev.scannedAt}); history does not run backwards`,
       );
     }
-    if (request !== undefined) {
-      const r = await this.request(request);
-      if (!r)
-        throw new PublishRefusedError(
-          `request ${request} is not a live, valid igris.request.v1 entity`,
-        );
-      if (r.hostname !== pub.hostname)
-        throw new PublishRefusedError(
-          `request ${request} is for ${r.hostname}, not ${pub.hostname}`,
-        );
-    }
     const version = prev ? prev.version + 1 : 1;
-    const v = withVersion(pub, version, prev?.key ?? null, request ?? null);
+    const v = withVersion(pub, version, prev?.key ?? null);
     const batch = this.batchFor(v);
     const gas = estimateBatchGas(batch);
     if (gas.lowerBound > MAX_TRANSACTION_GAS) {
@@ -764,7 +607,6 @@ export class ArkivSiteRegistry implements SiteRegistry {
       scannerVersion: v.scan.scannerVersion,
       reportVersion: v.scan.reportVersion,
       expiresAtBlock: null,
-      request: v.scan.request === '' ? null : v.scan.request,
     };
     return { scan, evidenceKey, flowKeys, walletRequestKeys, txHash };
   }

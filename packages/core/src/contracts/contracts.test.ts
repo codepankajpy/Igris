@@ -494,11 +494,15 @@ describe('Report 2.2.0 / igris.evidence.v3: the wallet-sdk class (approved 2026-
   });
 });
 
-describe('igris.evidence.v4 (PROPOSED — pending owner approval; docs/design/WALLET-REQUESTS.md)', () => {
-  // TODO(evidence-v4 approval): once the project owner approves
-  // docs/design/WALLET-REQUESTS.md, pin contentHash(EVIDENCE_ITEM_SCHEMA) and
-  // contentHash(EVIDENCE_BUNDLE_SCHEMA) here, like the v1–v3 pins above, and
-  // mark them FROZEN in evidence.ts and docs/CONTRACTS.md.
+describe('igris.evidence.v4 (approved 2026-11-07; docs/design/WALLET-REQUESTS.md)', () => {
+  it('approved v4 schemas are byte-for-byte unchanged (FROZEN)', () => {
+    expect(contentHash(EVIDENCE_ITEM_SCHEMA)).toBe(
+      '0e18106fed576096c632ce49d385544ff7b6c08b8f9266e313435985ba1be643',
+    );
+    expect(contentHash(EVIDENCE_BUNDLE_SCHEMA)).toBe(
+      'e6a2150ed01a0fb2cef16e0e8f409b93a78cc2db2d51016060bf54677efdf6f6',
+    );
+  });
 
   it('v4 = the v3 item schemas, unchanged, + exactly one item type (wallet-request)', () => {
     expect(EVIDENCE_ITEM_SCHEMA.oneOf).toHaveLength(EVIDENCE_ITEM_SCHEMA_V3.oneOf.length + 1);
@@ -568,11 +572,12 @@ describe('igris.evidence.v4 (PROPOSED — pending owner approval; docs/design/WA
   });
 });
 
-describe('Report 3.0.0 (PROPOSED — pending owner approval; docs/design/REPORT-3.0.0.md)', () => {
-  // TODO(report-3.0.0 approval): once the project owner approves
-  // docs/design/REPORT-3.0.0.md, pin contentHash(REPORT_SCHEMA_3_0_0) here,
-  // like the 2.x pins above, and mark it FROZEN in report-v3.ts and
-  // docs/CONTRACTS.md. Until then 3.0.0 may still change.
+describe('Report 3.0.0 (approved 2026-11-07; docs/design/REPORT-3.0.0.md)', () => {
+  it('the approved 3.0.0 schema is byte-for-byte unchanged (FROZEN)', () => {
+    expect(contentHash(REPORT_SCHEMA_3_0_0)).toBe(
+      'a4c5f9cf9e6e66eaf2e130a4ac163924efc186e23a1ea20a4a823699733c5208',
+    );
+  });
 
   it('the frozen 2.x / evidence schemas are untouched by deriving 3.0.0 from them', () => {
     // report-v3.ts builds on REPORT_SCHEMA_2_2_0; deriving must never mutate it.

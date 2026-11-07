@@ -1,7 +1,6 @@
 /**
- * Report 3.0.0 — no score. PROPOSED (docs/design/REPORT-3.0.0.md); it is
- * frozen and hash-pinned in contracts.test.ts only after the project owner
- * approves that document.
+ * Report 3.0.0 — no score (docs/design/REPORT-3.0.0.md). FROZEN: approved by
+ * the project owner 2026-11-07 and hash-pinned in contracts.test.ts.
  *
  * What changes from 2.2.0 (contracts.test.ts asserts nothing else differs):
  *  - removed: `privacy.score`, `privacy.ledger`, and every finding's
@@ -499,7 +498,7 @@ export const WALLET_REQUESTS_SCHEMA = {
   ],
 } as const;
 
-/** PROPOSED report schema 3.0.0 (not yet hash-pinned: owner approval pending). */
+/** Report schema 3.0.0. FROZEN (approved 2026-11-07; hash-pinned in contracts.test.ts). */
 export const REPORT_SCHEMA_3_0_0 = {
   ...REPORT_SCHEMA_2_2_0,
   $id: 'https://igris.dev/schemas/report-3.0.0.json',

@@ -15,13 +15,9 @@
   scanned site that asks for an unlimited Permit2 approval is one
   `igris.walletreq.v1` query (schema.md has copy-pasteable curls, filtered
   on `$creator`). They need no account and no API from us.
-- **Anyone who wants a site checked** can ask for it: an `igris.request.v1`
-  on Arkiv (the website creates one per scan request). Any scanner node may
-  pick it up, so a request does not depend on one operator.
-- **Other operators** run IGRIS nodes with their own scanner key. They
-  fulfil open requests and publish versions attributable to their address;
-  each reader chooses which scanners it trusts and sees where independent
-  nodes agree or differ.
+- **Other operators** can run this repository with their own scanner key
+  and publish versions attributable to their address; each reader chooses
+  which scanners it trusts (`IGRIS_TRUSTED_SCANNERS`).
 
 ## Why the registry grows
 
@@ -30,8 +26,7 @@ completed scan publishes automatically, so the registry grows with every
 use, and retests add history instead of overwriting it. The flow and
 wallet-request entities make each new scan more useful: a tracker's reach,
 or a spender's unlimited approvals, across sites become visible as more
-sites are scanned. Each open request a second node fulfils adds an
-independent result for the same site.
+sites are scanned.
 
 ## Honest limits
 
@@ -39,10 +34,8 @@ independent result for the same site.
   network may reset. A site that nobody retests eventually disappears.
 - A browser scan sees what one visit with one throwaway wallet shows. It
   cannot see what a recipient does with the data afterwards.
-- Publishing needs a funded scanner key. Two scanners publish today
-  (`0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe`, `0xc11870c95Ffc869872e4CBB9d9F6FBC71aF7b869`);
-  no campaign numbers are claimed beyond the scans listed in the README.
-- Two nodes run by one person are not independent; live pages also vary
-  between runs, so agreement is shown per recipient, not per scan.
+- Publishing needs a funded scanner key. IGRIS's scanner is
+  `0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe`; no campaign numbers are
+  claimed beyond the scans listed in the README.
 - Real sites rarely ask for signatures during a visit; the wallet-request
   demo uses a fixture page and says so.

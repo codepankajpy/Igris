@@ -2,7 +2,6 @@
 
 Code: [packages/registry/src/schemas.ts](../packages/registry/src/schemas.ts).
 Design: [docs/design/FLOW.md](../docs/design/FLOW.md),
-[docs/design/SCAN-NETWORK.md](../docs/design/SCAN-NETWORK.md),
 [docs/design/WALLET-REQUESTS.md](../docs/design/WALLET-REQUESTS.md).
 
 Every completed scan is published as **one atomic `executeBatch`** signed by
@@ -15,9 +14,7 @@ N × igris.flow.v1       one per recipient with a hostname (the cross-site view)
 M × igris.walletreq.v1  one per wallet request except "connect" (≤ 64)
 ```
 
-Either all of them land or none do. Separately, anyone may create an
-**`igris.request.v1`** (an open scan request) that any scanner node may
-fulfil — see "Open scan requests" below. Schema names are versioned: a breaking
+Either all of them land or none do. Schema names are versioned: a breaking
 change gets a new name instead of corrupting old rows. `igris.scan.v1` (the
 scored v1 entity) was never published and is retired.
 
@@ -45,7 +42,6 @@ guard).
 | `recipients`, `addressRecipients`, `trackingRecipients` | i32   | yes     | all / address (exact or hashed) / tracking-or-unidentified |
 | `usesAnonRpc`                                           | bool  | yes     |                                                            |
 | `scannerVersion`, `reportVersion`                       | str   | no      | `reportVersion` is always `3.0.0`                          |
-| `request`                                               | str   | yes     | key of the `igris.request.v1` it fulfilled; `""` when none |
 | `report`                                                | bytes | no      | gzip(canonical Report 3.0.0)                               |
 
 `request` was added after the first versions were published: an entity
@@ -150,84 +146,21 @@ the rest, in request order; the full report still lists every request.
 `walletRequests({ kind?, unlimited?, hostname?, limit? })` returns only rows
 of each site's **latest** trusted version, newest first (like `flowsTo`).
 
-## `igris.request.v1` — open scan requests
-
-| attribute     | type | indexed | value                                                           |
-| ------------- | ---- | ------- | --------------------------------------------------------------- |
-| `hostname`    | str  | yes     | lower-case DNS hostname                                         |
-| `url`         | str  | no      | canonical http(s) URL on `hostname`, ≤ 128 bytes (else refused) |
-| `requestedAt` | u64  | yes     | unix seconds                                                    |
-
-`createRequest(hostname, url)` refuses a hostname that is not a lower-case
-DNS name and a URL that is not http(s), not on that hostname, carries
-credentials, or is longer than 128 bytes (never truncated). It stores the
-canonical form (`new URL(url).href`).
-
-**Flags: `readonly` + `permissionlessExtension`.** Checked in the SDK
-(1.0.1): the creation flags are two independent bits of one byte
-(`readonly` = 1, `permissionlessExtension` = 2; `encodeCreationFlags` ORs
-them; any other bit is `ReservedCreationFlags`), and the engine's
-`ReadOnlyEntity` rule only forbids changing attributes — a readonly entity
-"can still be extended, transferred or deleted". So readonly does **not**
-block extension, and IGRIS creates its requests with both: anyone may keep
-one alive, nobody (not even its creator) can switch its URL after a node
-fulfilled it. Readonly is **not required of other creators**: readers accept
-requests with or without it, so a third party following the spec may
-create a mutable one. That is safe because a scan stores only the request's
-key and every node re-validates the URL it reads (SSRF guard, public-only
-egress) right before it scans; what was scanned is in each published
-report. An edited request can only make two nodes' scans of one round
-differ, which the agreement table shows.
-
-**Any creator.** `request(key)` and `openRequests({ since, limit })` do not
-filter on `$creator`: anyone may ask for a scan. Every field is therefore
-untrusted input, and each row is validated strictly (schema tag, hostname,
-the URL rules above, `requestedAt`); a hostile row is skipped. A
-`requestedAt` more than **300 s** after the reader's clock is rejected (a
-request dated ahead would otherwise sort above every honest one), and the
-query bounds it too: `requestedAt >= u64(since) AND requestedAt <= u64(now + 300)`.
-`openRequests` reads newest first and takes at most **20 requests per
-`$creator`** (its newest), skipping the rest of that creator's rows and
-reading on — up to 5,000 rows — so one creator's flood can neither use up
-the limit nor hide other creators' requests. It returns at most `limit`
-(default 100), oldest first.
-The scanner node still applies its own SSRF guard, rate limits and block
-list before it scans anything.
-
-### The open-request protocol
-
-1. **Ask.** Anyone creates an `igris.request.v1` (permissionlessExtension,
-   7-day expiry; IGRIS's own are also readonly). On the website,
-   `POST /api/sites/:hostname/scans` does it with the node's key.
-2. **Discover.** Every scanner node polls `requestedAt >= u64(now − window)
-AND requestedAt <= u64(now + 300)`
-   (no creator filter), validates each row strictly, applies its own
-   egress / SSRF checks, per-creator limits and block list, and skips
-   requests it already fulfilled (`fulfilments(key)` has a scan by itself).
-3. **Fulfil.** The node scans and publishes the usual atomic batch with the
-   scan's `request` = the request key. Two nodes fulfilling one request
-   publish two versions (one version sequence per site).
-4. **Compare.** Readers group trusted scans by `request` (`fulfilments(key)`:
-   `$creator` ∈ trusted scanners, newest first) into rounds and compare
-   recipients per node.
-5. **Keep alive (optional).** Anyone may extend a request's expiry; nobody
-   can change it.
-
 ## Lifetime and flags per entity type
 
-| entity               | expiry                         | flags                              | creator          |
-| -------------------- | ------------------------------ | ---------------------------------- | ---------------- |
-| `igris.scan.v2`      | 180 days (`ARKIV_EXPIRY_DAYS`) | readonly                           | the scanner node |
-| `igris.evidence.v1`  | same as its scan               | readonly                           | the scanner node |
-| `igris.flow.v1`      | same as its scan               | readonly                           | the scanner node |
-| `igris.walletreq.v1` | same as its scan               | readonly                           | the scanner node |
-| `igris.request.v1`   | **7 days**                     | readonly + permissionlessExtension | anyone           |
+| entity               | expiry                         | flags    | creator          |
+| -------------------- | ------------------------------ | -------- | ---------------- |
+| `igris.scan.v2`      | 180 days (`ARKIV_EXPIRY_DAYS`) | readonly | the scanner node |
+| `igris.evidence.v1`  | same as its scan               | readonly | the scanner node |
+| `igris.flow.v1`      | same as its scan               | readonly | the scanner node |
+| `igris.walletreq.v1` | same as its scan               | readonly | the scanner node |
 
 Scans default to **180** days — close to Arkiv's maximum (7,884,000 blocks
 ≈ 182.5 days), so history persists as long as the chain allows; valid range
-1–182. Requests are short-lived: a request is a call to act now, and anyone
-who still cares can extend it. The local backend emulates the 7-day request
-lifetime from `requestedAt`.
+1–182.
+
+Scans published before 2026-11-07 may carry a `request` string attribute
+(from a multi-node experiment that was removed); readers ignore it.
 
 ## Batch size (gas)
 
@@ -259,14 +192,11 @@ execution assumption (friction.md #12).
 ## Trust and verification on read
 
 Every IGRIS entity is created with the `readonly` flag: once published, no
-attribute can be patched — not even by the publisher. IGRIS's requests are
-also readonly (plus `permissionlessExtension`); readers accept other
-creators' requests without the flag (see `igris.request.v1` above).
+attribute can be patched — not even by the publisher.
 
 Anyone can write entities tagged with these names. An entity is an
 **attestation by its creator**, not a fact. Scans, evidence, flows and
-wallet requests are read only from trusted creators; requests are read from
-any creator (anyone may ask) and validated strictly instead. Reads filter on `$creator`
+wallet requests are read only from trusted creators. Reads filter on `$creator`
 (immutable — never `$owner`, which anyone can set to any address by
 transferring an entity they created) against `trustedOwners` (default: the
 publisher) **server-side and again client-side**, and every row is decoded strictly (types, hostname / sha /
@@ -292,8 +222,7 @@ not match its entity is never upgraded.
 
 ### Every site sending data to one recipient
 
-IGRIS's scanners: `0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe` (Scanner 1) and
-`0xc11870c95Ffc869872e4CBB9d9F6FBC71aF7b869` (Scanner 2); both run by the IGRIS author.
+IGRIS's scanner: `0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe`.
 No access key needed (the public endpoint is rate limited; an access key from
 hub.arkiv.network, appended to the URL as a path segment, raises the budget).
 
@@ -308,35 +237,6 @@ EOF
 
 Each result's `attributes` holds `hostname`, `verdict`, `address`,
 `version`, …; `u64` values come back as `0x` hex.
-
-### Open scan requests (and who asked)
-
-Requests from **any** creator since a unix time (here 2026-11-07T00:00Z =
-`1794009600`; the upper bound is the reader's clock + 300 s, here a reader at 01:00Z). `creator`
-and `creationFlags` are selected so you can see who asked and whether the
-request is readonly (IGRIS's are; others need not be). Add
-`AND $creator = addr(0x…)` to see one node's requests only.
-
-```sh
-curl -s https://rpc.rabdi.db-chain.testnet.arkiv.network \
-  -H 'content-type: application/json' --data @- <<'EOF'
-{"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":[
-  "arkiv.schema = str('igris.request.v1') AND requestedAt >= u64(1794009600) AND requestedAt <= u64(1794013500) ORDER BY requestedAt:u64 DESC",
-  {"select":{"key":true,"creator":true,"creationFlags":true,"expiresAt":true,"attributes":true},"limit":"0x64"}]}
-EOF
-```
-
-Which trusted scanners fulfilled one of them (replace `<request key>`;
-select `creator` to see who signed each scan). Combine creators with the
-keyword `OR` — the symbol forms `||` / `&&` are rejected by the node:
-
-```
-arkiv.schema = str('igris.scan.v2') AND request = str('<request key>') AND ($creator = addr(0x36dff990206fff8e8ba91f38a0b111418c985bbe) OR $creator = addr(0xc11870c95ffc869872e4cbb9d9f6fbc71af7b869)) ORDER BY version:i32 DESC
-```
-
-Live example: request
-`0x2d8a19473bb961d8135929bbe1115d399ab611ed3d56dd466619aac6124b17d4`
-(app.ens.domains) returns v3 by Scanner 1 and v4 by Scanner 2.
 
 ### Unlimited Permit2 requests across every scanned site
 

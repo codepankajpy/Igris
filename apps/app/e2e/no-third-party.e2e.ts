@@ -36,22 +36,16 @@ import {
   FAILED_ID,
   HOST as SITE,
   NEW_HOST,
-  NODES,
-  REQUEST,
-  RETEST_REQUEST,
   OTHER_HOST,
   PUBLISH_ERROR,
   RUNNING_ID,
   UNPUBLISHED_ID,
   cachedVersionBody,
   citedEvidenceId,
-  expiredRoundBody,
-  expiredSiteBody,
   failedJob,
   flowsTo,
   registry,
   republishedJob,
-  roundBody,
   runningDoneJob,
   runningJob,
   runningProgress,
@@ -67,7 +61,6 @@ import {
   walletEvidenceId,
 } from './fixtures.js';
 import { EMPTY_TEXT, KIND_LABEL } from '../src/report/wallet-requests.js';
-import { REQUEST_EXPIRED } from '../src/rounds.js';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(APP_DIR, 'dist');
@@ -149,20 +142,19 @@ function json(route: Route, status: number, body: unknown) {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
 
-/** How the stubbed API answers (the default is the live round). */
-interface StubOptions {
-  /** The v2 + v3 round's request entity has expired: request: null in rounds. */
-  expiredRequest?: boolean;
-}
-
-/** Fresh context (cold cache) with the API stubbed and all requests recorded. */
+/**
+ * Fresh context (cold cache) with the API stubbed and all requests recorded.
+ * `bypassCSP`: ignore the build's Content-Security-Policy (the negative
+ * control only, so injected requests reach the recorder).
+ */
 async function open(
   viewport?: { width: number; height: number },
-  stub: StubOptions = {},
+  opts: { bypassCSP?: boolean } = {},
 ): Promise<Visit> {
   const context = await browser.newContext({
     acceptDownloads: true,
     ...(viewport ? { viewport } : {}),
+    ...(opts.bypassCSP ? { bypassCSP: true } : {}),
   });
   const visit: Visit = {
     context,
@@ -217,15 +209,7 @@ async function open(
       return json(route, 200, { sites: sites.slice(0, limit) });
     }
     if (m === 'GET' && (mm = /^\/api\/sites\/([^/]+)$/.exec(p))) {
-      const h = decodeURIComponent(mm[1]!);
-      return json(route, 200, stub.expiredRequest ? expiredSiteBody(h) : siteBody(h));
-    }
-    if (m === 'GET' && p === '/api/nodes') return json(route, 200, { nodes: NODES });
-    if (m === 'GET' && (mm = /^\/api\/sites\/([^/]+)\/rounds\/([^/]+)$/.exec(p))) {
-      const ok = decodeURIComponent(mm[1]!) === SITE && decodeURIComponent(mm[2]!) === REQUEST.key;
-      return ok
-        ? json(route, 200, stub.expiredRequest ? expiredRoundBody : roundBody)
-        : json(route, 404, { error: 'no such round' });
+      return json(route, 200, siteBody(decodeURIComponent(mm[1]!)));
     }
     if (m === 'GET' && (mm = /^\/api\/sites\/([^/]+)\/versions\/(\d+)$/.exec(p))) {
       const h = decodeURIComponent(mm[1]!);
@@ -235,8 +219,7 @@ async function open(
       return body ? json(route, 200, body) : json(route, 404, { error: 'no such version' });
     }
     if (m === 'POST' && (mm = /^\/api\/sites\/([^/]+)\/scans$/.exec(p))) {
-      // Retest of the scanned site → the running scan (with its request entity);
-      // a first scan → the failed one (no request).
+      // Retest of the scanned site → the running scan; a first scan → the failed one.
       return json(route, 202, scanStarted(decodeURIComponent(mm[1]!)));
     }
     if (m === 'GET' && (mm = /^\/api\/scans\/([0-9a-f-]{36})$/.exec(p))) {
@@ -285,10 +268,9 @@ async function open(
  * has passed in total). The app does not poll fast: its intervals are the
  * live scan's clock (no request) and the header's same-origin registry check
  * every 20 s (test/styles.test.ts keeps it that way); the site page re-checks
- * a site every 20 s only while a scan runs or a request is under 10 minutes
- * old (rounds.ts shouldRecheck). Every event stream the stub serves is
- * finite, so a page does go quiet; SETTLE_MAX_MS bounds one that never does
- * (reported, not hidden).
+ * a site every 20 s only while a scan of it is running (Site.tsx). Every
+ * event stream the stub serves is finite, so a page does go quiet;
+ * SETTLE_MAX_MS bounds one that never does (reported, not hidden).
  */
 const QUIET_MS = 1500;
 const SETTLE_MAX_MS = 12_000;
@@ -333,9 +315,6 @@ const V2 = `#/site/${SITE}/v/2`;
 
 const ROUTES: Array<{
   hash: string;
-  /** Test name when one hash is visited with another API answer. */
-  name?: string;
-  stub?: StubOptions;
   exercise: (page: Page) => Promise<void>;
 }> = [
   {
@@ -354,71 +333,27 @@ const ROUTES: Array<{
   {
     hash: `#/site/${SITE}`,
     exercise: async (page) => {
-      // Latest version (v3) with its history rail: v3 + v2 are one request, two scanners.
+      // Latest version (v3) with its history rail: every version, newest first.
       await page.getByText(summaryV3.headline).first().waitFor();
       const rail = page.getByRole('navigation', { name: 'Version history' });
-      await rail.getByText('Request · 2 scanners').waitFor();
-      await rail.getByText('Scanned by Scanner 2').waitFor();
-      await expect.poll(() => rail.getByText('Scanned by Scanner 1').count()).toBe(2);
-      // The Agreement panel loads its round lazily, then compares per recipient.
-      const panel = page.locator('section.agreement');
-      await panel.scrollIntoViewIfNeeded();
-      await panel.getByRole('table').waitFor();
-      await panel.getByText('pages vary between runs', { exact: false }).waitFor();
-      const row = (d: string) => panel.locator('tbody tr', { hasText: d });
-      await row('segment.io').getByText('Differ').waitFor();
-      await row('sentry.io').getByText('Only Scanner 1').waitFor();
-      await row('infura.io').getByText('Agree').waitFor();
-      expect(await panel.locator('.agreement-summary').textContent()).toMatch(
-        /2 agree.*1 differ.*1 seen by only some/,
-      );
-      // Each scan links to its entity on the explorer; nodes are labels, never addresses.
-      const hrefs = await panel
-        .locator('.agreement-scans a.ext-link')
-        .evaluateAll((as) => as.map((a) => a.getAttribute('href')));
-      expect(hrefs).toEqual([
-        `${registry.explorer}/entity/${roundBody.scans[0]!.scan.key}`,
-        `${registry.explorer}/entity/${roundBody.scans[1]!.scan.key}`,
+      await expect.poll(() => rail.locator('a.rail-item').count()).toBe(3);
+      expect(await rail.locator('a.rail-item b.mono').allTextContents()).toEqual([
+        'v3',
+        'v2',
+        'v1',
       ]);
-      for (const sel of ['nav.rail', 'section.agreement'])
-        expect(await page.locator(sel).textContent()).not.toMatch(
-          /0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/,
-        );
-      // Open v1 from the rail (migrated: not recorded, and not part of any request).
+      expect(await page.locator('nav.rail').textContent()).not.toMatch(
+        /0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/,
+      );
+      // Open v1 from the rail (migrated: not recorded).
       await rail.getByText('v1', { exact: true }).click();
       await page.waitForURL(`**/#/site/${SITE}/v/1`);
       await page.getByText('Not recorded').first().waitFor();
-      expect(await page.locator('section.agreement').count()).toBe(0);
-      // Retest → POST (a new request) → the live scan shows the request → the new version.
+      // Retest → POST → the live scan → the new version.
       await page.getByRole('button', { name: 'Retest' }).click();
       await page.waitForURL(`**/#/scan/${RUNNING_ID}`);
-      const link = page.getByRole('link', { name: /Request on the Arkiv explorer/ });
-      expect(await link.getAttribute('href')).toBe(
-        `${registry.explorer}/entity/${RETEST_REQUEST.key}`,
-      );
-      await page.getByText('Other scanner nodes may pick this request up').waitFor();
       await page.waitForURL(`**/#/site/${SITE}/v/2`, { timeout: 15_000 });
       await page.getByText(summaryV2.headline).first().waitFor();
-    },
-  },
-  {
-    hash: `#/site/${SITE}`,
-    name: `#/site/${SITE} (request expired)`,
-    stub: { expiredRequest: true },
-    exercise: async (page) => {
-      // The API sends request: null for an expired request; the round, its
-      // scans and the agreement still come back — and the panel says so.
-      await page.getByText(summaryV3.headline).first().waitFor();
-      const rail = page.getByRole('navigation', { name: 'Version history' });
-      await rail.getByText('Request · 2 scanners').waitFor();
-      const panel = page.locator('section.agreement');
-      await panel.scrollIntoViewIfNeeded();
-      await panel.getByText(REQUEST_EXPIRED).waitFor();
-      await panel.getByRole('table').waitFor();
-      await panel.locator('tbody tr', { hasText: 'segment.io' }).getByText('Differ').waitFor();
-      expect(await panel.getByText('request entity').count()).toBe(0);
-      expect(await panel.locator('.agreement-scans a.ext-link').count()).toBe(2);
-      expect(await panel.textContent()).not.toMatch(/0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/);
     },
   },
   {
@@ -435,7 +370,6 @@ const ROUTES: Array<{
     exercise: async (page) => {
       await page.getByText(summaryV2.headline).first().waitFor();
       await page.getByText('Published on Arkiv').first().waitFor();
-      await page.locator('.report-hero').getByText('Scanned by Scanner 1').waitFor();
       // Timeline rows are focusable and show their details.
       await page.locator('button.tl-row').first().focus();
       await page.locator('.tl-detail .kv').waitFor();
@@ -629,9 +563,9 @@ const ROUTES: Array<{
 ];
 
 describe('web app makes no third-party requests', () => {
-  for (const { hash, name, stub, exercise } of ROUTES) {
-    it(`${name ?? hash} — every request is same-origin`, async () => {
-      const v = await open(undefined, stub);
+  for (const { hash, exercise } of ROUTES) {
+    it(`${hash} — every request is same-origin`, async () => {
+      const v = await open();
       try {
         await v.page.goto(`${ORIGIN}/${hash}`);
         await exercise(v.page);
@@ -651,13 +585,13 @@ describe('web app makes no third-party requests', () => {
         const types = new Set(v.requests.map((r) => r.type));
         for (const t of ['document', 'script', 'stylesheet', 'font', 'fetch'])
           expect(types, `${hash} should request a ${t}`).toContain(t);
-        if (hash === `#/scan/${RUNNING_ID}` || (hash === `#/site/${SITE}` && !stub))
+        if (hash === `#/scan/${RUNNING_ID}` || hash === `#/site/${SITE}`)
           expect(types).toContain('eventsource');
 
         const byType: Record<string, number> = {};
         for (const r of v.requests) byType[r.type] = (byType[r.type] ?? 0) + 1;
         perRoute.push({
-          route: name ?? hash,
+          route: hash,
           total: v.requests.length,
           settledMs: settled.ms,
           byType,
@@ -669,7 +603,9 @@ describe('web app makes no third-party requests', () => {
   }
 
   it('negative control: injected tracker requests, immediate AND delayed, ARE recorded (never sent)', async () => {
-    const v = await open();
+    // The build's CSP would block these in the page before any request
+    // exists (asserted below); bypassed here so the recorder itself is tested.
+    const v = await open(undefined, { bypassCSP: true });
     const thirdParty = () =>
       v.requests
         .filter((r) => !isAllowed(r.url))
@@ -726,6 +662,25 @@ describe('web app makes no third-party requests', () => {
       await v.context.close();
     }
   });
+
+  it("the build's CSP stops a third-party fetch in the page: no request is ever made", async () => {
+    const v = await open();
+    try {
+      await v.page.goto(`${ORIGIN}/#/`);
+      await v.page.getByText(SITE).first().waitFor();
+      const csp = await v.page
+        .locator('meta[http-equiv="Content-Security-Policy"]')
+        .getAttribute('content');
+      expect(csp).toContain("connect-src 'self'");
+      await v.page.evaluate(() =>
+        fetch('https://analytics.invalid/collect', { mode: 'no-cors' }).catch(() => undefined),
+      );
+      await settle(v);
+      expect(v.requests.map((r) => r.url).filter((u) => !isAllowed(u))).toEqual([]);
+    } finally {
+      await v.context.close();
+    }
+  });
 });
 
 // ---------------------------------------------------------------- 360 px
@@ -743,9 +698,8 @@ describe('360 px layout: no horizontal page scroll', () => {
     {
       hash: `#/site/${SITE}`,
       ready: async (page) => {
-        const panel = page.locator('section.agreement');
-        await panel.scrollIntoViewIfNeeded();
-        await panel.getByRole('table').waitFor();
+        await page.getByRole('navigation', { name: 'Version history' }).waitFor();
+        await page.locator('#wallet-requests .wr-card').first().waitFor();
       },
     },
     {

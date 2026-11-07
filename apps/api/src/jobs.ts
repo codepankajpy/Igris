@@ -17,9 +17,7 @@
  *  - a retry never puts an older scan on top of a newer version of the
  *    hostname (it is refused, and the job says why);
  *  - at most one scan per hostname is in flight (a retest while one runs
- *    would race for the same version number);
- *  - a scan made for an open request (igris.request.v1,
- *    docs/design/SCAN-NETWORK.md) is published with `{ request: key }`.
+ *    would race for the same version number).
  *
  * Job metadata lives in <dataDir>/jobs/<id>.json (operator's machine only);
  * finished scans in the cache (artifacts.ts).
@@ -34,7 +32,7 @@ import {
   type ScanResult,
 } from '@igris/core';
 import type { EgressPolicy, ScanOptions, ScanProgressEvent } from '@igris/scanner';
-import type { PublishedScan, SiteRegistry } from '@igris/registry';
+import type { SiteRegistry } from '@igris/registry';
 import { readCachedScan, writeCachedScan } from './artifacts.js';
 import { JobQueue, JobTimeoutError } from './limits.js';
 import { errText } from './public.js';
@@ -49,11 +47,6 @@ export interface JobPublish {
   evidenceKey?: string;
   flowKeys?: string[];
   txHash?: string | null;
-  /**
-   * Why the job's request is not fulfilled by this publish (the registry
-   * already held this scan, published without that request).
-   */
-  note?: string;
 }
 
 export interface Job {
@@ -70,11 +63,6 @@ export interface Job {
   version: number | null;
   /** null until the scan finished and a publish was attempted. */
   publish: JobPublish | null;
-  /**
-   * Entity key of the scan request this job fulfils; null when none (or
-   * while the request is still being created — see submit()).
-   */
-  request: string | null;
 }
 
 export interface DonePayload {
@@ -100,6 +88,8 @@ export interface SiteScanServiceOptions {
   /** Forced on every scan; never taken from a request. Public-only by type. */
   egress: Extract<EgressPolicy, { mode: 'public-only' }>;
   dwellMs: number;
+  /** Run Chromium inside its own OS sandbox (IGRIS_CHROMIUM_SANDBOX). */
+  chromiumSandbox?: boolean;
   log?: (m: string) => void;
 }
 
@@ -115,14 +105,6 @@ interface JobRecord {
   job: Job;
   /** contentHash(report) of the finished scan (its cache key); null before. */
   scanId: string | null;
-  /** Settles once a request being created for this job is known (not persisted). */
-  requestReady?: Promise<void>;
-  /**
-   * The request this job was made for when its publish did not fulfil it
-   * (job.request is then null — not claimed). Persisted: the request still
-   * counts as attempted by this node (forRequest).
-   */
-  unclaimed?: string;
 }
 
 const MAX_JOBS = 1000;
@@ -167,11 +149,7 @@ export class SiteScanService {
   private persist(rec: JobRecord): void {
     writeFileSync(
       join(this.jobsDir, `${rec.job.id}.json`),
-      JSON.stringify({
-        job: rec.job,
-        scanId: rec.scanId,
-        ...(rec.unclaimed !== undefined ? { unclaimed: rec.unclaimed } : {}),
-      }) + '\n',
+      JSON.stringify({ job: rec.job, scanId: rec.scanId }) + '\n',
     );
   }
 
@@ -182,12 +160,11 @@ export class SiteScanService {
       const id = name.replace(/\.json$/, '');
       if (!isJobId(id) || name !== `${id}.json`) continue;
       try {
-        const rec = JSON.parse(readFileSync(join(this.jobsDir, name), 'utf8')) as JobRecord;
-        if (rec?.job?.id !== id) continue;
-        if (typeof rec.unclaimed !== 'string') delete rec.unclaimed;
-        const job = rec.job;
-        // Records written before scan requests existed have no `request`.
-        if (typeof job.request !== 'string') job.request = null;
+        const raw = JSON.parse(readFileSync(join(this.jobsDir, name), 'utf8')) as JobRecord;
+        if (raw?.job?.id !== id) continue;
+        // Only what this release writes (earlier records may carry more).
+        const { request: _request, ...job } = raw.job as Job & { request?: unknown };
+        const rec: JobRecord = { job, scanId: raw.scanId ?? null };
         if (job.state === 'queued' || job.state === 'running') {
           // The process that ran it is gone: say so instead of pretending.
           job.finishedAt = new Date().toISOString();
@@ -252,31 +229,8 @@ export class SiteScanService {
     if (!existing) return false;
     rec.job.version = existing.version;
     rec.job.publish = { ok: true, mode: this.o.registry.mode, scanKey: existing.key };
-    this.settleRequest(rec, existing);
     this.persist(rec);
     return true;
-  }
-
-  /**
-   * A publish is idempotent per scanId: it may return a version the registry
-   * already held. That version fulfils the job's request only when it
-   * carries it; otherwise the request is not claimed — job.request becomes
-   * null (the request stays open for other nodes; this node counts it as
-   * attempted) and the publish says why.
-   */
-  private settleRequest(rec: JobRecord, published: PublishedScan): void {
-    const want = rec.job.request;
-    if (want === null || rec.job.publish === null) return;
-    if (published.request !== null && published.request.toLowerCase() === want.toLowerCase()) {
-      return;
-    }
-    rec.job.request = null;
-    rec.unclaimed = want;
-    rec.job.publish.note =
-      `the registry already held this scan as v${published.version} ` +
-      `${published.request === null ? 'without a request' : `for request ${published.request}`}; ` +
-      `it does not fulfil request ${want}`;
-    this.o.log?.(`scan ${rec.job.id}: ${rec.job.publish.note}`);
   }
 
   /** contentHash of a finished job's report (its cache key), null before it finished. */
@@ -298,20 +252,6 @@ export class SiteScanService {
 
   get(id: string): Job | undefined {
     return this.records.get(id)?.job;
-  }
-
-  /**
-   * This node's job for scan request `key` (any state), if any: a request is
-   * attempted at most once per node (its publish can be retried) — also when
-   * that publish turned out not to fulfil it (see settleRequest).
-   */
-  forRequest(key: string): Job | undefined {
-    const k = key.toLowerCase();
-    for (const { job, unclaimed } of this.records.values()) {
-      const made = job.request ?? unclaimed ?? null;
-      if (made !== null && made.toLowerCase() === k) return job;
-    }
-    return undefined;
   }
 
   /** Would submit() find room in the queue right now? */
@@ -358,17 +298,8 @@ export class SiteScanService {
    * Start a scan (or retest) of `hostname` at `url`. Throws ScanInProgress
    * when one is already queued/running for the hostname, ScanQueueFull when
    * the queue cannot take it.
-   *
-   * `request`: the scan request this job fulfils — its key, or a promise of
-   * it while the request is being created (the job is reserved first so the
-   * one-scan-per-hostname rule holds meanwhile; its publish waits for the
-   * promise, and a null / rejected one publishes without a request).
    */
-  submit(
-    hostname: string,
-    url: string,
-    opts: { request?: string | Promise<string | null> } = {},
-  ): Job {
+  submit(hostname: string, url: string): Job {
     const running = this.inFlight(hostname);
     if (running) throw new ScanInProgress(running.id);
     if (!this.o.queue.canAccept()) throw new ScanQueueFull('scanner busy; try again in a minute');
@@ -381,19 +312,8 @@ export class SiteScanService {
       events: [],
       version: null,
       publish: null,
-      request: typeof opts.request === 'string' ? opts.request : null,
     };
     const rec: JobRecord = { job, scanId: null };
-    if (opts.request !== undefined && typeof opts.request !== 'string') {
-      rec.requestReady = opts.request.then(
-        (key) => {
-          if (key === null) return;
-          job.request = key;
-          this.persist(rec);
-        },
-        () => undefined,
-      );
-    }
     this.records.set(job.id, rec);
     this.persist(rec);
     this.prune();
@@ -409,6 +329,7 @@ export class SiteScanService {
         signal,
         // NOT configurable by the request: every scan is public-only.
         egress: this.o.egress,
+        ...(this.o.chromiumSandbox === true ? { chromiumSandbox: true } : {}),
         onProgress: (e) => {
           job.events.push(e);
           this.emit(job.id, { kind: 'progress', event: e });
@@ -476,13 +397,8 @@ export class SiteScanService {
       };
       return;
     }
-    if (rec.requestReady) await rec.requestReady;
     try {
-      const r = await registry.publish(
-        report,
-        bundle,
-        job.request !== null ? { request: job.request } : {},
-      );
+      const r = await registry.publish(report, bundle);
       job.version = r.scan.version;
       job.publish = {
         ok: true,
@@ -492,7 +408,6 @@ export class SiteScanService {
         flowKeys: r.flowKeys,
         txHash: r.txHash,
       };
-      this.settleRequest(rec, r.scan);
     } catch (err) {
       job.publish = { ok: false, error: errText(err), mode: registry.mode };
     } finally {

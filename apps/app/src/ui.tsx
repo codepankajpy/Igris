@@ -72,17 +72,9 @@ export const MILESTONE_LABEL: Record<string, string> = {
  * judges nothing itself.
  */
 export function addressToTracker(r: Pick<Recipient, 'verdict' | 'learned'>): boolean {
-  return addressReachedTracker(r.verdict, r.learned.address);
-}
-
-/** The same rule from a bare (verdict, address) pair, e.g. one node's row in an agreement. */
-export function addressReachedTracker(
-  verdict: Verdict,
-  address: Recipient['learned']['address'],
-): boolean {
   return (
-    (verdict === 'tracking' || verdict === 'unidentified') &&
-    (address === 'exact' || address === 'hashed')
+    (r.verdict === 'tracking' || r.verdict === 'unidentified') &&
+    (r.learned.address === 'exact' || r.learned.address === 'hashed')
   );
 }
 

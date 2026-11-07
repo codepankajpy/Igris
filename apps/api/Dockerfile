@@ -71,6 +71,8 @@ COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 COPY apps/app/ ./apps/app/
 COPY data/ ./data/
+# The website build publishes this test page at /demo/wallet-requests/.
+COPY fixtures/wallet-requests/ ./fixtures/wallet-requests/
 
 # Build packages, the backend and the website (apps/app/dist)
 RUN pnpm --filter @igris/core build && \
@@ -81,9 +83,9 @@ RUN pnpm --filter @igris/core build && \
     test -f apps/app/dist/index.html && \
     test -f packages/registry/dist/bin/init-scanner.js
 
-# Unprivileged runtime user. NOTE: Playwright launches Chromium without its
-# own sandbox by default (chromiumSandbox: false); the README
-# ("Security") states the resulting trust boundary.
+# Unprivileged runtime user (Node runs as it; see the entrypoint).
+# Chromium's own OS sandbox is opt-in: IGRIS_CHROMIUM_SANDBOX=1 on hosts
+# that allow it (docker run --cap-add=SYS_ADMIN).
 RUN useradd --create-home --uid 10001 igris \
     && mkdir -p /data/igris-data /data/igris-home \
     && chown -R igris:igris /data \
@@ -95,7 +97,10 @@ ENV PORT=3001 \
     IGRIS_HOME=/data/igris-home \
     IGRIS_STATIC_DIR=/app/apps/app/dist
 
-USER igris
+# Starts as root only to chown the data directories (platform volumes are
+# root-owned), then drops to `igris` (docker-entrypoint.sh).
+COPY --chmod=755 apps/api/docker-entrypoint.sh /usr/local/bin/igris-entrypoint
+ENTRYPOINT ["/usr/local/bin/igris-entrypoint"]
 
 # /data is the mount point for a persistent volume/disk (no VOLUME line:
 # Railway rejects it; mount with -v / the platform's disk settings).

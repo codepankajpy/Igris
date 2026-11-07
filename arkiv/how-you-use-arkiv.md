@@ -8,7 +8,7 @@ Arkiv directly. Entities: [schema.md](./schema.md).
 ## Writes (backend)
 
 [packages/registry/src/arkiv.ts](../packages/registry/src/arkiv.ts) —
-`ArkivSiteRegistry.publish(report, bundle, { request? })`:
+`ArkivSiteRegistry.publish(report, bundle)`:
 
 1. `buildPublication` refuses anything that must not be published: a report
    that is not 3.0.0, fails schema validation or integrity against its
@@ -16,11 +16,9 @@ Arkiv directly. Entities: [schema.md](./schema.md).
    in its evidence (or as a wallet-request address), has a malformed
    wallet-request entry, or whose gzip payload exceeds 128 KiB.
 2. It reads the latest version of the hostname (trusted owners and the
-   publisher) → `version = latest + 1`, `previous = latest.key`. With
-   `{ request }`, the request must be a live, valid `igris.request.v1` for
-   the same hostname.
+   publisher) → `version = latest + 1`, `previous = latest.key`.
 3. **One `walletClient.executeBatch({ creates })`**: the `igris.scan.v2`
-   entity (attributes, `request`, gzip report), the `igris.evidence.v1`
+   entity (attributes, gzip report), the `igris.evidence.v1`
    entity (gzip bundle), one `igris.flow.v1` per recipient and one
    `igris.walletreq.v1` per wallet request except `connect`, all readonly
    with `ExpirationTime.fromDays(180)`. The batch is atomic, so a version
@@ -28,10 +26,6 @@ Arkiv directly. Entities: [schema.md](./schema.md).
    keys come back in batch order: scan, evidence, flows, wallet requests.
    Before signing, a batch whose calldata alone would exceed the 2^24 gas
    cap is refused (schema.md → "Batch size").
-
-`ArkivSiteRegistry.createRequest(hostname, url)` writes one
-`igris.request.v1` (readonly + permissionlessExtension, 7-day expiry): the
-open-request protocol in schema.md.
 
 Signing key: the node's scanner profile (`loadScanner()`, mode 0600 under
 `~/.igris`, never from env). Chain `rabdi({ accessKey })` with
@@ -42,22 +36,17 @@ Signing key: the node's scanner profile (`loadScanner()`, mode 0600 under
 Raw `arkiv_query` JSON-RPC calls whose query strings are built with the SDK
 expression builders (`and`, `or`, `eq`, `checkAgainstSchema`):
 
-| feature                      | query                                                                                                                              |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| site page, version history   | scan.v2 `hostname = …` AND owners, `ORDER BY version:i32 DESC`                                                                     |
-| one version                  | … AND `version = i32(n)`                                                                                                           |
-| recently scanned sites       | scan.v2 AND owners, `ORDER BY scannedAt:u64 DESC` → latest per hostname                                                            |
-| full report of a version     | scan.v2 `$key = key(…)` (selecting `report`) + evidence.v1 `sha256`,`scanId`                                                       |
-| "also receives data from …"  | flow.v1 `recipient = …` AND owners, then each site's latest version                                                                |
-| open scan requests           | request.v1 `requestedAt >= u64(since)` AND `requestedAt <= u64(now + 300)` (any creator), `ORDER BY requestedAt`, ≤ 20 per creator |
-| one request                  | request.v1 `$key = key(…)` (any creator)                                                                                           |
-| scans that fulfilled it      | scan.v2 `request = …` AND owners, `ORDER BY version:i32 DESC`                                                                      |
-| wallet requests across sites | walletreq.v1 [`kind`, `unlimited = i32(1)`, `hostname`] AND owners, then each site's latest version                                |
+| feature                      | query                                                                                               |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| site page, version history   | scan.v2 `hostname = …` AND owners, `ORDER BY version:i32 DESC`                                      |
+| one version                  | … AND `version = i32(n)`                                                                            |
+| recently scanned sites       | scan.v2 AND owners, `ORDER BY scannedAt:u64 DESC` → latest per hostname                             |
+| full report of a version     | scan.v2 `$key = key(…)` (selecting `report`) + evidence.v1 `sha256`,`scanId`                        |
+| "also receives data from …"  | flow.v1 `recipient = …` AND owners, then each site's latest version                                 |
+| wallet requests across sites | walletreq.v1 [`kind`, `unlimited = i32(1)`, `hostname`] AND owners, then each site's latest version |
 
 "owners" is always `$creator = addr(…)` OR-ed over the trusted scanners,
-never `$owner`. Requests are the one entity read from any creator (anyone
-may ask for a scan); they are validated strictly (readonly is not required
-of other creators; a request dated > 300 s ahead is ignored).
+never `$owner`.
 
 Listings select every column except the `report` payload. Every row is
 decoded strictly and skipped when invalid
@@ -85,21 +74,15 @@ version:i32` / `scannedAt:u64`, attribute selection), and the
   organisers' curl in schema.md.
 - **Verified with a mocked node**: the batch contents, version chaining,
   load verification and owner filtering (`packages/registry/src/arkiv.test.ts`);
-  requests, fulfilments, wallet-request entities and their flags, every new
+  wallet-request entities and their flags, every new
   query string, hostile rows and `$owner`-transfer forgeries for every
   entity type, and the gas estimate (`packages/registry/src/network.test.ts`,
   against both backends).
-- **Verified live** (2026-11-07, Rabdi, two funded scanner nodes on one
-  machine): the website created two `igris.request.v1` entities for
-  app.ens.domains (readonly + permissionlessExtension: the node returns
-  `creationFlags` as `{"readonly":true,"permissionlessExtension":true,"raw":3}`);
-  the second node's worker found each request on Arkiv and both nodes
-  published a scan linked to it (`request` attribute), signed by two
-  different `$creator`s; the API grouped them into rounds and compared
-  them (7/7 and 9/9 third parties agree). The `request = … AND ($creator =
-… OR $creator = …)` query in schema.md returns both scans.
+- **Verified live** (2026-11-06/07, Rabdi): publishes of app.uniswap.org
+  (v1 → v3), swap.cow.fi and app.ens.domains; entities come back readonly
+  (`creationFlags` `{"readonly":true,…}`), `$creator` = the scanner, and the
+  `previous` chain intact.
 - **UNVERIFIED**: a live `igris.walletreq.v1` write (no scanned real site
   has asked for a signature yet; the fixture page that does is not hosted
   publicly, so it is covered offline by `packages/scanner/e2e/wallet-requests.e2e.ts`
-  and the registry tests), and `permissionlessExtension` used by a third
-  party.
+  and the registry tests).

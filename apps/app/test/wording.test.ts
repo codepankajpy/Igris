@@ -20,7 +20,6 @@ const scan = (version: number, findingSetSha256 = 'f'.repeat(64)): PublishedScan
   scannerVersion: '0.3.0',
   reportVersion: '3.0.0',
   expiresAtBlock: null,
-  request: null,
 });
 
 describe('proof chip: provenance (defect 1)', () => {

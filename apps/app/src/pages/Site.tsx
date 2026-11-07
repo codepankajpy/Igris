@@ -11,24 +11,16 @@ import {
   startScan,
   type PublishedScan,
   type RegistryInfo,
-  type RoundSummary,
   type SiteResponse,
 } from '../api.js';
 import { go, paths } from '../router.js';
 import { Empty, ErrorNote, Loading, StateChip, day, plural } from '../ui.js';
 import { railChange } from '../wording.js';
-import {
-  RECHECK_MS,
-  comparableKey,
-  nodeLabel,
-  railGroups,
-  roundOf,
-  shouldRecheck,
-  type RailItem,
-} from '../rounds.js';
-import { AgreementPanel } from './Agreement.js';
 import { loadReport, type ReportData } from '../report/data.js';
 import { ReportView } from './Report.js';
+
+/** Interval between site page re-checks while a scan of the site runs (one same-origin GET). */
+const RECHECK_MS = 20_000;
 
 function ScanButton({
   hostname,
@@ -84,9 +76,9 @@ export function SitePage({
   registry: RegistryInfo | null;
 }) {
   const [site, setSite] = useState<SiteResponse | null>(null);
-  // The newest version when the page loaded: shown by default, so a version
-  // that another scanner publishes meanwhile is added to the rail without
-  // replacing the report being read.
+  // The newest version when the page loaded: shown by default, so the version
+  // a running scan publishes meanwhile is added to the rail without replacing
+  // the report being read.
   const [shown, setShown] = useState<number | null>(null);
   const [error, setError] = useState<unknown>(null);
   useEffect(() => {
@@ -95,12 +87,11 @@ export function SitePage({
     setError(null);
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    // While a scan runs or a recent request may still be answered by other
-    // scanner nodes, look again (one same-origin GET every RECHECK_MS); stop
-    // once neither holds. A failed re-check keeps what is shown.
+    // While a scan of this site runs here, look again (one same-origin GET
+    // every RECHECK_MS) so its version appears without a reload; stop once no
+    // scan is running. A failed re-check keeps what is shown.
     const schedule = (s: SiteResponse) => {
-      if (live && shouldRecheck(s, Math.floor(Date.now() / 1000)))
-        timer = setTimeout(recheck, RECHECK_MS);
+      if (live && s.scanning !== null) timer = setTimeout(recheck, RECHECK_MS);
     };
     const recheck = () =>
       api.site(hostname).then(
@@ -154,9 +145,6 @@ export function SitePage({
 
   const latest = site.versions[0]!;
   const n = version ?? shown ?? latest.version;
-  // An API older than scanner nodes sends no rounds: every version stands alone.
-  const round = roundOf(n, site.versions, site.rounds ?? []);
-  const roundKey = comparableKey(round, site.versions);
   return (
     <div class="page" style={{ paddingTop: 40 }}>
       <SiteHeader hostname={hostname}>
@@ -170,26 +158,13 @@ export function SitePage({
           </span>
         </a>
       )}
-      <VersionRail
-        hostname={hostname}
-        versions={site.versions}
-        rounds={site.rounds ?? []}
-        current={n}
-      />
+      <VersionRail hostname={hostname} versions={site.versions} current={n} />
       {registry?.mode === 'arkiv' && (
         <p class="small rail-explorer">
           <ExplorerLink kind="versions" value={hostname}>
             Every version of {hostname} on the Arkiv explorer
           </ExplorerLink>
         </p>
-      )}
-      {round !== null && roundKey !== null && (
-        <AgreementPanel
-          key={`${roundKey}:${round.scans.length}`}
-          hostname={hostname}
-          requestKey={roundKey}
-          scanners={round.scans.length}
-        />
       )}
       <VersionBody key={`${hostname}@${n}`} hostname={hostname} n={n} registry={registry} />
     </div>
@@ -229,63 +204,41 @@ function VersionBody({
   return <ReportView data={data} registry={registry} />;
 }
 
-/**
- * Version history: newest first, each compared with version − 1 when it is
- * listed. Versions made for one request are grouped ("Request · 2 scanners");
- * each says which scanner node published it, by the API's label.
- */
+/** Version history: newest first, each compared with version − 1 when it is listed. */
 function VersionRail({
   hostname,
   versions,
-  rounds,
   current,
 }: {
   hostname: string;
   versions: PublishedScan[];
-  rounds: RoundSummary[];
   current: number;
 }) {
-  const groups = railGroups(versions, rounds);
-  const item = ({ v, node }: RailItem) => (
-    <a
-      href={`#${paths.version(hostname, v.version)}`}
-      class={`rail-item ${v.version === current ? 'on' : ''}`}
-      aria-current={v.version === current ? 'page' : undefined}
-    >
-      <span class="rail-dot" aria-hidden="true" />
-      <span class="spread">
-        <b class="mono">v{v.version}</b>
-        <span class="muted small">{day(v.scannedAt)}</span>
-      </span>
-      <StateChip state={v.state} />
-      {node !== null && <span class="chip node-chip">Scanned by {nodeLabel(node)}</span>}
-      <span class="rail-counts small">
-        {v.recipients} parties · {v.addressRecipients} got address · {v.trackingRecipients}{' '}
-        tracking/unidentified
-      </span>
-      <span class="rail-change small muted">{railChange(v, versions)}</span>
-    </a>
-  );
   return (
     <nav class="rail rise d1" aria-label="Version history">
       <div class="eyebrow rail-title">Version history · {plural(versions.length, 'version')}</div>
       <ol class="rail-list">
-        {groups.map((g) =>
-          g.label === null ? (
-            <li key={g.items[0]!.v.key}>{item(g.items[0]!)}</li>
-          ) : (
-            <li key={g.items[0]!.v.key} class="rail-group">
-              <div class="rail-group-head mono small" id={`round-${g.items[0]!.v.key}`}>
-                {g.label}
-              </div>
-              <ol class="rail-group-list" aria-labelledby={`round-${g.items[0]!.v.key}`}>
-                {g.items.map((x) => (
-                  <li key={x.v.key}>{item(x)}</li>
-                ))}
-              </ol>
-            </li>
-          ),
-        )}
+        {versions.map((v) => (
+          <li key={v.key}>
+            <a
+              href={`#${paths.version(hostname, v.version)}`}
+              class={`rail-item ${v.version === current ? 'on' : ''}`}
+              aria-current={v.version === current ? 'page' : undefined}
+            >
+              <span class="rail-dot" aria-hidden="true" />
+              <span class="spread">
+                <b class="mono">v{v.version}</b>
+                <span class="muted small">{day(v.scannedAt)}</span>
+              </span>
+              <StateChip state={v.state} />
+              <span class="rail-counts small">
+                {v.recipients} parties · {v.addressRecipients} got address · {v.trackingRecipients}{' '}
+                tracking/unidentified
+              </span>
+              <span class="rail-change small muted">{railChange(v, versions)}</span>
+            </a>
+          </li>
+        ))}
       </ol>
     </nav>
   );

@@ -1,7 +1,7 @@
 # Wallet-request audit (design)
 
-Status: approved direction (owner, 2026-11-07: "Options 1 + 2"); schemas
-pinned after review. Shared types: `packages/core/src/contracts/wallet-request.ts`.
+Status: approved and frozen (owner, 2026-11-07); evidence v4 and report
+3.0.0 are hash-pinned. Shared types: `packages/core/src/contracts/wallet-request.ts`.
 
 ## Why
 
@@ -125,7 +125,7 @@ Remediation text explains the risk in plain words.
   (`WalletRequestEvidence`, additionalProperties false, every field typed,
   addresses `^0x[0-9a-fA-F]{40}$`, decimal strings `^[0-9]{1,78}$`). v1–v3
   pins untouched.
-- Report **3.0.0** (still proposed) gains required `walletRequests:
+- Report **3.0.0** gains required `walletRequests:
 WalletRequestSummary[] | null` (null for migrated reports) and pairs with
   evidence v4. Integrity: every summary's `evidenceId` resolves to a
   `wallet-request` item; findingIds exist.

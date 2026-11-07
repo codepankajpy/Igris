@@ -7,14 +7,8 @@
  *
  * The backend makes every judgement (summary, verdicts, changes between
  * versions); the website only displays. Scans always run with egress forced
- * to public-only. No client identity is logged or stored.
- *
- * Scan network (docs/design/SCAN-NETWORK.md): a scan started here is also an
- * open request (igris.request.v1) any trusted node may fulfil; a site's
- * versions are grouped into rounds (one request and the scans that fulfilled
- * it) and the API compares the nodes of a round per recipient. Nodes are
- * "Scanner n"; no response carries a signer address outside report and
- * evidence payloads (public.ts).
+ * to public-only. No client identity is logged or stored, and no response
+ * carries a signer address outside report and evidence payloads (public.ts).
  */
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
@@ -29,18 +23,13 @@ import {
   type WalletRequestKind,
 } from '@igris/core';
 import {
-  ARKIV_KEY_RE,
-  LOCAL_KEY_RE,
   PUBLISHED_WALLET_REQUEST_KINDS,
   RABDI_EXPLORER_URL,
   isHostname,
-  requestUrlProblem,
   type Changes,
   type PublishedScan,
-  type ScanRequest,
   type SiteRegistry,
 } from '@igris/registry';
-import { compareRound, type Agreement, type NodeReport } from './agreement.js';
 import { readCachedScan, type CachedScan } from './artifacts.js';
 import type { ApiConfig } from './config.js';
 import {
@@ -49,20 +38,11 @@ import {
   ScanQueueFull,
   doneOf,
   isJobId,
-  type Job,
   type SiteScanService,
 } from './jobs.js';
 import { RateLimiter } from './limits.js';
 import { websiteHandler } from './static.js';
-import { NodeLabels } from './nodes.js';
-import {
-  errText,
-  publicFlow,
-  publicRequest,
-  publicScan,
-  publicWalletRequest,
-  type PublicRequest,
-} from './public.js';
+import { errText, publicFlow, publicScan, publicWalletRequest } from './public.js';
 import type { RegistryInfo } from './registry.js';
 import { BadRequest, limitParam, positiveInt, scanTarget, validateHostname } from './validate.js';
 
@@ -75,32 +55,10 @@ export interface ApiDeps {
   log?: (msg: string) => void;
   /** Live registry probe for GET /api/registry (defaults: 5 s timeout, 30 s cache). */
   probe?: { timeoutMs?: number; ttlMs?: number; now?: () => number };
-  /** Scan-request cache: how long a "no such request" is remembered (default 10 min). */
-  requestCache?: { nullTtlMs?: number; now?: () => number };
 }
 
 /** Verified registry loads kept in memory (published content is immutable). */
 export const VERIFIED_CACHE_ENTRIES = 64;
-/** Scan requests kept in memory (readonly entities: their content never changes). */
-export const REQUEST_CACHE_ENTRIES = 512;
-/** Request lookups in flight at once while building a site's rounds. */
-const REQUEST_LOOKUP_CONCURRENCY = 8;
-/**
- * GET /api/sites/:hostname looks up the requests of the newest this-many
- * versions only (rounds of older versions show request null): one site read
- * costs at most this many registry reads, however long its history.
- */
-export const ROUND_REQUEST_VERSIONS = 50;
-/** How long a request lookup that found nothing is remembered. */
-export const REQUEST_NULL_TTL_MS = 10 * 60_000;
-
-/** One round of a site (light): a request and the scans that fulfilled it. */
-export interface RoundSummary {
-  /** null for a scan made without a request, or a request no longer on the registry. */
-  request: PublicRequest | null;
-  /** Newest first. */
-  scans: Array<{ version: number; key: string; node: string }>;
-}
 const PROBE_TIMEOUT_MS = 5_000;
 const PROBE_TTL_MS = 30_000;
 
@@ -251,12 +209,6 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
   const limiter = new RateLimiter(config.rateLimitMax, config.rateLimitWindowMs);
   const readLimiter = new RateLimiter(config.readRateLimitMax, config.rateLimitWindowMs);
   const verifiedLoads = new Lru<Loaded>(VERIFIED_CACHE_ENTRIES);
-  /** Hits forever (requests are readonly); misses ("null") for nullTtlMs. */
-  const requests = new Lru<{ request: ScanRequest | null; at: number }>(REQUEST_CACHE_ENTRIES);
-  const requestNullTtlMs = deps.requestCache?.nullTtlMs ?? REQUEST_NULL_TTL_MS;
-  const requestNow = deps.requestCache?.now ?? Date.now;
-  const nodes = new NodeLabels(registryInfo.publisher, registryInfo.trustedOwners);
-  const requestKeyRe = registry.mode === 'arkiv' ? ARKIV_KEY_RE : LOCAL_KEY_RE;
 
   const app = express();
   app.disable('x-powered-by');
@@ -344,8 +296,9 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
       const prev = await registry.byKey(scan.previous);
       if (!prev) return { why: `entity ${scan.previous} was not found` };
       // One version sequence per site across all trusted scanners
-      // (SCAN-NETWORK.md): v{n−1} may be another trusted node's — byKey only
-      // returns trusted entities — but it must be this hostname's v{n−1}.
+      // (IGRIS_TRUSTED_SCANNERS): v{n−1} may have been published by another
+      // trusted key — byKey only returns trusted entities — but it must be
+      // this hostname's v{n−1}.
       if (prev.hostname !== scan.hostname || prev.version !== scan.version - 1) {
         return {
           why: `entity ${scan.previous} is not ${scan.hostname} v${scan.version - 1}`,
@@ -357,80 +310,6 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
     } catch (err) {
       return { why: errText(err) };
     }
-  }
-
-  /**
-   * A scan request by key, null when absent. Cached: a request found is
-   * kept (requests are readonly), a request not found is remembered for
-   * requestNullTtlMs (so a site page full of expired requests does not
-   * re-ask the registry on every read). Registry errors are not cached.
-   */
-  async function getRequest(key: string): Promise<ScanRequest | null> {
-    const memo = key.toLowerCase();
-    const hit = requests.get(memo);
-    if (hit && (hit.request !== null || requestNow() - hit.at < requestNullTtlMs)) {
-      return hit.request;
-    }
-    const r = await registry.request(key);
-    requests.set(memo, { request: r, at: requestNow() });
-    return r;
-  }
-
-  /** getRequest, but a failing lookup is logged and reads as null (never fails the route). */
-  async function getRequestOrNull(key: string): Promise<ScanRequest | null> {
-    try {
-      return await getRequest(key);
-    } catch (err) {
-      log(`request ${key} could not be read (${errText(err)})`);
-      return null;
-    }
-  }
-
-  /**
-   * A site's versions (newest first) grouped into rounds: scans sharing a
-   * request key form one round, a scan without a request is a round of one.
-   * Rounds are ordered by their newest scan.
-   */
-  async function roundsOf(hostname: string, versions: PublishedScan[]): Promise<RoundSummary[]> {
-    const groups = new Map<string, PublishedScan[]>();
-    const rounds: Array<{ key: string | null; scans: PublishedScan[] }> = [];
-    for (const v of versions) {
-      if (v.request === null) {
-        rounds.push({ key: null, scans: [v] });
-        continue;
-      }
-      const k = v.request.toLowerCase();
-      let g = groups.get(k);
-      if (!g) {
-        g = [];
-        groups.set(k, g);
-        rounds.push({ key: v.request, scans: g });
-      }
-      g.push(v);
-    }
-    // Only the requests of the newest ROUND_REQUEST_VERSIONS versions are
-    // looked up (distinct keys); a failing lookup is request null.
-    const keys = [
-      ...new Set(
-        versions
-          .slice(0, ROUND_REQUEST_VERSIONS)
-          .flatMap((v) => (v.request === null ? [] : [v.request.toLowerCase()])),
-      ),
-    ];
-    const found = new Map<string, ScanRequest | null>();
-    for (let i = 0; i < keys.length; i += REQUEST_LOOKUP_CONCURRENCY) {
-      const batch = keys.slice(i, i + REQUEST_LOOKUP_CONCURRENCY);
-      const got = await Promise.all(batch.map((k) => getRequestOrNull(k)));
-      // A request for another hostname is not this site's round.
-      batch.forEach((k, j) => found.set(k, got[j]?.hostname === hostname ? got[j]! : null));
-    }
-    return rounds.map((r) => {
-      const req = r.key === null ? null : (found.get(r.key.toLowerCase()) ?? null);
-      return {
-        request: req ? publicRequest(req) : null,
-        scans: r.scans.map((s) => ({ version: s.version, key: s.key, node: nodes.label(s.owner) })),
-      };
-    });
   }
 
   app.get('/api/health', (_req, res) => {
@@ -515,13 +394,11 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
     handle(async (req, res) => {
       const hostname = validateHostname(param(req, 'hostname'));
       const versions = await registry.versions(hostname);
-      const rounds = await roundsOf(hostname, versions);
       const job = jobs.inFlight(hostname);
       res.json({
         hostname,
         versions: versions.map(publicScan),
         scanning: job ? { id: job.id, state: job.state } : null,
-        rounds,
       });
     }),
   );
@@ -568,76 +445,12 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
         summary: summarise(current.report, current.bundle),
         changes,
         source: current.source,
-        node: nodes.label(scan.owner),
       });
     }),
   );
 
-  // One round: each scan loaded and verified, and the agreement between the
-  // nodes (per recipient) when ≥ 2 nodes have a verified scan in it.
-  app.get(
-    '/api/sites/:hostname/rounds/:requestKey',
-    readLimited,
-    handle(async (req, res) => {
-      const hostname = validateHostname(param(req, 'hostname'));
-      const key = param(req, 'requestKey');
-      if (!requestKeyRe.test(key)) throw new BadRequest('requestKey is not a scan request key');
-      // The request entity may have expired (7 days unless extended) while
-      // trusted scans still reference it: the round is shown with request
-      // null. 404 only when no trusted scan of this site references the key
-      // and no live request of this site has it.
-      const [found, all] = await Promise.all([getRequestOrNull(key), registry.fulfilments(key)]);
-      const request = found && found.hostname === hostname ? found : null;
-      const fulfilled = all.filter((s) => s.hostname === hostname);
-      if (!request && fulfilled.length === 0) {
-        res.status(404).json({
-          error: `${hostname} has no scan request ${key} on the registry (requests expire after 7 days unless extended)`,
-        });
-        return;
-      }
-      const loaded = await Promise.all(
-        fulfilled.map(async (scan) => {
-          try {
-            return await loadVersion(scan);
-          } catch (err) {
-            log(`round ${key}: v${scan.version} could not be loaded (${errText(err)})`);
-            return null;
-          }
-        }),
-      );
-      const scans = fulfilled.map((scan, i) => ({
-        scan,
-        node: nodes.label(scan.owner),
-        verified: loaded[i]?.verified === true,
-        report: loaded[i]?.report ?? null,
-      }));
-      // One report per node: its newest verified scan of the round (scans are newest first).
-      const perNode = new Map<string, NodeReport>();
-      for (const s of scans) {
-        if (s.verified && s.report && !perNode.has(s.node)) {
-          perNode.set(s.node, { node: s.node, report: s.report });
-        }
-      }
-      const agreement: Agreement | null = compareRound(
-        [...perNode.values()].sort((a, b) => nodes.rank(a.node) - nodes.rank(b.node)),
-      );
-      res.json({
-        request: request ? publicRequest(request) : null,
-        scans: scans.map((s) => ({ scan: publicScan(s.scan), node: s.node, verified: s.verified })),
-        agreement,
-      });
-    }),
-  );
-
-  app.get('/api/nodes', (_req, res) => {
-    res.json({ nodes: nodes.list() });
-  });
-
-  // A scan here is also an open request (igris.request.v1) other nodes may
-  // fulfil. The job is reserved first (one scan per hostname holds while the
-  // request transaction runs), then the request is created; the job's publish
-  // waits for it and carries { request: key }. When the request cannot be
-  // created the scan still runs and publishes without one (request: null).
+  // Validate, then start the local job; it publishes the next version when
+  // the scan finishes (jobs.ts).
   app.post('/api/sites/:hostname/scans', rateLimited, (req, res) => {
     let target: { hostname: string; url: string };
     try {
@@ -665,13 +478,10 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
       });
       return;
     }
-    let settle!: (key: string | null) => void;
-    const requestKey = new Promise<string | null>((r) => (settle = r));
-    let job: Job;
     try {
-      job = jobs.submit(target.hostname, target.url, { request: requestKey });
+      const job = jobs.submit(target.hostname, target.url);
+      res.status(202).json({ id: job.id });
     } catch (err) {
-      settle(null);
       if (err instanceof ScanInProgress) {
         res.status(409).json({ error: err.message, id: err.id });
         return;
@@ -682,40 +492,7 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
       }
       throw err;
     }
-    void createRequestFor(job, target)
-      .then((request) => {
-        settle(request?.key ?? null);
-        res.status(202).json({ id: job.id, request: request ? publicRequest(request) : null });
-      })
-      .catch((err: unknown) => {
-        settle(null);
-        log(`scan ${job.id}: ${errText(err)}`);
-        if (!res.headersSent) res.status(202).json({ id: job.id, request: null });
-      });
   });
-
-  /** The request for a job just started here; null (logged) when it cannot be created. */
-  async function createRequestFor(
-    job: Job,
-    target: { hostname: string; url: string },
-  ): Promise<ScanRequest | null> {
-    const problem = requestUrlProblem(target.hostname, target.url);
-    if (problem !== null) {
-      log(`scan ${job.id}: no scan request (${problem}); scanning without one`);
-      return null;
-    }
-    try {
-      const created = await registry.createRequest(target.hostname, target.url);
-      // Known now: a site read right after must not cache it as missing.
-      requests.set(created.key.toLowerCase(), { request: created, at: requestNow() });
-      return created;
-    } catch (err) {
-      log(
-        `scan ${job.id}: the scan request could not be created (${errText(err)}); scanning without one`,
-      );
-      return null;
-    }
-  }
 
   app.get('/api/scans/:id', (req, res) => {
     const job = isJobId(param(req, 'id')) ? jobs.get(param(req, 'id')) : undefined;

@@ -4,20 +4,16 @@
  * published, the site's new version opens; when publishing failed (or has not
  * finished), the reason is shown with a retry and the report can be viewed
  * from the server's cache; when the scan failed, the reason and a retry.
- * A scan started from this tab also shows the open request it answers (the
- * igris.request.v1 entity), which other scanner nodes may fulfil too.
  */
 import { ExplorerLink } from '../explorer.js';
 import { useEffect, useState } from 'preact/hooks';
 import {
   SCAN_STAGES,
   api,
-  requestFor,
+  apiUrl,
   startScan,
   type Job,
   type JobState,
-  type NodeInfo,
-  type ScanRequest,
   type PublishStatus,
   type ScanProgressEvent,
   type ScanStage,
@@ -25,7 +21,6 @@ import {
 import { go, paths } from '../router.js';
 import { ErrorNote, Loading, duration, short, stamp } from '../ui.js';
 import { elapsedMs } from '../wording.js';
-import { nodeLabel } from '../rounds.js';
 
 export function ScanPage({ id }: { id: string }) {
   const [job, setJob] = useState<Job | null>(null);
@@ -127,7 +122,7 @@ function LiveScan({ job }: { job: Job }) {
 
   useEffect(() => {
     if (job.state === 'failed' || job.state === 'completed') return;
-    const es = new EventSource(`/api/scans/${encodeURIComponent(job.id)}/events`);
+    const es = new EventSource(apiUrl(`/api/scans/${encodeURIComponent(job.id)}/events`));
     es.onopen = () => {
       // The server replays every event on (re)connect: start from scratch.
       setEvents([]);
@@ -171,7 +166,6 @@ function LiveScan({ job }: { job: Job }) {
   const t0 = job.startedAt ?? events[0]?.at;
   const elapsed = elapsedMs({ t0, anchor, finishedAt, finished, now });
   const counters = [...events].reverse().find((e) => e.counters)?.counters;
-  const [request] = useState(() => requestFor(job.id));
   const firstAt = events[0] ? new Date(events[0].at).getTime() : 0;
 
   return (
@@ -204,8 +198,6 @@ function LiveScan({ job }: { job: Job }) {
           <div class="eyebrow">elapsed · requested {stamp(job.createdAt)}</div>
         </div>
       </div>
-
-      {request && <RequestPanel request={request} />}
 
       {state === 'failed' && (
         <div class="panel failure rise" style={{ marginTop: 28 }} role="alert">
@@ -317,62 +309,6 @@ function LiveScan({ job }: { job: Job }) {
         </div>
       </div>
     </div>
-  );
-}
-
-/** The open request this scan answers, and the scanner nodes that may answer it too. */
-function RequestPanel({ request }: { request: ScanRequest }) {
-  const [nodes, setNodes] = useState<NodeInfo[] | null>(null);
-  useEffect(() => {
-    let live = true;
-    api.nodes().then(
-      (n) => live && setNodes(n),
-      () => live && setNodes([]),
-    );
-    return () => {
-      live = false;
-    };
-  }, []);
-  const self = nodes?.find((n) => n.self) ?? null;
-  const others = nodes?.filter((n) => !n.self) ?? [];
-  return (
-    <section class="panel request-panel rise" aria-labelledby="request-h" style={{ marginTop: 28 }}>
-      <div class="eyebrow" id="request-h">
-        Open scan request
-      </div>
-      <p style={{ margin: '10px 0 6px' }}>
-        This scan answers a request for <span class="mono">{request.url}</span>, made{' '}
-        {stamp(request.requestedAt)} and published as entity{' '}
-        <span class="mono">{short(request.key, 10, 6)}</span>.{' '}
-        <ExplorerLink kind="entity" value={request.key}>
-          Request on the Arkiv explorer
-        </ExplorerLink>
-      </p>
-      <p class="muted small" style={{ margin: 0 }}>
-        Other scanner nodes may pick this request up and publish their own scans of it. The site
-        page then compares their reports, third party by third party.
-      </p>
-      {nodes !== null && nodes.length > 0 && (
-        <p class="small request-nodes" style={{ margin: '10px 0 0' }}>
-          {self && (
-            <>
-              <span class="chip node-chip">{nodeLabel(self.label)}</span> this node, running this
-              scan
-            </>
-          )}
-          {others.length > 0 && (
-            <>
-              {self ? ' · ' : ''}may also answer:{' '}
-              {others.map((n) => (
-                <span key={n.label} class="chip node-chip">
-                  {nodeLabel(n.label)}
-                </span>
-              ))}
-            </>
-          )}
-        </p>
-      )}
-    </section>
   );
 }
 

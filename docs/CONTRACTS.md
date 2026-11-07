@@ -6,17 +6,17 @@ disagree. Such a disagreement is a bug: report it. The JSON Schemas are
 exported from `@igris/core` (`REPORT_V3_SCHEMA`, `REPORT_V2_SCHEMA`,
 `EVIDENCE_BUNDLE_SCHEMA`, `EVIDENCE_ITEM_SCHEMA`).
 
-| Contract               | Identifier                                                                                            | Where                                                                                    |
-| ---------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Canonical JSON         | RFC 8785                                                                                              | `packages/core/src/contracts/canonical.ts`                                               |
-| Content hash           | sha256 over canonical bytes, 64 lowercase hex                                                         | `contracts/hash.ts`                                                                      |
-| Capture                | v1 (internal, unredacted — never published)                                                           | `contracts/capture.ts`                                                                   |
-| Wallet requests        | shared types (proposed)                                                                               | `contracts/wallet-request.ts`, `walletreq.ts`                                            |
-| Evidence bundle        | `igris.evidence.v4` (writes, proposed); v1–v3 read                                                    | `contracts/evidence.ts`                                                                  |
-| Report                 | `"3.0.0"` (writes, proposed); `"2.x"` read                                                            | `contracts/report-v{2,3}.ts`                                                             |
-| Detector API           | v1                                                                                                    | `contracts/detector.ts`, `engine.ts`                                                     |
-| Scanner node / profile | `igris.node.v1` / `igris.scanner.v1`                                                                  | `packages/registry/src/identity.ts`                                                      |
-| Registry entities      | Arkiv `igris.scan.v2`, `igris.evidence.v1`, `igris.flow.v1`, `igris.request.v1`, `igris.walletreq.v1` | `packages/registry/src/{schemas,payload,rows}.ts`; [arkiv/schema.md](../arkiv/schema.md) |
+| Contract               | Identifier                                                                        | Where                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Canonical JSON         | RFC 8785                                                                          | `packages/core/src/contracts/canonical.ts`                                               |
+| Content hash           | sha256 over canonical bytes, 64 lowercase hex                                     | `contracts/hash.ts`                                                                      |
+| Capture                | v1 (internal, unredacted — never published)                                       | `contracts/capture.ts`                                                                   |
+| Wallet requests        | shared types (frozen)                                                             | `contracts/wallet-request.ts`, `walletreq.ts`                                            |
+| Evidence bundle        | `igris.evidence.v4` (writes, frozen); v1–v3 read                                  | `contracts/evidence.ts`                                                                  |
+| Report                 | `"3.0.0"` (writes, frozen); `"2.x"` read                                          | `contracts/report-v{2,3}.ts`                                                             |
+| Detector API           | v1                                                                                | `contracts/detector.ts`, `engine.ts`                                                     |
+| Scanner node / profile | `igris.node.v1` / `igris.scanner.v1`                                              | `packages/registry/src/identity.ts`                                                      |
+| Registry entities      | Arkiv `igris.scan.v2`, `igris.evidence.v1`, `igris.flow.v1`, `igris.walletreq.v1` | `packages/registry/src/{schemas,payload,rows}.ts`; [arkiv/schema.md](../arkiv/schema.md) |
 
 ## Canonicalization and hashing
 
@@ -234,12 +234,12 @@ class existed such vendors could only be `unknown-third-party`.
 - Scoring: a leak to a `wallet-sdk` recipient is severity medium and costs
   20 points (docs/SCORING.md); the `canary-leak` detector is 1.1.0.
 
-## Evidence bundle `igris.evidence.v4` (proposed, pending approval)
+## Evidence bundle `igris.evidence.v4` (approved 2026-11-07, frozen)
 
 Specified in [docs/design/WALLET-REQUESTS.md](design/WALLET-REQUESTS.md).
-**Not yet frozen**: `EVIDENCE_ITEM_SCHEMA` / `EVIDENCE_BUNDLE_SCHEMA` (v4)
-are hash-pinned only after the owner approves that document (a TODO marks
-the pin's place in `contracts.test.ts`). The frozen v3 schemas are exported
+Approved by the project owner on 2026-11-07 and frozen:
+`EVIDENCE_ITEM_SCHEMA` / `EVIDENCE_BUNDLE_SCHEMA` (v4) are hash-pinned in
+`contracts.test.ts`. The frozen v3 schemas are exported
 as `EVIDENCE_ITEM_SCHEMA_V3` / `EVIDENCE_BUNDLE_SCHEMA_V3`; their pins are
 unchanged. v1–v3 bundles still validate (`validateEvidenceBundle` dispatches
 on `bundleVersion`).
@@ -303,13 +303,12 @@ label and item-schema reference):
   `wallet_switchEthereumChain` with a string chain id, as the canary does)
   and whether it called `eth_requestAccounts` (`preConnect`).
 
-## Report `3.0.0` (proposed, pending approval)
+## Report `3.0.0` (approved 2026-11-07, frozen)
 
 Specified in [docs/design/REPORT-3.0.0.md](design/REPORT-3.0.0.md), which is
 normative for it. Implemented in `contracts/report-v3.ts`, `verdicts.ts`,
-`timeline.ts`; **not yet frozen**: its schema is not hash-pinned until the
-project owner approves the design document (a TODO marks the pin's place in
-`contracts.test.ts`). The engine writes 3.0.0 with `igris.evidence.v4`
+`timeline.ts`. Approved by the project owner on 2026-11-07 and frozen: its
+schema is hash-pinned in `contracts.test.ts`. The engine writes 3.0.0 with `igris.evidence.v4`
 bundles; 2.0.0 / 2.1.0 / 2.2.0 reports still validate (`validateReport`,
 which `validateReportV2` now aliases) and verify.
 
@@ -334,12 +333,12 @@ addressPhases, ip }`, a `verdict` (`unidentified` > `tracking` >
   third party). All times are integer ms ≥ 0; the bundle never holds times;
 - added `walletRequests` (required): `null` (not recorded — migrated
   reports) or one `WalletRequestSummary` per recorded request, in request
-  order, at most 500 (proposed, pending pin; see below);
+  order, at most 500 (see below);
 - finding evidence references may also point at `wallet-request` items, and
   `evidence.bundleVersion` is `igris.evidence.v4`;
 - `migratedFrom` accepts `1.x.y` and `2.x.y`.
 
-### `walletRequests` (proposed, pending pin)
+### `walletRequests`
 
 ```
 {
@@ -430,8 +429,7 @@ Built-in detectors: `canary-leak` 1.1.0 (privacy), `ip-exposure` 1.0.0
 - **Approval and freezing**: a successor contract takes effect only after
   the project owner approves it. Once approved it is frozen, and its schemas
   are pinned by canonical hash in `contracts.test.ts`. Frozen so far: report
-  2.0.0, 2.1.0 and 2.2.0; `igris.evidence.v1`, `v2` and `v3`. Proposed and
-  not yet pinned: report 3.0.0 and `igris.evidence.v4`.
+  2.0.0, 2.1.0, 2.2.0 and 3.0.0; `igris.evidence.v1`, `v2`, `v3` and `v4`.
 - **Detectors**: bump `version` when logic changes. The `id` never changes,
   because it is part of every fingerprint.
 - **Arkiv entity schema**: a new schema name on breaking change
