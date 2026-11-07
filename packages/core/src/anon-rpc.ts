@@ -20,14 +20,6 @@ export const ANON_RPC_SPECIFIER_SELECTORS: readonly string[] = [
   selector('workerResolvers()'),
 ];
 
-/** Known specifier contract addresses from adopters.json5 (2026-11-06). */
-export const KNOWN_SPECIFIERS = {
-  passthrough: '0x4fd77be300f31c5fe6ab266d35d27750a3478d27',
-  torJs: '0x700dA3193D35fA54Cd3fBf29B66f2a2A0385659e',
-  nym: '0x3aCD9742C68F6d993066Ae25533e09b9e1f60eD0',
-  nox: '0x35133267A8F7EC35046a83DCA0f4Ca8A6e1b7A9A',
-} as const;
-
 /** Does this wallet-routed request look like the Anon-RPC bootstrap read? */
 export function isAnonRpcBootstrapCall(method: string, params: unknown): boolean {
   if (method !== 'eth_call') return false;

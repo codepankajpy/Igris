@@ -34,9 +34,9 @@ export const SCANNER_VERSION = '0.4.1'; // 0.4.1: connect controls named without
 
 /**
  * Network egress policy for the scanned page.
- *  - unrestricted (default for the local CLI): the browser reaches anything
- *    the scanning machine can — needed for localhost / dev / LAN dapps the
- *    user scans on their own machine.
+ *  - unrestricted (the default when no policy is passed; used by the offline
+ *    e2e tests, which scan fixtures on *.test → 127.0.0.1): the browser
+ *    reaches anything the scanning machine can.
  *  - public-only (mandatory for any hosted scanner): all browser traffic is
  *    forced through an egress-filtering proxy that refuses non-public
  *    addresses and non-allowlisted ports (see egress/proxy.ts).

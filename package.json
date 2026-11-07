@@ -19,6 +19,8 @@
     "api:dev": "pnpm --filter @igris/api dev",
     "api:build": "pnpm --filter @igris/api build",
     "api:start": "pnpm --filter @igris/api start",
+    "start": "pnpm --filter @igris/api start",
+    "docker:build": "docker build -f apps/api/Dockerfile -t igris .",
     "dev": "pnpm --filter @igris/api dev & pnpm --filter @igris/app dev",
     "scanner:init": "pnpm -s --filter @igris/registry exec tsx src/bin/init-scanner.ts"
   },

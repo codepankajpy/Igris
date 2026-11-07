@@ -14,9 +14,12 @@ reports/
 test-results/
 playwright-report/
 .trash-node_modules/
-igris-registry.json
-igris-snapshot.json
-igris-batch/
-corpus/runs/
 .igris-data/
 .igris-data-node2/
+
+# Internal working notes and local tooling (kept locally, not part of the submission)
+STATUS.md
+docs/ROADMAP.md
+docs/ENGINEERING_LOG.md
+VIDEO_SCRIPT.md
+.claude/

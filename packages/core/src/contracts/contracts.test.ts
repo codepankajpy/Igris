@@ -315,7 +315,7 @@ describe('P0.5 contracts are frozen; P1 successors are additive and, once approv
   });
 
   // Report 2.1.0 and igris.evidence.v2 were approved by the project owner on
-  // 2026-11-06 (ROADMAP MVP-7) exactly as committed at dd47f45. From here on
+  // 2026-11-06 exactly as committed at dd47f45. From here on
   // they are frozen like 2.0.0 / v1: any change is a new version.
   it('approved successor schemas (2.1.0, evidence v2) are byte-for-byte unchanged', () => {
     expect(contentHash(REPORT_SCHEMA_2_1_0)).toBe(

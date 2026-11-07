@@ -12,8 +12,17 @@
  *   IGRIS_REQUEST_WINDOW_S     how far back requests are read, s (default 3600)
  *   IGRIS_REQUESTS_PER_CREATOR requests fulfilled per creator per hour (default 5)
  *   IGRIS_BLOCKED_REQUESTERS   comma-separated creators whose requests are ignored
+ *
+ * The website (static.ts):
+ *   IGRIS_STATIC_DIR  directory of the built website (apps/app/dist) served
+ *                     at / from this same origin. Default: apps/app/dist of
+ *                     this checkout when it has been built, else none.
+ *                     "off" disables it; any other value must hold an
+ *                     index.html.
  */
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export interface ApiConfig {
   port: number;
@@ -43,6 +52,8 @@ export interface ApiConfig {
   dwellMs: number;
   /** Job metadata and the local cache of finished scans live here. */
   dataDir: string;
+  /** Built website served at / (same origin); null = API only. */
+  staticDir: string | null;
   worker: WorkerConfig;
 }
 
@@ -81,6 +92,22 @@ function workerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   };
 }
 
+/** apps/app/dist, from apps/api/src or apps/api/dist alike. */
+export const DEFAULT_STATIC_DIR = fileURLToPath(new URL('../../app/dist', import.meta.url));
+
+function staticDir(env: NodeJS.ProcessEnv): string | null {
+  const raw = env.IGRIS_STATIC_DIR?.trim();
+  if (raw === undefined || raw === '') {
+    return existsSync(join(DEFAULT_STATIC_DIR, 'index.html')) ? DEFAULT_STATIC_DIR : null;
+  }
+  if (raw === 'off') return null;
+  const dir = resolve(raw);
+  if (!existsSync(join(dir, 'index.html'))) {
+    throw new Error(`IGRIS_STATIC_DIR: ${dir} has no index.html (build apps/app, or set "off")`);
+  }
+  return dir;
+}
+
 function int(env: NodeJS.ProcessEnv, key: string, def: number, min: number, max: number): number {
   const raw = env[key];
   if (raw === undefined || raw === '') return def;
@@ -92,7 +119,7 @@ function int(env: NodeJS.ProcessEnv, key: string, def: number, min: number, max:
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
-  const origins = (env.IGRIS_ALLOWED_ORIGINS ?? 'http://localhost:5180,http://127.0.0.1:5180')
+  const origins = (env.IGRIS_ALLOWED_ORIGINS || 'http://localhost:5180,http://127.0.0.1:5180')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
@@ -101,7 +128,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
       throw new Error(`IGRIS_ALLOWED_ORIGINS: "${o}" must be an exact origin (no "*", no path)`);
     }
   }
-  const ports = (env.IGRIS_ALLOWED_PORTS ?? '80,443').split(',').map((p) => Number(p.trim()));
+  const ports = (env.IGRIS_ALLOWED_PORTS || '80,443').split(',').map((p) => Number(p.trim()));
   if (ports.some((p) => !Number.isInteger(p) || p < 1 || p > 65535)) {
     throw new Error('IGRIS_ALLOWED_PORTS must be a comma-separated list of ports');
   }
@@ -117,7 +144,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     trustProxy: int(env, 'IGRIS_TRUST_PROXY', 0, 0, 10),
     allowedPorts: ports,
     dwellMs: int(env, 'IGRIS_DWELL_MS', 4000, 1000, 20_000),
-    dataDir: resolve(env.IGRIS_DATA_DIR ?? '.igris-data'),
+    dataDir: resolve(env.IGRIS_DATA_DIR || '.igris-data'),
+    staticDir: staticDir(env),
     worker: workerConfig(env),
   };
 }

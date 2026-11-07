@@ -6,17 +6,17 @@ disagree. Such a disagreement is a bug: report it. The JSON Schemas are
 exported from `@igris/core` (`REPORT_V3_SCHEMA`, `REPORT_V2_SCHEMA`,
 `EVIDENCE_BUNDLE_SCHEMA`, `EVIDENCE_ITEM_SCHEMA`).
 
-| Contract               | Identifier                                         | Where                                         |
-| ---------------------- | -------------------------------------------------- | --------------------------------------------- |
-| Canonical JSON         | RFC 8785                                           | `packages/core/src/contracts/canonical.ts`    |
-| Content hash           | sha256 over canonical bytes, 64 lowercase hex      | `contracts/hash.ts`                           |
-| Capture                | v1 (internal, unredacted — never published)        | `contracts/capture.ts`                        |
-| Wallet requests        | shared types (proposed)                            | `contracts/wallet-request.ts`, `walletreq.ts` |
-| Evidence bundle        | `igris.evidence.v4` (writes, proposed); v1–v3 read | `contracts/evidence.ts`                       |
-| Report                 | `"3.0.0"` (writes, proposed); `"2.x"` read         | `contracts/report-v{2,3}.ts`                  |
-| Detector API           | v1                                                 | `contracts/detector.ts`, `engine.ts`          |
-| Scanner node / profile | `igris.node.v1` / `igris.scanner.v1`               | `packages/registry/src/identity.ts`           |
-| Registry entity        | Arkiv schema `igris.scan.v1`, summary payload v2   | `packages/registry/src/{schema,record}.ts`    |
+| Contract               | Identifier                                                                                            | Where                                                                                    |
+| ---------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Canonical JSON         | RFC 8785                                                                                              | `packages/core/src/contracts/canonical.ts`                                               |
+| Content hash           | sha256 over canonical bytes, 64 lowercase hex                                                         | `contracts/hash.ts`                                                                      |
+| Capture                | v1 (internal, unredacted — never published)                                                           | `contracts/capture.ts`                                                                   |
+| Wallet requests        | shared types (proposed)                                                                               | `contracts/wallet-request.ts`, `walletreq.ts`                                            |
+| Evidence bundle        | `igris.evidence.v4` (writes, proposed); v1–v3 read                                                    | `contracts/evidence.ts`                                                                  |
+| Report                 | `"3.0.0"` (writes, proposed); `"2.x"` read                                                            | `contracts/report-v{2,3}.ts`                                                             |
+| Detector API           | v1                                                                                                    | `contracts/detector.ts`, `engine.ts`                                                     |
+| Scanner node / profile | `igris.node.v1` / `igris.scanner.v1`                                                                  | `packages/registry/src/identity.ts`                                                      |
+| Registry entities      | Arkiv `igris.scan.v2`, `igris.evidence.v1`, `igris.flow.v1`, `igris.request.v1`, `igris.walletreq.v1` | `packages/registry/src/{schemas,payload,rows}.ts`; [arkiv/schema.md](../arkiv/schema.md) |
 
 ## Canonicalization and hashing
 
@@ -100,7 +100,7 @@ byte-for-byte identical in v2 (tested).
 made it and the evidence it rested on. `relationship` is descriptive; the
 scoring class stays the frozen `recipientClass` on `third-party-contact`.
 
-No detector produces `contact-classification` items yet (ROADMAP P1-3).
+No detector produces `contact-classification` items yet.
 
 ## Report v2 (`2.0.0`)
 
@@ -142,6 +142,9 @@ Every finding, privacy or security, has these fields:
 
 ### Privacy score vs. security observations
 
+This section describes Report 2.x, which is still read (old published
+reports) but no longer written: Report 3.0.0 has no score.
+
 - **The score is computed only from `privacy.findings`.** It uses a scoring
   rule registered per detector (`scoring-v2.ts`), which reads the typed
   evidence. A counted finding from a detector without a rule is an error.
@@ -160,7 +163,7 @@ Every finding, privacy or security, has these fields:
 | `evidence.sha256`   | the exact observations (bytes) | only when the page embeds no nonces           |
 | `findingSet.sha256` | which findings were observed   | yes (verified on the fixtures, repeated runs) |
 
-Use `findingSet` for re-scan confirmation (ROADMAP P2-5) and independent
+Use `findingSet` for re-scan confirmation and independent
 reproduction (P6-2). Use `evidence.sha256` to prove what was seen.
 
 ## Report `2.1.0`

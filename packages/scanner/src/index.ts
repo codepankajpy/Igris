@@ -49,4 +49,3 @@ export {
   type ScoredCandidate,
 } from './connect/candidates.js';
 export { openConnectUi, isUnexpectedNavigation, type OpenResult } from './connect/open.js';
-export { INVENTORY_PROBE, walletOptionAncestryProbe } from './connect/page-probes.js';

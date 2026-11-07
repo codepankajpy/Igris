@@ -79,7 +79,8 @@ const server = app.listen(config.port, () => {
     `listening on :${config.port} — registry ${info.mode} (${info.network}), ` +
       `${info.publisher !== null ? 'publishing' : 'read-only'}, ${info.ready ? 'ready' : `NOT READY: ${info.reason ?? ''}`}; ` +
       `${info.trustedOwners.length} trusted scanner(s); egress public-only; concurrency ${config.concurrency}; ` +
-      `request worker ${worker ? `on (every ${config.worker.pollMs} ms)` : 'off'}; origins ${config.allowedOrigins.join(' ')}`,
+      `request worker ${worker ? `on (every ${config.worker.pollMs} ms)` : 'off'}; origins ${config.allowedOrigins.join(' ')}; ` +
+      `website ${config.staticDir !== null ? `served from ${config.staticDir}` : 'not served (API only)'}`,
   );
   worker?.start();
 });

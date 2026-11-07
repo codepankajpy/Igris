@@ -41,12 +41,14 @@ document's final response** (after redirects) during phase A. They are
 response headers; reading them from request headers (as versions before
 1.1.0 did) reported them missing on every site. If no main-document
 response was observed, the report omits them ("unknown"), never "missing".
-They are informational and do not affect the privacy score.
+They are informational security observations, kept apart from privacy
+findings: they never make a recipient or a verdict.
 
 ## Network egress (hosted scans)
 
-The local CLI reaches whatever the scanning machine can (needed to scan
-localhost and dev builds). A hosted scanner must not: its scans run with
+An unrestricted scan (the scanner's default, used only by the offline e2e
+tests against `*.test` fixtures on 127.0.0.1) reaches whatever the scanning
+machine can. A hosted scanner must not, and the API never allows it: its scans run with
 `egress: public-only`, which forces **all** Chromium traffic through an
 in-process proxy that resolves each hostname once, refuses non-public
 addresses (loopback, RFC 1918, link-local/cloud metadata, CGNAT, multicast,
@@ -69,8 +71,8 @@ each backed by redacted, content-addressed evidence
   lower; partial forms are low and `possible`; storage and first-party
   observations are info.
 - **ip-exposure** (privacy): one finding per third-party registrable domain
-  (low; Anon-RPC contacts are info and never counted).
-- **security-headers** (security, never scored): CSP missing (medium) or
+  (low; Anon-RPC contacts are info).
+- **security-headers** (security, never a privacy finding): CSP missing (medium) or
   report-only (low); framing allowed (medium); HSTS missing on https (low);
   plain HTTP on a non-local host (high). It always records a summary
   observation with the document-headers evidence.
@@ -83,7 +85,7 @@ so the same behaviour has the same id on every scan and every scanner node.
 All HTTP requests (failed/aborted and `keepalive`/sendBeacon included: URL,
 method, headers, body up to 512 KiB), response `Set-Cookie` headers,
 WebSocket frames, cookies at each phase end, and localStorage/sessionStorage
-entries containing the canary (reported as "persisted locally", unscored).
+entries containing the canary (reported as "persisted locally"; local storage is not a recipient).
 **Service workers are disabled** (`serviceWorkers: 'block'`) so their
 requests cannot bypass capture — at the cost of scanning the non-SW code
 path of apps that require one.
@@ -98,8 +100,9 @@ URL-encoded, ABI 32-byte left-padded (calldata and event topics, with/without
 the raw 20/32 bytes, inside JSON-RPC batch bodies, keccak256 and sha256 of
 the lowercase and checksummed forms (hex and base64) flagged separately as
 **"hashed, still linkable"**, and truncated display forms (first 6 + last 4)
-flagged **"partial, low confidence"** and excluded from the score. Only
-exact, decoded matches count as leaks.
+flagged **"partial, low confidence"** (a recipient that only saw one is
+shown as "possible" and counts as no address in its verdict). Only exact,
+decoded matches count as leaks.
 
 ## Wallet behaviour
 

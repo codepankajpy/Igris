@@ -53,6 +53,7 @@ import {
   type SiteScanService,
 } from './jobs.js';
 import { RateLimiter } from './limits.js';
+import { websiteHandler } from './static.js';
 import { NodeLabels } from './nodes.js';
 import {
   errText,
@@ -846,6 +847,10 @@ export function createApp(config: ApiConfig, deps: ApiDeps): express.Express {
       });
     }),
   );
+
+  // The built website, same origin (static.ts). After every API route, and
+  // it never handles /api paths, so it cannot shadow one.
+  if (config.staticDir !== null) app.use(websiteHandler(config.staticDir));
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'not found' });

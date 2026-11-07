@@ -83,7 +83,8 @@ export function createRegistry(
   dataDir: string,
   f: RegistryFactories,
 ): { registry: SiteRegistry; info: RegistryInfo } {
-  const requested = env.IGRIS_REGISTRY?.trim();
+  // Empty (e.g. a blank line copied from .env.example) means not set.
+  const requested = env.IGRIS_REGISTRY?.trim() || undefined;
   if (requested && requested !== 'arkiv' && requested !== 'local') {
     throw new Error(`IGRIS_REGISTRY must be "arkiv" or "local" (got "${requested}")`);
   }

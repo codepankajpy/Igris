@@ -1,13 +1,19 @@
-# Keep secrets and host build state out of the Docker build context.
+# Keep secrets, local state and host build output out of the Docker build
+# context. The image builds everything (packages, api, website) itself.
 .env
 .env.*
 !.env.example
+**/.igris*
 .git
+.claude
 **/node_modules
 **/dist
-igris-out
-igris-registry.json
-igris-snapshot.json
-igris-batch
+**/*.tsbuildinfo
+**/coverage
+**/test-results
+**/playwright-report
 .trash-node_modules
 **/.DS_Store
+igris-out
+reports
+**/*.log

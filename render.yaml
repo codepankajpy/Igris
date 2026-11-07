@@ -1,12 +1,43 @@
+# Render Blueprint: IGRIS as ONE web service (backend + website, same origin).
+# Render builds apps/api/Dockerfile from the repository root.
+#
+# The persistent disk at /data keeps the node identity and scanner key
+# (IGRIS_HOME=/data/igris-home) and the job cache / local registry
+# (IGRIS_DATA_DIR=/data/igris-data) across deploys. A service with a disk runs
+# a single instance.
+#
+# Arkiv publishing (optional): open a Shell on the service and run
+#   node --conditions=igris-dist packages/registry/dist/bin/init-scanner.js <name>
+# fund the printed address at https://hub.arkiv.network/faucet, set
+# ARKIV_ACCESS_KEY in the dashboard, and redeploy. Without a key the registry
+# is local (on the disk).
 services:
   - type: web
-    name: igris-scanner-api
-    env: docker
-    dockerfilePath: apps/api/Dockerfile
+    name: igris
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
     plan: standard
     healthCheckPath: /api/health
+    disk:
+      name: igris-data
+      mountPath: /data
+      sizeGB: 1
     envVars:
-      - key: PORT
-        value: 3001
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 3001
+      # Render's load balancer is one proxy hop in front of the app.
+      - key: IGRIS_TRUST_PROXY
+        value: 1
+      - key: IGRIS_DATA_DIR
+        value: /data/igris-data
+      - key: IGRIS_HOME
+        value: /data/igris-home
+      # Comma-separated scanner owner addresses whose Arkiv entities are read.
+      - key: IGRIS_TRUSTED_SCANNERS
+        sync: false
+      # Arkiv access key: set in the dashboard, never committed.
+      - key: ARKIV_ACCESS_KEY
+        sync: false

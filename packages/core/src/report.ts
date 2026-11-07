@@ -14,9 +14,6 @@ import type { MatchCategory } from './encodings.js';
  */
 export const REPORT_VERSION = '1.1.0';
 
-/** Report versions this code can read (older reports stay valid input). */
-export const READABLE_REPORT_VERSIONS = ['1.0.0', '1.1.0'] as const;
-
 export type Phase = 'pre-connect' | 'post-connect';
 
 /**
@@ -183,7 +180,7 @@ export interface Report {
 /**
  * JSON Schema (draft 2020-12) for Report. Exported so external consumers can
  * validate reports without TypeScript; kept in lockstep with the types above
- * (NOT yet enforced by a test: schema validation tests are ROADMAP P05-1).
+ * (not yet enforced by a test).
  */
 export const REPORT_JSON_SCHEMA = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',

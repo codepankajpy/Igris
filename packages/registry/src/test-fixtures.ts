@@ -190,10 +190,6 @@ export function capturedApprove(
   return captured('eth_sendTransaction', [{ from: canary, to: TOKEN, data }], over);
 }
 
-/** eth_sign of a raw 32-byte hash (a blind signature). */
-export const capturedEthSign = (canary = CANARY_A) =>
-  captured('eth_sign', [canary, '0x' + '11'.repeat(32)], { outcome: 'rejected' });
-
 /** connect, an unlimited Permit2 on the wrong chain (10; wallet on 1), a SIWE for evil.example. */
 export function sampleCapturedWalletRequests(): CapturedWalletRequest[] {
   return [capturedConnect(), capturedPermit2(10), capturedSiwe('evil.example')];
@@ -249,24 +245,6 @@ export function walletSummary(over: Partial<WalletRequestSummary> = {}): WalletR
     findingIds: [],
     ...over,
   };
-}
-
-/** connect, an unlimited Permit2 on the wrong chain, a SIWE for another domain. */
-export function sampleWalletRequests(): WalletRequestSummary[] {
-  return [
-    walletSummary({ kind: 'connect', method: 'eth_requestAccounts', outcome: 'answered' }),
-    walletSummary({
-      kind: 'permit2',
-      method: 'eth_signTypedData_v4',
-      chainId: 10,
-      verifyingContract: PERMIT2,
-      spender: SPENDER,
-      amount: '1461501637330902918203684832716283019655932542975',
-      unlimited: true,
-      chainIdMismatch: true,
-    }),
-    walletSummary({ kind: 'siwe', siweDomain: 'evil.example', domainMismatch: true }),
-  ];
 }
 
 /** The scan result with `walletRequests` set on its report (evidence unchanged). */

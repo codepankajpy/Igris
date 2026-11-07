@@ -2,99 +2,78 @@
 
 **Open privacy reports for dApps — who learns your wallet address, and when.**
 
-Search a site. If it has been scanned, IGRIS shows its latest report and its
-version history; if not, one click scans it. A scan opens the site in an
-isolated browser, connects a throwaway wallet the way a user would, and
-records every request. The report shows — with charts and evidence, never a
-score:
+Paste a dApp's URL. IGRIS opens it in an isolated browser, connects a
+throwaway wallet the way a real user would, records every request, and
+shows — with charts and evidence, never a score — which third parties
+received your wallet address, your IP, your RPC calls, and what the site
+asked your wallet to sign. Every report is published on **Arkiv**, versioned,
+and re-verifiable by anyone.
 
-- **who received the wallet address** (in any of 14+ encodings, hashed forms
-  flagged separately) and when;
-- **who learned the visitor's IP** before and after connecting;
-- **which RPC endpoints were called**, with every JSON-RPC method and count,
-  and whether the address travelled with the calls;
-- **trackers, cookies, storage and security headers** of the page;
-- a **verdict for every third party** — _expected_ (the app needs it),
-  _avoidable_ (the app works without it), _tracking_ (not needed, profiles
-  visitors) or _unidentified_ — each with its rule and reason, each backed by
-  content-addressed evidence;
-- **what the site asked the wallet to sign** — sign-in messages (and whether
+> Built at ETHGlobal for the **Ethereum Foundation CROPS** track (lead
+> property: _Privacy_ — "a tool that shows what an app leaks: RPC calls,
+> trackers, metadata") and **Arkiv — Build on Arkiv**.
+
+## What a report shows
+
+- **Who received the wallet address** (exact, or in any of 14+ encodings;
+  hashed forms flagged separately) and **when**, on a timeline of the visit.
+- **Who learned the visitor's IP** before and after connecting the wallet.
+- **Every RPC endpoint** the page called, with each JSON-RPC method, its
+  count, and whether the address travelled with it.
+- **What the site asked the wallet to sign**: sign-in messages (and whether
   they name another site), unlimited Permit / Permit2 approvals, `eth_sign`
-  blind signatures, `approve` / `setApprovalForAll` transactions, requests
-  that name the wrong chain or come before connecting.
+  blind signatures, `approve` / `setApprovalForAll`, requests naming the
+  wrong chain or arriving before connecting.
+- **Trackers, cookies, storage and security headers** of the page.
+- A **verdict for every third party** — _expected_ (the app needs it),
+  _avoidable_ (the app works without it), _tracking_ (profiles visitors) or
+  _unidentified_ — each with its rule, its reason and content-addressed
+  evidence.
 
-Every report is **published on Arkiv**. A retest publishes the next version,
-linked to the previous one, so a site's privacy history lives on Arkiv — not
-on our server. A scan request is itself an Arkiv entity: **any IGRIS scanner
-node can answer it**, and the site page compares the nodes' reports third
-party by third party, so no single operator has to be trusted.
+## The flow
 
-## Run it
-
-Requirements: Node ≥ 20, pnpm 9.
-
-```bash
-pnpm install
-pnpm exec playwright install chromium chromium-headless-shell
-```
-
-To publish on Arkiv (Rabdi testnet), once per machine:
-
-```bash
-pnpm scanner:init primary        # creates this node's publishing key in ~/.igris (0600)
-```
-
-Fund the printed address at https://hub.arkiv.network/faucet, and put your
-Arkiv access key in a file `.env.arkiv` (gitignored):
-
-```
-ARKIV_ACCESS_KEY=<your key from hub.arkiv.network>
-```
-
-Then start the backend and the website:
-
-```bash
-pnpm --filter @igris/api dev     # scanner + Arkiv publisher on :3001
-pnpm --filter @igris/app dev     # website on http://localhost:5180
-```
-
-A second scanner node (its own key, data directory and port) answers the
-same open requests:
-
-```bash
-IGRIS_HOME=~/.igris-node2 pnpm scanner:init node2
-IGRIS_HOME=~/.igris-node2 IGRIS_DATA_DIR=.igris-data-node2 PORT=3002 \
-  IGRIS_TRUSTED_SCANNERS=<node2 address>,<primary address> \
-  pnpm -s exec tsx --env-file-if-exists=.env.arkiv apps/api/src/index.ts
-```
-
-Give the first node `IGRIS_TRUSTED_SCANNERS=<primary address>,<node2 address>`
-so it shows both nodes' scans.
-
-Without a scanner key the backend uses a local registry file
-(`.igris-data/registry.json`) with the same behaviour, so everything works
-offline. Tests: `pnpm test` (unit) and `pnpm test:e2e` (browser, offline
-fixtures).
+1. **Search a site.** If it was scanned before, IGRIS shows its latest
+   report and full version history, with a **Retest** button; otherwise
+   **Scan this site**.
+2. **Watch the scan live**: isolated Chromium, egress limited to public
+   addresses, a fresh throwaway wallet per scan.
+3. **Read the report**: timeline, traffic chart, address flow, RPC
+   inventory, wallet requests, findings and evidence.
+4. **It is on Arkiv**: one atomic, signed batch per scan. A retest publishes
+   version _n + 1_ linked to version _n_, so a site's privacy history lives
+   on-chain, not on our server. Every version links to the Arkiv explorer.
+5. **Any scanner node can answer.** "Scan this site" creates an open scan
+   request on Arkiv; every IGRIS node polls for requests, scans
+   independently and publishes. The site page compares the nodes' reports
+   third party by third party (agree / differ / seen by only some), so no
+   single operator has to be trusted.
 
 ## How it works
 
 ```
 website (apps/app) ──► backend (apps/api) ──► scanner (packages/scanner)  isolated Chromium,
-        │                     │                                          canary wallet, egress
-        │                     │                                          public-only
-        │                     ├──► core (packages/core)    detectors, verdicts, timeline,
-        │                     │                            RPC inventory, Report 3.0.0
-        │                     └──► registry (packages/registry) ──► Arkiv: igris.scan.v2,
-        │                                                            igris.evidence.v1,
-        │                                                            igris.flow.v1,
-        │                                                            igris.walletreq.v1,
-        └── same-origin only; never talks to Arkiv or any third party   igris.request.v1
+   Preact, same-origin      │                                             canary wallet,
+   only, zero third-party   │                                             egress public-only
+   requests                 ├──► core (packages/core)      detectors, verdicts, timeline,
+                            │                              RPC inventory, Report 3.0.0
+                            └──► registry (packages/registry) ──► Arkiv: igris.scan.v2
+                                                                         igris.evidence.v1
+                                                                         igris.flow.v1
+                                                                         igris.walletreq.v1
+                                                                         igris.request.v1
 ```
 
-Formats: [docs/CONTRACTS.md](docs/CONTRACTS.md) ·
-[docs/design/REPORT-3.0.0.md](docs/design/REPORT-3.0.0.md) ·
-[docs/design/FLOW.md](docs/design/FLOW.md) · method:
-[docs/METHODOLOGY.md](docs/METHODOLOGY.md) · Arkiv: [arkiv/](arkiv/).
+| Path                | What it is                                                                                                     |
+| ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `apps/app`          | The website (Preact + Vite). Talks only to its own backend; makes zero third-party requests (enforced by e2e). |
+| `apps/api`          | Backend: scan jobs, the scan-request worker, rounds and agreement, Arkiv publishing; serves the built website. |
+| `packages/scanner`  | Playwright scanner: canary EIP-1193/6963 wallet, connect engine, traffic capture, egress-filtering proxy.      |
+| `packages/core`     | Detectors, verdicts, timeline, RPC inventory, wallet-request decoder, report and evidence contracts.           |
+| `packages/registry` | Site registry on Arkiv (and an offline local registry with the same behaviour); scanner identity.              |
+| `fixtures/`         | Offline test dApps used by the end-to-end tests.                                                               |
+| `data/`             | Third-party database (domain → class) used for verdicts.                                                       |
+| `arkiv/`            | Arkiv bounty docs: why Arkiv, how we use it, schema, reach, friction log.                                      |
+| `docs/`             | Methodology, contracts and design specs (Report 3.0.0, flow, scanner network, wallet requests).                |
 
 ## Where the blockchain is used
 
@@ -125,7 +104,7 @@ Formats: [docs/CONTRACTS.md](docs/CONTRACTS.md) ·
   browser scan cannot run on-chain anyway; what the chain gives is a public,
   signed, append-only record that no IGRIS operator can edit or withhold.
 
-### Live on Arkiv (Rabdi, chain 7794095)
+## Live on Arkiv (Rabdi, chain 7794095)
 
 - Publishing scanners (both run by the IGRIS author, on one machine for the
   demo, so they show the protocol, not independence):
@@ -168,7 +147,7 @@ Other queries (same call, different first parameter):
 Always filter or check `$creator`: anyone can create entities with these
 attributes, and IGRIS trusts only the scanners it is configured with.
 
-## CROPS
+## CROPS — how IGRIS meets each property
 
 Lead property: **Privacy** — IGRIS exists to show, with evidence, what a
 dApp leaks about its users. Each line was checked against the code on branch
@@ -219,8 +198,99 @@ dApp leaks about its users. Each line was checked against the code on branch
   created it (`$creator`, which never changes — not `$owner`, which anyone
   can set to any address by transferring an entity they created); a report covers what a browser can observe (server-side sharing
   is invisible). Open gaps: Chromium runs without its own sandbox in the
-  container image (ROADMAP P4-6), and the backend has no authentication
+  container image, and the backend has no authentication
   (anyone who can reach it can start scans, within its rate limits).
+
+## Run it locally
+
+Requirements: Node ≥ 20, pnpm 9, ~2 GB free RAM for Chromium.
+
+```bash
+pnpm install
+pnpm exec playwright install chromium chromium-headless-shell
+pnpm --filter @igris/api dev     # backend + scanner on :3001
+pnpm --filter @igris/app dev     # website on http://localhost:5180
+```
+
+Without a scanner key the backend uses a **local registry**
+(`.igris-data/registry.json`) with the same behaviour, so everything works
+offline.
+
+### Publish to Arkiv (Rabdi testnet)
+
+```bash
+pnpm scanner:init primary        # creates this node's key in ~/.igris (0600); prints its address
+```
+
+Fund the printed address at https://hub.arkiv.network/faucet, then put your
+Arkiv access key in `.env.arkiv` at the repository root (gitignored — never
+commit it):
+
+```
+ARKIV_ACCESS_KEY=<your key from hub.arkiv.network>
+```
+
+Restart the backend: it now publishes every scan to Arkiv and answers open
+scan requests.
+
+### A second scanner node
+
+```bash
+IGRIS_HOME=~/.igris-node2 pnpm scanner:init node2
+IGRIS_HOME=~/.igris-node2 IGRIS_DATA_DIR=.igris-data-node2 PORT=3002 \
+  IGRIS_TRUSTED_SCANNERS=<node2 address>,<primary address> \
+  pnpm -s exec tsx --env-file-if-exists=.env.arkiv apps/api/src/index.ts
+```
+
+Start the first node with `IGRIS_TRUSTED_SCANNERS=<primary address>,<node2 address>`
+so its website shows both nodes' scans.
+
+### Tests
+
+```bash
+pnpm lint && pnpm format:check && pnpm build
+pnpm test        # unit: core, scanner, registry, api, app
+pnpm test:e2e    # browser: scanner fixtures + the website's zero-third-party test
+```
+
+## Deploy
+
+IGRIS deploys as **one container** that serves the website and the backend
+from the same origin (`apps/api/Dockerfile`; runs as an unprivileged user,
+no keys baked in). Persistent data lives under `/data`: the scanner key and
+node identity in `/data/igris-home`, jobs and the local registry in
+`/data/igris-data`.
+
+```bash
+docker build -f apps/api/Dockerfile -t igris .
+docker run -d --name igris -p 3001:3001 -v igris-data:/data igris
+# open http://localhost:3001  (local registry until a scanner key exists)
+```
+
+To publish to Arkiv from the container:
+
+```bash
+docker exec -it igris node --conditions=igris-dist packages/registry/dist/bin/init-scanner.js primary
+# fund the printed address at https://hub.arkiv.network/faucet, then:
+docker rm -f igris
+docker run -d --name igris -p 3001:3001 -v igris-data:/data \
+  -e ARKIV_ACCESS_KEY=<key> -e IGRIS_TRUSTED_SCANNERS=<your scanner address> igris
+```
+
+- **Render**: `render.yaml` is a Blueprint (Docker, 1 GB disk at `/data`,
+  health check `/api/health`). Set `ARKIV_ACCESS_KEY` and
+  `IGRIS_TRUSTED_SCANNERS` in the dashboard; create the key from the
+  service Shell with the `init-scanner.js` command above, then redeploy.
+- **Railway**: `railway.json` builds the same Dockerfile; add a volume
+  mounted at `/data` and the same variables.
+- **Behind a reverse proxy** (Render, Railway, nginx, Caddy) set
+  `IGRIS_TRUST_PROXY=1` so rate limits see the real client.
+- Check it: `curl https://<host>/api/health` → `{"ok":true}`;
+  `curl https://<host>/api/registry` → `mode: "arkiv"`, `ready: true`.
+
+Every setting is optional and documented in [`.env.example`](.env.example)
+(port, concurrency, timeouts, rate limits, worker, trusted scanners). Use a
+plan with ≥ 2 GB RAM: each scan runs a Chromium.
 
 ## Limitations
 
@@ -231,6 +301,16 @@ detectable, not nothing wrong: server-side forwarding, encrypted
 exfiltration, WalletConnect-relayed flows and deep interaction paths are out
 of scope ([docs/METHODOLOGY.md](docs/METHODOLOGY.md)). Arkiv entities expire
 after 180 days; a site's history older than that disappears unless retested.
+
+## Docs
+
+- Arkiv: [why Arkiv](arkiv/why-arkiv.md) · [how we use it](arkiv/how-you-use-arkiv.md) ·
+  [schema and organiser queries](arkiv/schema.md) · [reach](arkiv/reach.md) ·
+  [friction log](arkiv/friction.md)
+- Design: [the flow](docs/design/FLOW.md) · [Report 3.0.0](docs/design/REPORT-3.0.0.md) ·
+  [scanner network](docs/design/SCAN-NETWORK.md) · [wallet requests](docs/design/WALLET-REQUESTS.md)
+- [Methodology](docs/METHODOLOGY.md) · [contracts](docs/CONTRACTS.md) ·
+  [AI usage](AI_USAGE.md)
 
 ## License
 

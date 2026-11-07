@@ -94,7 +94,7 @@ export class JobQueue {
 /**
  * Fixed-window rate limiter keyed by client identity. Client IPs are hashed
  * with a per-process random salt and never stored or logged in clear (the
- * hosted node must not keep identifying logs — ROADMAP P4-2).
+ * hosted node must not keep identifying logs).
  */
 export class RateLimiter {
   private windows = new Map<string, { start: number; count: number }>();

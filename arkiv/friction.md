@@ -64,7 +64,7 @@ how to reproduce.
 - **Expected**: scriptable faucet for CI ("fund this address").
 - **Happened**: https://hub.arkiv.network/faucet is an interactive app; there
   is no documented API. Our real-publish path therefore needs one manual
-  human step (see STATUS.md → TODO(human)); everything else is automated.
+  human step; everything else is automated.
 
 ## 7. Reads reveal the reader's IP
 

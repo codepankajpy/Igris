@@ -1,7 +1,7 @@
 /**
  * JSON Schema validation of the published contracts (Ajv, draft 2020-12,
- * strict mode). Used by the engine (evidence items), the migration, the CLI
- * (`igris verify`, `igris publish`) and the contract tests.
+ * strict mode). Used by the engine (evidence items), the migration, the
+ * registry (verifying published scans) and the contract tests.
  */
 // Named export: avoids CJS default-import interop differences between
 // tsc (NodeNext), tsx and vitest.
