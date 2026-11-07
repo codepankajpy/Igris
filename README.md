@@ -309,8 +309,7 @@ after 180 days; a site's history older than that disappears unless retested.
   [friction log](arkiv/friction.md)
 - Design: [the flow](docs/design/FLOW.md) · [Report 3.0.0](docs/design/REPORT-3.0.0.md) ·
   [scanner network](docs/design/SCAN-NETWORK.md) · [wallet requests](docs/design/WALLET-REQUESTS.md)
-- [Methodology](docs/METHODOLOGY.md) · [contracts](docs/CONTRACTS.md) ·
-  [AI usage](AI_USAGE.md)
+- [Methodology](docs/METHODOLOGY.md) · [contracts](docs/CONTRACTS.md)
 
 ## License
 
