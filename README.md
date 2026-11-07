@@ -98,7 +98,7 @@ website (apps/app) ──► backend (apps/api) ──► scanner (packages/scan
 
 ## Live on Arkiv (Rabdi, chain 7794095)
 
-- Publishing scanner: **`0x36DfF990206FfF8e8BA91f38A0b111418C985Bbe`**
+- New Publishing scanner: **`0x5e292D1b2A13E2CeF229b174905B5373a4f70A5a`**
 - `app.uniswap.org` v1 → v2 → v3, each `previous` pointing to the version
   before: transactions `0xce45a3811bc4eeb47600ec69d44299df96f358a8443cdf456c0b18b250e21343`,
   `0x96198c7a1cefd357713ca4ae65d6a07430d46c603b9ab464d662f5f39d6d9f79`,
